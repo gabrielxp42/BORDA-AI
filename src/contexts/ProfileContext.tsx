@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState } from 'react';
 
 export type UserRole = 'chefe' | 'producao';
 
@@ -9,6 +9,7 @@ interface ProfileContextType {
   isUnlocked: boolean;
   hasPinSet: boolean;
   setMasterPin: (pin: string) => void;
+  resetMasterPin: () => void;
   isProfileModalOpen: boolean;
   openProfileModal: () => void;
   closeProfileModal: () => void;
@@ -47,6 +48,13 @@ export const ProfileProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setIsProfileModalOpen(false);
   };
 
+  const resetMasterPin = () => {
+    localStorage.removeItem('borda-master-pin');
+    setMasterPinState(null);
+    setRole('producao');
+    localStorage.setItem('borda-role', 'producao');
+  };
+
   const lockToProducao = () => {
     setRole('producao');
     localStorage.setItem('borda-role', 'producao');
@@ -65,6 +73,7 @@ export const ProfileProvider: React.FC<{ children: React.ReactNode }> = ({ child
         isUnlocked: role === 'chefe',
         hasPinSet: masterPin !== null,
         setMasterPin,
+        resetMasterPin,
         isProfileModalOpen,
         openProfileModal,
         closeProfileModal
