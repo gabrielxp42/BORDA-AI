@@ -324,17 +324,31 @@ export const NetflixProfileModal: React.FC = () => {
                 )}
               </div>
 
-              {/* Input Invisível / ReadOnly para Bloquear Teclado Nativo no Celular */}
-              <input
-                type="password"
-                readOnly
-                inputMode="none"
-                value={pin}
-                className="sr-only"
-              />
+              {/* MODO DESKTOP: Entrada via Teclado Físico do Computador */}
+              <div className="hidden md:flex flex-col items-center space-y-4 pt-2">
+                <input
+                  type="password"
+                  maxLength={6}
+                  autoFocus
+                  placeholder="••••"
+                  value={pin}
+                  onChange={(e) => {
+                    const val = e.target.value.replace(/\D/g, '').slice(0, 6);
+                    setPin(val);
+                    setError(false);
+                    if (hasPinSet && val.length === 4) {
+                      submitPin(val);
+                    }
+                  }}
+                  className="w-48 bg-white/10 border border-white/20 rounded-2xl px-4 py-3 text-center text-2xl font-black text-white tracking-[0.4em] focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/30 transition-all placeholder:tracking-normal placeholder:text-zinc-600"
+                />
+                <p className="text-[11px] text-zinc-400 text-center font-medium">
+                  ⌨️ Digite a senha no teclado do seu computador e pressione <kbd className="px-1.5 py-0.5 rounded bg-white/10 text-white font-mono text-[10px]">Enter</kbd>
+                </p>
+              </div>
 
-              {/* TECLADO NUMÉRICO LIQUID GLASS (3x4 Grid) */}
-              <div className="grid grid-cols-3 gap-3.5 max-w-[260px] mx-auto pt-2">
+              {/* MODO MOBILE / TABLET: Teclado Numérico Touch (Liquid Glass 3x4) */}
+              <div className="grid md:hidden grid-cols-3 gap-3.5 max-w-[260px] mx-auto pt-2">
                 {[
                   { num: '1', sub: '' },
                   { num: '2', sub: 'ABC' },
