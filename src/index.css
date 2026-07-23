@@ -58,24 +58,26 @@
 }
 
 .light .glass-panel {
-  background: rgba(255, 255, 255, 0.85);
+  background: rgba(255, 255, 255, 0.92) !important;
   backdrop-filter: blur(16px);
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.06);
+  border: 1px solid rgba(226, 232, 240, 0.8) !important;
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.06) !important;
+  color: #0f172a !important;
 }
 
 .glass-card {
-  background: rgba(25. 25, 36, 0.6);
+  background: rgba(25, 25, 36, 0.6);
   backdrop-filter: blur(12px);
   border: 1px solid rgba(255, 255, 255, 0.06);
   transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .light .glass-card {
-  background: rgba(255, 255, 255, 0.9);
+  background: rgba(248, 250, 252, 0.95) !important;
   backdrop-filter: blur(12px);
-  border: 1px solid rgba(0, 0, 0, 0.06);
-  box-shadow: 0 4px 20px 0 rgba(0, 0, 0, 0.03);
+  border: 1px solid rgba(226, 232, 240, 0.8) !important;
+  box-shadow: 0 4px 20px 0 rgba(0, 0, 0, 0.03) !important;
+  color: #0f172a !important;
 }
 
 .glass-card:hover {
@@ -86,10 +88,106 @@
 }
 
 .light .glass-card:hover {
-  background: rgba(255, 255, 255, 1);
-  border-color: rgba(139, 92, 246, 0.4);
+  background: rgba(255, 255, 255, 1) !important;
+  border-color: rgba(139, 92, 246, 0.4) !important;
   transform: translateY(-2px);
-  box-shadow: 0 12px 25px -5px rgba(139, 92, 246, 0.15);
+  box-shadow: 0 12px 25px -5px rgba(139, 92, 246, 0.15) !important;
+}
+
+/* ======================================================
+   GLOBAL LIGHT MODE STYLING & TEXT CONTRAST FIXES
+   ====================================================== */
+
+.light body {
+  background-color: #f8fafc;
+  color: #0f172a;
+}
+
+.light {
+  color: #0f172a;
+}
+
+.light h1, .light h2, .light h3, .light h4, .light h5, .light h6 {
+  color: #0f172a;
+}
+
+/* Corrige cores de texto brancas e cinzas no modo claro */
+.light .text-white {
+  color: #0f172a !important;
+}
+
+.light .text-zinc-100,
+.light .text-zinc-200,
+.light .text-zinc-300 {
+  color: #1e293b !important;
+}
+
+.light .text-zinc-400 {
+  color: #475569 !important;
+}
+
+.light .text-zinc-500 {
+  color: #64748b !important;
+}
+
+.light .text-slate-200,
+.light .text-slate-300,
+.light .text-slate-400 {
+  color: #334155 !important;
+}
+
+/* Exceções necessárias para manter texto branco em botões e badges com fundo colorido/escuro */
+.light .bg-purple-600 .text-white,
+.light .bg-purple-700 .text-white,
+.light .bg-indigo-600 .text-white,
+.light .bg-emerald-500 .text-white,
+.light .bg-emerald-600 .text-white,
+.light .bg-emerald-700 .text-white,
+.light .bg-rose-500 .text-white,
+.light .bg-rose-600 .text-white,
+.light .bg-cyan-600 .text-white,
+.light .bg-slate-900 .text-white,
+.light .bg-black .text-white,
+.light button[class*="bg-purple-"] .text-white,
+.light button[class*="bg-emerald-"] .text-white,
+.light button[class*="bg-rose-"] .text-white,
+.light button[class*="bg-indigo-"] .text-white,
+.light button[class*="bg-cyan-"] .text-white,
+.light button[class*="from-purple-"] .text-white,
+.light button[class*="from-emerald-"] .text-white,
+.light button[class*="from-rose-"] .text-white {
+  color: #ffffff !important;
+}
+
+/* Utilitários de Bordas e Fundo no Modo Claro */
+.light .border-white\/5,
+.light .border-white\/10,
+.light .border-white\/15,
+.light .border-white\/20 {
+  border-color: rgba(203, 213, 225, 0.8) !important;
+}
+
+.light .bg-white\/5,
+.light .bg-white\/10 {
+  background-color: rgba(241, 245, 249, 0.9) !important;
+}
+
+.light .bg-white\/15,
+.light .bg-white\/20 {
+  background-color: rgba(226, 232, 240, 0.9) !important;
+}
+
+.light .hover\:bg-white\/10:hover,
+.light .hover\:bg-white\/20:hover {
+  background-color: rgba(226, 232, 240, 1) !important;
+}
+
+.light .bg-\[\#0d0d14\],
+.light .bg-\[\#0f0f16\],
+.light .bg-\[\#111118\],
+.light .bg-\[\#14141f\] {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
 }
 
 /* Custom Scrollbar */
