@@ -31,19 +31,20 @@ export const WhatsAppConnectionCard: React.FC = () => {
   const [lastChecked, setLastChecked] = useState<Date | null>(null);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const stopPolling = () => {
+  const stopPolling = useCallback(() => {
     if (pollingRef.current) {
       clearInterval(pollingRef.current);
       pollingRef.current = null;
     }
-  };
+  }, []);
 
-  // Inicializa o status baseado no perfil
+  // Inicializa o status baseado no perfil apenas na carga inicial ou quando mudar de id/status
   useEffect(() => {
-    if (profile?.whatsapp_status === 'connected') {
+    const waStatus = profile?.whatsapp_status;
+    if (waStatus === 'connected') {
       setStatus('connected');
       setQrCode(null);
-    } else if (profile?.whatsapp_status === 'connecting') {
+    } else if (waStatus === 'connecting') {
       setStatus('connecting');
       if (profile?.whatsapp_qr_cache) {
         setQrCode(profile.whatsapp_qr_cache);
@@ -52,7 +53,7 @@ export const WhatsAppConnectionCard: React.FC = () => {
       setStatus('disconnected');
       setQrCode(null);
     }
-  }, [profile]);
+  }, [profile?.whatsapp_status, profile?.whatsapp_qr_cache]);
 
   // Polling automático de status quando em estado 'connecting'
   useEffect(() => {
@@ -86,8 +87,10 @@ export const WhatsAppConnectionCard: React.FC = () => {
       }, 5000);
     }
 
-    return stopPolling;
-  }, [status]);
+    return () => {
+      stopPolling();
+    };
+  }, [status, stopPolling]);
 
   // Função principal de conexão / geração de QR Code
   const handleConnect = useCallback(async (force = false) => {

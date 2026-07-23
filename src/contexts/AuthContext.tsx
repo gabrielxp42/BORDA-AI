@@ -23,7 +23,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchProfile = useCallback(async (userId: string) => {
+  // fetchProfile com useCallback sem dependência instável para não causar loop
+  const fetchProfile = useCallback(async (userId: string, authUser?: User | null) => {
     try {
       const { data, error } = await supabase
         .from('profiles')
@@ -34,11 +35,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (data && !error) {
         setProfile(data as Profile);
       } else {
-        // Fallback local profile if record is missing in DB
+        // Fallback local profile se o registro ainda não existir
         setProfile({
           id: userId,
-          full_name: user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Usuário',
-          email: user?.email || '',
+          full_name: authUser?.user_metadata?.full_name || authUser?.email?.split('@')[0] || 'Usuário',
+          email: authUser?.email || '',
           role: 'admin',
           is_active: true,
           created_at: new Date().toISOString(),
@@ -46,38 +47,47 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         });
       }
     } catch {
-      // Ignore network errors
+      // Silencia falhas temporárias de rede
     }
-  }, [user]);
+  }, []);
 
   const refreshProfile = useCallback(async () => {
     if (user?.id) {
-      await fetchProfile(user.id);
+      await fetchProfile(user.id, user);
     }
   }, [fetchProfile, user]);
 
   useEffect(() => {
+    let mounted = true;
+
+    // Busca a sessão inicial
     supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!mounted) return;
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
-        fetchProfile(session.user.id);
+        fetchProfile(session.user.id, session.user);
       }
       setLoading(false);
     });
 
+    // Subscrição única de mudanças de estado de autenticação
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!mounted) return;
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
-        fetchProfile(session.user.id);
+        fetchProfile(session.user.id, session.user);
       } else {
         setProfile(null);
       }
       setLoading(false);
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, [fetchProfile]);
 
   const signIn = async (email: string, pass: string): Promise<boolean> => {
