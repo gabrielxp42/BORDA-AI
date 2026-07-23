@@ -1,5 +1,7 @@
 export type UserRole = 'admin' | 'digitizer' | 'operator' | 'seller';
 
+export type WhatsAppStatus = 'disconnected' | 'connecting' | 'connected';
+
 export interface Profile {
   id: string;
   full_name: string;
@@ -7,8 +9,18 @@ export interface Profile {
   phone?: string;
   role: UserRole;
   is_active: boolean;
+  whatsapp_api_url?: string;
+  whatsapp_api_key?: string;
+  whatsapp_instance_id?: string;
+  whatsapp_status?: WhatsAppStatus;
+  whatsapp_qr_cache?: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface EvolutionApiConfig {
+  apiUrl: string;
+  apiKey: string;
 }
 
 export interface Client {

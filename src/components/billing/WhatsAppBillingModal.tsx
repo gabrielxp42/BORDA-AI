@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
-import { X, Send, MessageCircle } from 'lucide-react';
+import { X, Send, MessageCircle, ExternalLink, CheckCircle2, AlertCircle } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
+import { sendEvolutionText, getWhatsAppWebLink } from '@/services/whatsappService';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface WhatsAppBillingModalProps {
   isOpen: boolean;
@@ -18,6 +20,7 @@ interface WhatsAppBillingModalProps {
 }
 
 export const WhatsAppBillingModal: React.FC<WhatsAppBillingModalProps> = ({ isOpen, onClose, clientData }) => {
+  const { profile } = useAuth();
   const [phoneNumber, setPhoneNumber] = useState(clientData?.phone || '');
   const [isSending, setIsSending] = useState(false);
   const [sendSuccess, setSendSuccess] = useState(false);
@@ -27,45 +30,68 @@ export const WhatsAppBillingModal: React.FC<WhatsAppBillingModalProps> = ({ isOp
   const currentMonth = format(new Date(), 'MMMM', { locale: ptBR });
   const formattedTotal = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(clientData.totalAmount);
 
-  // Mensagem padrão formatada
+  // Mensagem padrão formatada para cobrança
   const defaultMessage = `Olá ${clientData.name}!\n\nAqui é da *Bordados Elite*.\nSegue o seu fechamento referente aos pedidos de *${currentMonth}*:\n\n👕 Total de Pedidos: ${clientData.orderCount}\n💰 *Valor Total: ${formattedTotal}*\n\nVocê pode realizar o pagamento via PIX (Chave: CNPJ XX.XXX.XXX/0001-XX).\n\nQualquer dúvida, estamos à disposição!`;
 
   const [message, setMessage] = useState(defaultMessage);
 
-  const handleSend = async () => {
+  const isEvolutionConnected = profile?.whatsapp_status === 'connected';
+
+  const handleSendEvolution = async () => {
     if (!phoneNumber) {
       toast.error("Por favor, informe um número de WhatsApp válido.");
       return;
     }
 
     setIsSending(true);
-    // Aqui no futuro entraremos com a chamada real para a Evolution API (como no Direct-AI)
-    // ex: await fetch('https://evolution-api.../message/sendText', { ... })
-    
-    // Simulação de disparo
-    setTimeout(() => {
+    try {
+      await sendEvolutionText(phoneNumber, message);
       setIsSending(false);
       setSendSuccess(true);
+      toast.success("Cobrança enviada com sucesso pelo WhatsApp!");
       setTimeout(() => {
         setSendSuccess(false);
         onClose();
       }, 2000);
-    }, 1500);
+    } catch (err: any) {
+      setIsSending(false);
+      toast.error("Erro ao enviar pelo WhatsApp: " + (err.message || "Tente pelo botão Web WhatsApp"));
+    }
+  };
+
+  const handleOpenWebWhatsApp = () => {
+    if (!phoneNumber) {
+      toast.error("Por favor, informe um número de WhatsApp válido.");
+      return;
+    }
+    const webUrl = getWhatsAppWebLink(phoneNumber, message);
+    window.open(webUrl, '_blank', 'noopener,noreferrer');
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="bg-[#0f0f13] border border-white/10 w-full max-w-md rounded-3xl overflow-hidden shadow-2xl shadow-black">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+      <div className="bg-[#0f0f13] border border-white/10 w-full max-w-md rounded-3xl overflow-hidden shadow-2xl shadow-black relative">
         
         {/* Header */}
-        <div className="p-4 border-b border-white/10 flex items-center justify-between bg-gradient-to-r from-emerald-900/20 to-teal-900/20">
+        <div className="p-5 border-b border-white/10 flex items-center justify-between bg-gradient-to-r from-emerald-900/20 via-teal-900/20 to-purple-900/20">
           <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-full bg-emerald-500/20 flex items-center justify-center">
+            <div className="h-10 w-10 rounded-2xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center">
               <MessageCircle className="h-5 w-5 text-emerald-400" />
             </div>
             <div>
-              <h2 className="text-white font-black">Cobrar via WhatsApp</h2>
-              <p className="text-zinc-400 text-xs">Enviar extrato de fechamento</p>
+              <div className="flex items-center gap-2">
+                <h2 className="text-white font-black text-base">Cobrar via WhatsApp</h2>
+                {isEvolutionConnected ? (
+                  <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                    Evolution API
+                  </span>
+                ) : (
+                  <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                    Link Web
+                  </span>
+                )}
+              </div>
+              <p className="text-zinc-400 text-xs">Enviar extrato de fechamento de bordados</p>
             </div>
           </div>
           <button 
@@ -90,7 +116,7 @@ export const WhatsAppBillingModal: React.FC<WhatsAppBillingModalProps> = ({ isOp
           </div>
 
           <div className="space-y-2">
-            <label className="text-[11px] font-black uppercase tracking-wider text-zinc-400 block">Mensagem</label>
+            <label className="text-[11px] font-black uppercase tracking-wider text-zinc-400 block">Mensagem de Cobrança</label>
             <textarea 
               rows={8}
               value={message}
@@ -101,31 +127,32 @@ export const WhatsAppBillingModal: React.FC<WhatsAppBillingModalProps> = ({ isOp
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t border-white/10 bg-white/5 flex justify-end gap-3">
+        <div className="px-6 py-4 border-t border-white/10 bg-white/5 flex flex-col sm:flex-row items-center justify-between gap-3">
           <button 
-            onClick={onClose}
-            disabled={isSending}
-            className="px-6 py-2.5 rounded-xl text-xs font-bold text-zinc-400 hover:text-white hover:bg-white/10 transition-colors"
+            onClick={handleOpenWebWhatsApp}
+            className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold text-zinc-300 hover:text-white bg-white/5 hover:bg-white/10 transition-all border border-white/10"
           >
-            CANCELAR
+            <ExternalLink className="h-4 w-4 text-emerald-400" /> Abrir no Web WhatsApp
           </button>
           
           <button 
-            onClick={handleSend}
+            onClick={handleSendEvolution}
             disabled={isSending || sendSuccess}
-            className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-white text-xs font-black tracking-wider uppercase transition-all shadow-lg ${
+            className={`w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl text-white text-xs font-black tracking-wider uppercase transition-all shadow-lg ${
               sendSuccess 
                 ? 'bg-emerald-500 shadow-emerald-500/20' 
-                : 'bg-gradient-to-r from-emerald-600 to-teal-500 hover:opacity-90 shadow-emerald-500/20 active:scale-95'
+                : 'bg-gradient-to-r from-emerald-600 to-teal-500 hover:brightness-110 shadow-emerald-500/20 active:scale-95'
             }`}
           >
             {isSending ? (
               'ENVIANDO...'
             ) : sendSuccess ? (
-              'ENVIADO!'
+              <>
+                <CheckCircle2 className="h-4 w-4" /> ENVIADO!
+              </>
             ) : (
               <>
-                <Send className="h-4 w-4" /> ENVIAR COBRANÇA
+                <Send className="h-4 w-4" /> ENVIAR DIRETO
               </>
             )}
           </button>
