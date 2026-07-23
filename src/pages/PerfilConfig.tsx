@@ -192,7 +192,7 @@ export const PerfilConfig: React.FC = () => {
             <div className="p-4 rounded-xl bg-slate-50 dark:bg-black/40 border border-slate-200 dark:border-white/5">
               <span className="text-xs font-bold text-slate-500 dark:text-zinc-500 uppercase">Visibilidade Financeira</span>
               <p className="text-base font-black text-purple-600 dark:text-purple-400 mt-0.5">
-                {isUnlocked ? 'Modo Chefe (Valores Visíveis)' : 'Modo Produção (Valores Ocultos)'}
+                {isUnlocked ? 'Modo Chefe (Acesso Total)' : 'Modo Produção (Foco Operacional)'}
               </p>
             </div>
           </div>

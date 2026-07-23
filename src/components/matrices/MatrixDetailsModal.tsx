@@ -1,7 +1,8 @@
 import React from 'react';
-import { X, Layers, Download, Play, Clock, Hash, Maximize2, Tag, Calendar, User, Eye, CheckCircle2 } from 'lucide-react';
+import { X, Layers, Download, Play, Clock, Hash, Maximize2, Tag, User, CheckCircle2 } from 'lucide-react';
 import { Matrix } from '../../types/borda';
 import { createPortal } from 'react-dom';
+import { useCompanySettings } from '../../contexts/CompanySettingsContext';
 
 interface MatrixDetailsModalProps {
   isOpen: boolean;
@@ -12,11 +13,13 @@ interface MatrixDetailsModalProps {
 export const MatrixDetailsModal: React.FC<MatrixDetailsModalProps> = ({ isOpen, onClose, matrix }) => {
   if (!isOpen || !matrix) return null;
   const v = matrix.current_version;
+  const { settings } = useCompanySettings();
 
   const modalContent = (
     <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200" onClick={onClose}>
       <div 
-        className="w-full max-w-3xl bg-[#0f0f13] border border-white/10 rounded-3xl overflow-hidden shadow-2xl shadow-purple-500/10 flex flex-col md:flex-row max-h-[90vh]"
+        className="w-full max-w-3xl bg-[#0f0f13] border border-white/10 rounded-3xl overflow-hidden shadow-2xl flex flex-col md:flex-row max-h-[90vh]"
+        style={{ boxShadow: `0 20px 25px -5px ${settings.primaryColor}10` }}
         onClick={e => e.stopPropagation()}
       >
         {/* Left Side - Preview (Mocked) */}
@@ -44,7 +47,8 @@ export const MatrixDetailsModal: React.FC<MatrixDetailsModalProps> = ({ isOpen, 
               onClick={() => {
                 if (v?.file_url) window.open(v.file_url, '_blank');
               }}
-              className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-xs font-bold shadow-lg shadow-purple-500/25 hover:brightness-110 transition-all"
+              className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl text-white text-xs font-bold shadow-lg hover:opacity-90 transition-all"
+              style={{ backgroundColor: settings.primaryColor, boxShadow: `0 4px 14px ${settings.primaryColor}40` }}
             >
               <Download className="h-4 w-4" /> Baixar
             </button>
@@ -59,7 +63,8 @@ export const MatrixDetailsModal: React.FC<MatrixDetailsModalProps> = ({ isOpen, 
           <div className="flex items-center justify-between p-6 border-b border-white/5">
             <div>
               <div className="flex items-center gap-2 mb-1.5">
-                <span className="px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider text-purple-400 bg-purple-500/10 border border-purple-500/20">
+                <span className="px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider border"
+                  style={{ color: settings.primaryColor, backgroundColor: `${settings.primaryColor}15`, borderColor: `${settings.primaryColor}30` }}>
                   {matrix.code}
                 </span>
                 <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">
@@ -88,8 +93,8 @@ export const MatrixDetailsModal: React.FC<MatrixDetailsModalProps> = ({ isOpen, 
                 <div className="bg-black/20 p-4 rounded-2xl border border-white/5">
                   <span className="text-[10px] text-zinc-500 uppercase font-bold block mb-1">Pontos (Stitches)</span>
                   <div className="flex items-end gap-1.5">
-                    <Hash className="h-4 w-4 text-purple-400 mb-0.5" />
-                    <span className="text-lg font-black text-white leading-none">{v?.stitch_count.toLocaleString('pt-BR')}</span>
+                    <Hash className="h-4 w-4 mb-0.5" style={{ color: settings.primaryColor }} />
+                    <span className="text-lg font-black text-slate-900 dark:text-white leading-none">{v?.stitch_count.toLocaleString('pt-BR')}</span>
                   </div>
                 </div>
 

@@ -2,6 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { ShoppingBag, Play, Package, Lock } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useProfile } from '@/contexts/ProfileContext';
+import { useCompanySettings } from '@/contexts/CompanySettingsContext';
+import { parsePaymentMetadata } from '@/utils/paymentHelper';
+
 
 interface OrderItem {
   id: string;
@@ -14,6 +17,7 @@ interface KanbanOrder {
   client_id: string;
   status: string;
   total_amount: number;
+  due_date?: string;
   notes: string;
   created_at: string;
   client: { name: string };
@@ -31,6 +35,7 @@ export const PedidosKanban: React.FC = () => {
   const [orders, setOrders] = useState<KanbanOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const { isUnlocked } = useProfile();
+  const { settings } = useCompanySettings();
 
   useEffect(() => {
     fetchOrders();
@@ -54,7 +59,7 @@ export const PedidosKanban: React.FC = () => {
       const { data: ordersData, error: ordersError } = await supabase
         .from('orders')
         .select(`
-          id, client_id, status, total_amount, notes, created_at,
+          id, client_id, status, total_amount, due_date, notes, created_at,
           clients (name)
         `)
         .order('created_at', { ascending: false });
@@ -121,7 +126,7 @@ export const PedidosKanban: React.FC = () => {
     <div className="space-y-6 h-full flex flex-col animate-in fade-in duration-300">
       <div>
         <h2 className="text-2xl font-black tracking-tight text-white flex items-center gap-3">
-          <ShoppingBag className="h-6 w-6 text-purple-400" /> Fila de Produção (Kanban)
+          <ShoppingBag className="h-6 w-6 text-purple-400" /> Pedidos & Produção (Kanban)
         </h2>
         <p className="text-xs text-zinc-400 mt-1">
           Acompanhe o andamento dos pedidos de bordado. Arraste os cards para atualizar o status.
@@ -153,78 +158,93 @@ export const PedidosKanban: React.FC = () => {
                     Vazio
                   </div>
                 ) : (
-                  colOrders.map((ord) => (
-                    <div 
-                      key={ord.id} 
-                      draggable
-                      onDragStart={(e) => handleDragStart(e, ord.id)}
-                      className="glass-card p-4 rounded-2xl space-y-3 relative group border border-white/5 cursor-grab active:cursor-grabbing hover:border-purple-500/30 transition-colors"
-                    >
-                      <div className="flex items-start justify-between">
-                        <span className="text-[10px] font-black uppercase text-purple-300">
-                          {new Date(ord.created_at).toLocaleDateString()}
-                        </span>
-                        
-                        {isUnlocked ? (
-                          <span className="text-xs font-black text-emerald-400">
-                            {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(ord.total_amount || 0)}
-                          </span>
-                        ) : (
-                          <span title="Valor Oculto">
-                            <Lock className="h-3 w-3 text-zinc-600" />
-                          </span>
-                        )}
-                      </div>
-
-                      <div>
-                        <h4 className="text-xs font-bold text-white truncate" title={ord.client?.name}>
-                          {ord.client?.name || 'Cliente Desconhecido'}
-                        </h4>
-                      </div>
-
-                      {/* Lista curta de itens (o que tem na sacola) */}
-                      {ord.items && ord.items.length > 0 && (
-                        <div className="bg-black/20 p-2 rounded-xl space-y-1">
-                          {ord.items.slice(0, 3).map((item, idx) => (
-                            <div key={idx} className="flex items-center gap-2 text-[10px] text-zinc-400">
-                              <Package className="h-3 w-3 text-zinc-500" />
-                              <span className="font-bold text-zinc-300">{item.quantity}x</span>
-                              <span className="truncate">{item.description}</span>
-                            </div>
-                          ))}
-                          {ord.items.length > 3 && (
-                            <div className="text-[9px] text-zinc-500 italic pl-5">
-                              + {ord.items.length - 3} outros itens
-                            </div>
+                  colOrders.map((ord) => {
+                    const { cleanNotes, metadata } = parsePaymentMetadata(ord.notes);
+                    return (
+                      <div 
+                        key={ord.id} 
+                        draggable
+                        onDragStart={(e) => handleDragStart(e, ord.id)}
+                        className="glass-card p-4 rounded-2xl space-y-3 relative group border border-white/5 cursor-grab active:cursor-grabbing hover:border-brand/30 transition-colors"
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-[10px] font-black uppercase text-brand">
+                              {new Date(ord.created_at).toLocaleDateString()}
+                            </span>
+                            {metadata.isQuickEntry && (
+                              <span className="animate-pulse text-[8px] font-black uppercase bg-amber-500/20 border border-amber-500/30 text-amber-500 px-1 rounded-md leading-none">
+                                ⚠️ Sem Orçamento
+                              </span>
+                            )}
+                          </div>
+                          
+                          {isUnlocked ? (
+                            <span className="text-xs font-black text-emerald-400">
+                              {ord.total_amount > 0 ? (
+                                new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(ord.total_amount)
+                              ) : (
+                                <span className="text-amber-500 font-bold text-[10px]">Aguardando</span>
+                              )}
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-bold text-zinc-400">
+                              🧵 #{ord.id.slice(0, 4)}
+                            </span>
                           )}
                         </div>
-                      )}
 
-                      {ord.notes && (
-                        <p className="text-[10px] text-zinc-500 italic border-l-2 border-white/10 pl-2">
-                          {ord.notes}
-                        </p>
-                      )}
+                        <div>
+                          <h4 className="text-xs font-bold text-white truncate" title={ord.client?.name}>
+                            {ord.client?.name || 'Cliente Desconhecido'}
+                          </h4>
+                        </div>
 
-                      <div className="pt-2 border-t border-white/5 flex items-center justify-between">
-                        <button
-                          onClick={() => {
-                            const nextStatusMap: Record<string, string> = {
-                              pending: 'production',
-                              production: 'embroidering',
-                              embroidering: 'completed',
-                              completed: 'pending',
-                            };
-                            moveOrder(ord.id, nextStatusMap[ord.status]);
-                          }}
-                          className="text-[10px] font-bold text-purple-400 hover:text-purple-300 flex items-center gap-1 sm:hidden md:flex lg:flex"
-                        >
-                          <Play className="h-3 w-3" /> {ord.status === 'completed' ? 'Reiniciar' : 'Avançar'}
-                        </button>
-                        <div className="text-[9px] text-zinc-600 hidden lg:block">Arraste para mover</div>
+                        {/* Lista curta de itens (o que tem na sacola) */}
+                        {ord.items && ord.items.length > 0 && (
+                          <div className="bg-black/20 p-2 rounded-xl space-y-1">
+                            {ord.items.slice(0, 3).map((item, idx) => (
+                              <div key={idx} className="flex items-center gap-2 text-[10px] text-zinc-400">
+                                <Package className="h-3 w-3 text-zinc-500" />
+                                <span className="font-bold text-zinc-300">{item.quantity}x</span>
+                                <span className="truncate">{item.description}</span>
+                              </div>
+                            ))}
+                            {ord.items.length > 3 && (
+                              <div className="text-[9px] text-zinc-500 italic pl-5">
+                                + {ord.items.length - 3} outros itens
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {cleanNotes && (
+                          <p className="text-[10px] text-zinc-500 italic border-l-2 border-white/10 pl-2">
+                            {cleanNotes}
+                          </p>
+                        )}
+
+                        <div className="pt-2 border-t border-white/5 flex items-center justify-between">
+                          <button
+                            onClick={() => {
+                              const nextStatusMap: Record<string, string> = {
+                                pending: 'production',
+                                production: 'embroidering',
+                                embroidering: 'completed',
+                                completed: 'pending',
+                              };
+                              moveOrder(ord.id, nextStatusMap[ord.status]);
+                            }}
+                            className="text-[10px] font-bold hover:opacity-80 flex items-center gap-1 sm:hidden md:flex lg:flex"
+                            style={{ color: settings.primaryColor }}
+                          >
+                            <Play className="h-3 w-3" /> {ord.status === 'completed' ? 'Reiniciar' : 'Avançar'}
+                          </button>
+                          <div className="text-[9px] text-zinc-600 hidden lg:block">Arraste para mover</div>
+                        </div>
                       </div>
-                    </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
             </div>

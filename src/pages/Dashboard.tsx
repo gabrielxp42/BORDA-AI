@@ -1,113 +1,193 @@
-import React from 'react';
-import { Layers, Calculator, Cpu, Users, ArrowUpRight, TrendingUp, Sparkles } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import {
+  Layers, Calculator, ShoppingBag, Users, ArrowUpRight,
+  Sparkles, Package, CheckCircle2, Clock, Cpu
+} from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
 import { useCompanySettings } from '../contexts/CompanySettingsContext';
 
 export const Dashboard: React.FC = () => {
   const { settings } = useCompanySettings();
+  const pc = settings.primaryColor;
+
+  const [counts, setCounts] = useState({
+    matrices: 0,
+    clients: 0,
+    pendingOrders: 0,
+    doneOrders: 0,
+  });
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const load = async () => {
+      setLoading(true);
+      const [matricesRes, clientsRes, pendingRes, doneRes] = await Promise.all([
+        supabase.from('matrices').select('id', { count: 'exact', head: true }),
+        supabase.from('clients').select('id', { count: 'exact', head: true }),
+        supabase.from('orders').select('id', { count: 'exact', head: true }).neq('payment_status', 'paid'),
+        supabase.from('orders').select('id', { count: 'exact', head: true }).eq('payment_status', 'paid'),
+      ]);
+      setCounts({
+        matrices: matricesRes.count || 0,
+        clients: clientsRes.count || 0,
+        pendingOrders: pendingRes.count || 0,
+        doneOrders: doneRes.count || 0,
+      });
+      setLoading(false);
+    };
+    load();
+  }, []);
+
+  const stats = [
+    {
+      title: 'Matrizes na Biblioteca',
+      value: loading ? '—' : counts.matrices.toString(),
+      sub: 'Arquivos cadastrados',
+      icon: Layers,
+      color: pc,
+    },
+    {
+      title: 'Clientes Cadastrados',
+      value: loading ? '—' : counts.clients.toString(),
+      sub: 'Na base de dados',
+      icon: Users,
+      color: '#06b6d4',
+    },
+    {
+      title: 'Pedidos em Aberto',
+      value: loading ? '—' : counts.pendingOrders.toString(),
+      sub: 'Aguardando pagamento',
+      icon: Clock,
+      color: '#f59e0b',
+    },
+    {
+      title: 'Pedidos Concluídos',
+      value: loading ? '—' : counts.doneOrders.toString(),
+      sub: 'Pagos e encerrados',
+      icon: CheckCircle2,
+      color: '#10b981',
+    },
+  ];
+
+  const quickActions = [
+    {
+      label: 'Fazer Orçamento',
+      desc: 'Calcule o preço por pontos e adicionais da peça',
+      to: '/calculadora',
+      icon: Calculator,
+    },
+    {
+      label: 'Pedidos & Produção',
+      desc: 'Acompanhe a fila e o kanban de produção',
+      to: '/pedidos',
+      icon: ShoppingBag,
+    },
+    {
+      label: 'Biblioteca de Matrizes',
+      desc: 'Gerencie e visualize o acervo de bordados',
+      to: '/matrizes',
+      icon: Layers,
+    },
+    {
+      label: 'Clientes',
+      desc: 'Base de clientes, histórico e recorrência',
+      to: '/clientes',
+      icon: Users,
+    },
+  ];
 
   return (
-    <div className="space-y-6">
-      {/* Banner de Boas-vindas Dinâmico */}
-      <div 
-        className="relative overflow-hidden rounded-3xl p-8 border shadow-2xl backdrop-blur-xl transition-all"
-        style={{ 
-          background: `linear-gradient(135deg, ${settings.primaryColor}35 0%, ${settings.primaryColor}15 50%, rgba(0,0,0,0.8) 100%)`,
-          borderColor: `${settings.primaryColor}40`
+    <div className="space-y-6 animate-in fade-in duration-300">
+
+      {/* Banner de boas-vindas */}
+      <div
+        className="relative overflow-hidden rounded-3xl p-6 sm:p-8 border shadow-2xl"
+        style={{
+          background: `linear-gradient(135deg, ${pc}30 0%, ${pc}10 50%, rgba(0,0,0,0.6) 100%)`,
+          borderColor: `${pc}40`
         }}
       >
+        {/* Padrão de fundo sutil */}
+        <div
+          className="absolute inset-0 opacity-[0.04]"
+          style={{
+            backgroundImage: `repeating-linear-gradient(45deg, ${pc} 0, ${pc} 1px, transparent 0, transparent 50%)`,
+            backgroundSize: '20px 20px'
+          }}
+        />
         <div className="relative z-10 space-y-2">
-          <div 
+          <div
             className="inline-flex items-center gap-2 px-3 py-1 rounded-full border text-xs font-bold uppercase tracking-widest"
-            style={{ 
-              backgroundColor: `${settings.primaryColor}25`, 
-              borderColor: `${settings.primaryColor}40`, 
-              color: settings.primaryColor 
-            }}
+            style={{ backgroundColor: `${pc}25`, borderColor: `${pc}40`, color: pc }}
           >
             <Sparkles className="h-3.5 w-3.5" /> Gestão Inteligente de Bordados
           </div>
-          <h2 className="text-3xl font-black tracking-tight text-slate-900 dark:text-white">
-            Painel Geral <span style={{ color: settings.primaryColor }}>{settings.systemName}</span>
+          <h2 className="text-2xl sm:text-3xl font-black tracking-tight text-white">
+            Bem-vindo ao <span style={{ color: pc }}>{settings.systemName}</span>
           </h2>
-          <p className="text-sm text-slate-600 dark:text-zinc-400 max-w-xl">
-            Integração direta com parâmetros do Wilcom, orçamentador automático por milheiro de pontos e acervo inteligente de matrizes.
+          <p className="text-sm text-zinc-400 max-w-xl">
+            Orçamentador automático por pontos, acervo inteligente de matrizes Wilcom e controle de produção em um só lugar.
           </p>
         </div>
       </div>
 
-      {/* Métricas Principais */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {[
-          { 
-            title: 'Matrizes Cadastradas', 
-            value: '1.240', 
-            icon: Layers, 
-            style: {
-              background: `linear-gradient(135deg, ${settings.primaryColor}20 0%, ${settings.primaryColor}05 100%)`,
-              borderColor: `${settings.primaryColor}30`,
-              color: settings.primaryColor
-            } 
-          },
-          { title: 'Orçamentos no Mês', value: '184', icon: Calculator, style: { background: 'linear-gradient(135deg, rgba(6,182,212,0.2) 0%, rgba(6,182,212,0.05) 100%)', borderColor: 'rgba(6,182,212,0.3)', color: '#06b6d4' } },
-          { title: 'Bordadeiras Ativas', value: '6 / 8', icon: Cpu, style: { background: 'linear-gradient(135deg, rgba(16,185,129,0.2) 0%, rgba(16,185,129,0.05) 100%)', borderColor: 'rgba(16,185,129,0.3)', color: '#10b981' } },
-          { title: 'Clientes Recorrentes', value: '92%', icon: Users, style: { background: 'linear-gradient(135deg, rgba(244,63,94,0.2) 0%, rgba(244,63,94,0.05) 100%)', borderColor: 'rgba(244,63,94,0.3)', color: '#f43f5e' } },
-        ].map((stat, i) => {
-          const Icon = stat.icon;
+      {/* KPIs operacionais (sem dados financeiros) */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {stats.map((s, i) => {
+          const Icon = s.icon;
           return (
-            <div key={i} className="p-5 rounded-3xl border backdrop-blur-md transition-all" style={stat.style}>
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-600 dark:text-zinc-400 uppercase tracking-wider">{stat.title}</span>
-                <div className="p-2.5 rounded-2xl bg-white/10 dark:bg-white/5" style={{ color: stat.style.color }}>
-                  <Icon className="h-5 w-5" />
+            <div
+              key={i}
+              className="glass-panel p-4 rounded-3xl border border-white/10 hover:border-white/20 transition-all group"
+            >
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-[10px] font-black uppercase tracking-wider text-zinc-500 leading-tight">{s.title}</span>
+                <div
+                  className="h-7 w-7 rounded-xl flex items-center justify-center shrink-0 transition-transform group-hover:scale-110"
+                  style={{ backgroundColor: `${s.color}20` }}
+                >
+                  <Icon className="h-3.5 w-3.5" style={{ color: s.color }} />
                 </div>
               </div>
-              <div className="mt-4 flex items-baseline justify-between">
-                <span className="text-2xl font-black text-slate-900 dark:text-white">{stat.value}</span>
-                <span className="text-[10px] font-bold text-emerald-500 dark:text-emerald-400 flex items-center gap-0.5">
-                  <TrendingUp className="h-3 w-3" /> +14%
-                </span>
-              </div>
+              <p className="text-2xl font-black text-white leading-none">{s.value}</p>
+              <p className="text-[10px] text-zinc-500 mt-1 font-medium">{s.sub}</p>
             </div>
           );
         })}
       </div>
 
       {/* Ações Rápidas */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="glass-panel p-6 rounded-3xl border border-slate-200 dark:border-white/10 space-y-4">
-          <h3 className="text-sm font-black uppercase tracking-widest flex items-center gap-2" style={{ color: settings.primaryColor }}>
-            <Calculator className="h-4 w-4" /> Novo Orçamento Rápido
-          </h3>
-          <p className="text-xs text-slate-600 dark:text-zinc-400">
-            Calcule o preço em segundos inserindo a quantidade de pontos do Wilcom e os adicionais da peça.
-          </p>
-          <Link
-            to="/calculadora"
-            className="inline-flex items-center justify-center gap-2 w-full py-3 rounded-2xl text-white font-bold text-xs shadow-lg hover:brightness-110 transition-all"
-            style={{ backgroundColor: settings.primaryColor }}
-          >
-            <span>Abrir Calculadora Dinâmica</span>
-            <ArrowUpRight className="h-4 w-4" />
-          </Link>
-        </div>
-
-        <div className="glass-panel p-6 rounded-3xl border border-slate-200 dark:border-white/10 space-y-4">
-          <h3 className="text-sm font-black uppercase tracking-widest text-cyan-600 dark:text-cyan-400 flex items-center gap-2">
-            <Layers className="h-4 w-4" /> Cadastrar Nova Matriz
-          </h3>
-          <p className="text-xs text-slate-600 dark:text-zinc-400">
-            Suba arquivos .dst, .emb ou imagens para guardar a versão e associar ao cliente.
-          </p>
-          <Link
-            to="/matrizes"
-            className="inline-flex items-center justify-center gap-2 w-full py-3 rounded-2xl bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-800 dark:text-white font-bold text-xs hover:bg-slate-200 dark:hover:bg-white/10 transition-all"
-          >
-            <span>Acessar Biblioteca</span>
-            <ArrowUpRight className="h-4 w-4" />
-          </Link>
+      <div>
+        <h3 className="text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-3 px-1">
+          Acesso Rápido
+        </h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {quickActions.map((a, i) => {
+            const Icon = a.icon;
+            return (
+              <Link
+                key={i}
+                to={a.to}
+                className="glass-panel p-5 rounded-3xl border border-white/10 hover:border-white/25 transition-all group flex items-center gap-4"
+              >
+                <div
+                  className="h-11 w-11 rounded-2xl flex items-center justify-center shrink-0 transition-transform group-hover:scale-110"
+                  style={{ backgroundColor: `${pc}20` }}
+                >
+                  <Icon className="h-5 w-5" style={{ color: pc }} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-black text-white">{a.label}</p>
+                  <p className="text-[11px] text-zinc-500 mt-0.5 leading-snug">{a.desc}</p>
+                </div>
+                <ArrowUpRight className="h-4 w-4 text-zinc-600 group-hover:text-white transition-colors shrink-0" />
+              </Link>
+            );
+          })}
         </div>
       </div>
+
     </div>
   );
 };

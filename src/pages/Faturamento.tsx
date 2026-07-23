@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useProfile } from '@/contexts/ProfileContext';
 import { useCompanySettings } from '@/contexts/CompanySettingsContext';
@@ -22,8 +22,13 @@ import {
   Sparkles,
   Users
 } from 'lucide-react';
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, PieChart as RePieChart, Pie, Legend
+} from 'recharts';
 import { WhatsAppBillingModal } from '@/components/billing/WhatsAppBillingModal';
-import { format, startOfMonth, endOfMonth, subMonths } from 'date-fns';
+import { FinancialTransactionModal } from '@/components/billing/FinancialTransactionModal';
+import { FinancialTransaction, FinancialTransactionType } from '@/types/stockTypes';
+import { format, startOfMonth, endOfMonth, subMonths, eachMonthOfInterval } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
 
@@ -56,6 +61,39 @@ export const Faturamento: React.FC = () => {
 
   // Modal State
   const [selectedClient, setSelectedClient] = useState<ClientBillingData | null>(null);
+
+  // Manual Cash Flow State (Receitas & Despesas)
+  const [financialTransactions, setFinancialTransactions] = useState<FinancialTransaction[]>(() => {
+    const saved = localStorage.getItem('borda_financial_transactions');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  });
+  const [isFinModalOpen, setIsFinModalOpen] = useState(false);
+  const [finModalType, setFinModalType] = useState<FinancialTransactionType>('income');
+
+  useEffect(() => {
+    localStorage.setItem('borda_financial_transactions', JSON.stringify(financialTransactions));
+  }, [financialTransactions]);
+
+  const handleAddFinancialTransaction = (newTx: Omit<FinancialTransaction, 'id' | 'created_at'>) => {
+    const created: FinancialTransaction = {
+      ...newTx,
+      id: Date.now().toString(),
+      created_at: new Date().toISOString(),
+    };
+    setFinancialTransactions((prev) => [created, ...prev]);
+  };
+
+  const openFinModal = (type: FinancialTransactionType) => {
+    setFinModalType(type);
+    setIsFinModalOpen(true);
+  };
 
   useEffect(() => {
     if (isUnlocked) {
@@ -152,6 +190,18 @@ export const Faturamento: React.FC = () => {
     }
   };
 
+  // Dados dos últimos 6 meses para o gráfico
+  const allOrdersMonthly = useMemo(() => {
+    const months = eachMonthOfInterval({
+      start: subMonths(new Date(), 5),
+      end: new Date(),
+    });
+    return months.map((month) => ({
+      name: format(month, 'MMM', { locale: ptBR }).toUpperCase(),
+      isCurrent: format(month, 'MM/yyyy') === format(subMonths(new Date(), selectedMonthOffset), 'MM/yyyy'),
+    }));
+  }, [selectedMonthOffset]);
+
   // Se for operador, mostra tela de bloqueio
   if (!isUnlocked) {
     return (
@@ -173,6 +223,8 @@ export const Faturamento: React.FC = () => {
 
   const targetMonthDate = subMonths(new Date(), selectedMonthOffset);
   const paidPercentage = grandTotal > 0 ? Math.round((paidTotal / grandTotal) * 100) : 0;
+
+
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
@@ -211,6 +263,61 @@ export const Faturamento: React.FC = () => {
             ))}
           </div>
         </div>
+      </div>
+
+      {/* 🟢🔴 DOIS BOTÕES GIGANTES DE ENTRADA E SAÍDA DE CAIXA */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Botão Gigante 1: REGISTRAR RECEITA */}
+        <button
+          onClick={() => openFinModal('income')}
+          className="group relative overflow-hidden p-6 rounded-3xl border border-emerald-500/40 bg-gradient-to-br from-emerald-950/40 via-emerald-900/20 to-black/60 hover:border-emerald-400 transition-all shadow-xl hover:shadow-emerald-950/50 text-left active:scale-[0.99]"
+        >
+          <div className="absolute -right-6 -bottom-6 opacity-10 group-hover:opacity-20 transition-opacity">
+            <ArrowUpRight className="h-40 w-40 text-emerald-400" />
+          </div>
+          <div className="relative z-10 flex items-center justify-between">
+            <div className="space-y-1">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-black uppercase tracking-wider">
+                🟢 Entrada de Caixa / Receita
+              </span>
+              <h2 className="text-2xl font-black text-white group-hover:text-emerald-300 transition-colors">
+                + NOVA RECEITA
+              </h2>
+              <p className="text-xs text-zinc-400 max-w-sm">
+                Lançar recebimento manual, venda direta no balcão ou serviço de matriz.
+              </p>
+            </div>
+            <div className="h-14 w-14 rounded-2xl bg-emerald-500 text-black flex items-center justify-center font-black shadow-lg shadow-emerald-500/30 group-hover:scale-110 transition-transform shrink-0">
+              <ArrowUpRight className="h-8 w-8 stroke-[3]" />
+            </div>
+          </div>
+        </button>
+
+        {/* Botão Gigante 2: REGISTRAR DESPESA */}
+        <button
+          onClick={() => openFinModal('expense')}
+          className="group relative overflow-hidden p-6 rounded-3xl border border-rose-500/40 bg-gradient-to-br from-rose-950/40 via-rose-900/20 to-black/60 hover:border-rose-400 transition-all shadow-xl hover:shadow-rose-950/50 text-left active:scale-[0.99]"
+        >
+          <div className="absolute -right-6 -bottom-6 opacity-10 group-hover:opacity-20 transition-opacity">
+            <ArrowDownRight className="h-40 w-40 text-rose-400" />
+          </div>
+          <div className="relative z-10 flex items-center justify-between">
+            <div className="space-y-1">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-500/20 text-rose-400 border border-rose-500/30 text-[10px] font-black uppercase tracking-wider">
+                🔴 Saída de Caixa / Despesa
+              </span>
+              <h2 className="text-2xl font-black text-white group-hover:text-rose-300 transition-colors">
+                - NOVA DESPESA / SAÍDA
+              </h2>
+              <p className="text-xs text-zinc-400 max-w-sm">
+                Lançar compras de estoque, energia, manutenção de máquinas ou salários.
+              </p>
+            </div>
+            <div className="h-14 w-14 rounded-2xl bg-rose-500 text-white flex items-center justify-center font-black shadow-lg shadow-rose-500/30 group-hover:scale-110 transition-transform shrink-0">
+              <ArrowDownRight className="h-8 w-8 stroke-[3]" />
+            </div>
+          </div>
+        </button>
       </div>
 
       {/* Grid de 4 KPIs Financeiros */}
@@ -296,28 +403,116 @@ export const Faturamento: React.FC = () => {
           <span className="text-xs font-black text-emerald-400">{paidPercentage}% Liquidado</span>
         </div>
 
-        {/* Barra Visual Progresso Dual Color */}
-        <div className="h-4 w-full bg-slate-200 dark:bg-white/10 rounded-full overflow-hidden p-0.5 flex">
-          <div 
-            className="h-full bg-gradient-to-r from-emerald-500 to-teal-400 rounded-full transition-all duration-700 shadow-lg shadow-emerald-500/30"
-            style={{ width: `${paidPercentage}%` }}
-          />
-          <div 
-            className="h-full bg-amber-500/40 rounded-r-full transition-all duration-700"
-            style={{ width: `${100 - paidPercentage}%` }}
-          />
+        {/* Donut Chart — Adimplência */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 items-center">
+          <div className="flex flex-col items-center justify-center">
+            <ResponsiveContainer width="100%" height={180}>
+              <RePieChart>
+                <Pie
+                  data={[
+                    { name: 'Pago', value: paidTotal, fill: '#10b981' },
+                    { name: 'Pendente', value: pendingTotal, fill: settings.primaryColor },
+                  ].filter(d => d.value > 0)}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={52}
+                  outerRadius={78}
+                  paddingAngle={4}
+                  dataKey="value"
+                  startAngle={90}
+                  endAngle={-270}
+                >
+                  <Cell fill="#10b981" stroke="transparent" />
+                  <Cell fill={settings.primaryColor} stroke="transparent" opacity={0.7} />
+                </Pie>
+                <Tooltip
+                  content={({ active, payload }) => {
+                    if (!active || !payload?.length) return null;
+                    const d = payload[0].payload;
+                    return (
+                      <div className="bg-[#111118] border border-white/10 rounded-xl px-3 py-2 text-xs shadow-xl">
+                        <p className="font-black" style={{ color: d.fill }}>
+                          {d.name}: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(d.value)}
+                        </p>
+                      </div>
+                    );
+                  }}
+                />
+              </RePieChart>
+            </ResponsiveContainer>
+
+            <div className="text-center -mt-2">
+              <p className="text-3xl font-black text-white">{paidPercentage}%</p>
+              <p className="text-[11px] text-zinc-400 font-bold">Liquidado no mês</p>
+            </div>
+          </div>
+
+          {/* Legenda e valores */}
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <div className="flex justify-between items-center">
+                <div className="flex items-center gap-2 text-xs font-bold text-emerald-400">
+                  <div className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
+                  Pago (Liquidado)
+                </div>
+                <span className="text-sm font-black text-white">
+                  {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(paidTotal)}
+                </span>
+              </div>
+              <div className="h-2 bg-white/5 rounded-full overflow-hidden">
+                <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${paidPercentage}%` }} />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <div className="flex justify-between items-center">
+                <div className="flex items-center gap-2 text-xs font-bold text-amber-400">
+                  <div className="h-2.5 w-2.5 rounded-full bg-amber-500" />
+                  Pendente / A Receber
+                </div>
+                <span className="text-sm font-black text-white">
+                  {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(pendingTotal)}
+                </span>
+              </div>
+              <div className="h-2 bg-white/5 rounded-full overflow-hidden">
+                <div className="h-full rounded-full" style={{ width: `${100 - paidPercentage}%`, backgroundColor: settings.primaryColor }} />
+              </div>
+            </div>
+
+            {grandTotal === 0 && (
+              <p className="text-[11px] text-zinc-500 text-center pt-2">Nenhum pedido neste mês ainda.</p>
+            )}
+          </div>
         </div>
 
-        <div className="flex items-center justify-between text-xs font-bold pt-1">
-          <div className="flex items-center gap-2 text-emerald-400">
-            <div className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-            <span>Pago: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(paidTotal)}</span>
+        {/* Ranking de clientes do mês (barras horizontais) */}
+        {billingData.length > 0 && (
+          <div className="pt-4 border-t border-white/10 space-y-3">
+            <h4 className="text-[10px] font-black uppercase tracking-wider text-zinc-400 flex items-center gap-2">
+              <Users className="h-3 w-3" style={{ color: settings.primaryColor }} /> Ranking de Clientes — {format(targetMonthDate, 'MMMM', { locale: ptBR })}
+            </h4>
+            <ResponsiveContainer width="100%" height={Math.min(billingData.length * 36, 180)}>
+              <BarChart data={billingData.slice(0, 5).map(d => ({ name: d.name.split(' ')[0], Total: Math.round(d.totalAmount) }))} layout="vertical" margin={{ left: 0, right: 8, top: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" horizontal={false} />
+                <XAxis type="number" tick={{ fill: '#52525b', fontSize: 9 }} axisLine={false} tickLine={false} tickFormatter={v => `R$${(v/1000).toFixed(0)}k`} />
+                <YAxis type="category" dataKey="name" tick={{ fill: '#a1a1aa', fontSize: 10, fontWeight: 700 }} axisLine={false} tickLine={false} width={60} />
+                <Tooltip
+                  content={({ active, payload, label }) => {
+                    if (!active || !payload?.length) return null;
+                    return (
+                      <div className="bg-[#111118] border border-white/10 rounded-xl px-3 py-2 text-xs shadow-xl">
+                        <p className="text-zinc-400 font-bold">{label}</p>
+                        <p className="font-black" style={{ color: settings.primaryColor }}>
+                          {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(payload[0].value as number)}
+                        </p>
+                      </div>
+                    );
+                  }}
+                />
+                <Bar dataKey="Total" fill={settings.primaryColor} radius={[0, 6, 6, 0]} maxBarSize={22} opacity={0.85} />
+              </BarChart>
+            </ResponsiveContainer>
           </div>
-          <div className="flex items-center gap-2 text-amber-400">
-            <div className="w-2.5 h-2.5 rounded-full bg-amber-500" />
-            <span>Pendente: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(pendingTotal)}</span>
-          </div>
-        </div>
+        )}
       </div>
 
       {/* Tabela de Fechamento por Cliente */}
@@ -411,6 +606,14 @@ export const Faturamento: React.FC = () => {
         isOpen={!!selectedClient}
         onClose={() => setSelectedClient(null)}
         clientData={selectedClient}
+      />
+
+      {/* Modal de Lançamento de Receitas e Despesas (Caixa) */}
+      <FinancialTransactionModal
+        isOpen={isFinModalOpen}
+        onClose={() => setIsFinModalOpen(false)}
+        type={finModalType}
+        onSubmitTransaction={handleAddFinancialTransaction}
       />
     </div>
   );

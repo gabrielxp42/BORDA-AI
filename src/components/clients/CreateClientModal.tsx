@@ -74,7 +74,7 @@ export const CreateClientModal: React.FC<CreateClientModalProps> = ({
   };
 
   const modalContent = (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
       <div 
         className="w-full max-w-2xl bg-[#0f0f13] border border-white/10 rounded-3xl overflow-hidden shadow-2xl shadow-black/80 flex flex-col max-h-[90vh]"
         onClick={e => e.stopPropagation()}

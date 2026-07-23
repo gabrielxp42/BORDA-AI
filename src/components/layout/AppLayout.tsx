@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
@@ -16,26 +16,47 @@ import {
   Sun,
   Moon,
   Plus,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Zap,
+  Boxes
 } from 'lucide-react';
 
 import { CreateOrderModal } from '../orders/CreateOrderModal';
 import { ProfileSwitcher } from './ProfileSwitcher';
+import { MobileBottomNav } from './MobileBottomNav';
 
 interface NavItem {
   label: string;
   path: string;
   icon: React.ElementType;
-  badge?: string;
+  badge?: React.ReactNode;
 }
+
+const SewingMachineIcon: React.FC<{ className?: string }> = ({ className = "h-3 w-3" }) => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className}
+  >
+    <path d="M3 19h18" />
+    <path d="M5 19V8a2 2 0 0 1 2-2h9a3 3 0 0 1 3 3v4h-6" />
+    <path d="M9 12v7" />
+    <circle cx="16" cy="10" r="1.5" />
+  </svg>
+);
 
 const navItems: NavItem[] = [
   { label: 'Painel Geral', path: '/', icon: LayoutDashboard },
-  { label: 'Biblioteca de Matrizes', path: '/matrizes', icon: Layers, badge: 'Wilcom' },
-  { label: 'Calculadora de Preço', path: '/calculadora', icon: Calculator, badge: 'IA' },
+  { label: 'Pedidos & Produção', path: '/pedidos', icon: ShoppingBag },
+  { label: 'Fazer Orçamento', path: '/calculadora', icon: Calculator, badge: <Zap className="h-3 w-3 fill-current" /> },
+  { label: 'Biblioteca de Matrizes', path: '/matrizes', icon: Layers, badge: <SewingMachineIcon className="h-3 w-3" /> },
+  { label: 'Estoque de Insumos', path: '/estoque', icon: Boxes },
   { label: 'Faturamento', path: '/faturamento', icon: FileSpreadsheet },
   { label: 'Clientes & Empresas', path: '/clientes', icon: Users },
-  { label: 'Fila de Produção', path: '/pedidos', icon: ShoppingBag },
   { label: 'Bordadeiras & Máquinas', path: '/maquinas', icon: Cpu },
   { label: 'Tabela de Preços', path: '/configuracoes', icon: Settings },
 ];
@@ -43,17 +64,37 @@ const navItems: NavItem[] = [
 import { LogOut } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCompanySettings } from '@/contexts/CompanySettingsContext';
+import { useProfile } from '@/contexts/ProfileContext';
+import { useNavigate } from 'react-router-dom';
 
 // (Dentro do componente AppLayout)
 export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { settings } = useCompanySettings();
+  const { isUnlocked } = useProfile();
   const { signOut } = useAuth();
+  const navigate = useNavigate();
+
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
   const [isDark, setIsDark] = useState<boolean>(() => {
     return localStorage.getItem('borda-theme') !== 'light';
   });
   const location = useLocation();
+
+  const OPERADOR_ALLOWED_PATHS = ['/pedidos', '/matrizes', '/maquinas'];
+
+  // Redireciona Operador se tentar acessar rota restrita
+  useEffect(() => {
+    if (!isUnlocked && !OPERADOR_ALLOWED_PATHS.includes(location.pathname)) {
+      navigate('/pedidos', { replace: true });
+    }
+  }, [isUnlocked, location.pathname, navigate]);
+
+  // Filtra itens do menu conforme o perfil
+  const visibleNavItems = useMemo(() => {
+    if (isUnlocked) return navItems;
+    return navItems.filter((item: NavItem) => OPERADOR_ALLOWED_PATHS.includes(item.path));
+  }, [isUnlocked]);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -93,7 +134,7 @@ export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children })
         </div>
 
         <nav className="flex-1 p-4 space-y-1.5 overflow-y-auto">
-          {navItems.map((item) => {
+          {visibleNavItems.map((item: NavItem) => {
             const isActive = location.pathname === item.path;
             const Icon = item.icon;
             return (
@@ -115,7 +156,7 @@ export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children })
                 </div>
                 {item.badge && (
                   <span 
-                    className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full border"
+                    className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full border flex items-center justify-center"
                     style={{ backgroundColor: `${settings.primaryColor}20`, color: settings.primaryColor, borderColor: `${settings.primaryColor}40` }}
                   >
                     {item.badge}
@@ -156,12 +197,32 @@ export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children })
         {/* Top Header */}
         <header className={`h-16 glass-panel border-b ${isDark ? 'border-white/10' : 'border-slate-200'} px-6 flex items-center justify-between z-10`}>
           <div className="flex items-center gap-4">
-            <button
-              onClick={() => setSidebarOpen(!sidebarOpen)}
-              className={`md:hidden p-2 rounded-xl ${isDark ? 'bg-white/5 text-zinc-400 hover:text-white' : 'bg-slate-200 text-slate-600 hover:text-slate-900'}`}
-            >
-              {sidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-            </button>
+            {/* Mobile Logo Brand */}
+            <div className="md:hidden flex items-center gap-2">
+              {settings.logoUrl ? (
+                <img 
+                  src={settings.logoUrl} 
+                  alt={settings.systemName} 
+                  className="h-8 w-auto max-w-[120px] object-contain rounded-lg" 
+                />
+              ) : (
+                <div className="flex items-center gap-2">
+                  <div 
+                    className="h-8 w-8 rounded-xl flex items-center justify-center shadow-md border shrink-0"
+                    style={{
+                      backgroundColor: `${settings.primaryColor}20`,
+                      borderColor: `${settings.primaryColor}40`,
+                      color: settings.primaryColor
+                    }}
+                  >
+                    <Sparkles className="h-4 w-4 animate-pulse" />
+                  </div>
+                  <span className="font-black text-xs uppercase tracking-wider text-slate-900 dark:text-white truncate max-w-[110px]">
+                    {settings.systemName || 'BORDA AI'}
+                  </span>
+                </div>
+              )}
+            </div>
             <div className="relative hidden sm:block w-72">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
               <input
@@ -216,10 +277,17 @@ export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children })
         </header>
 
         {/* Dynamic Page Workspace */}
-        <main className="flex-1 overflow-y-auto p-6 custom-scrollbar">
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6 pb-20 md:pb-6 custom-scrollbar">
           {children}
         </main>
       </div>
+
+      {/* Mobile Bottom Navigation Bar */}
+      <MobileBottomNav 
+        onOpenNewOrder={() => setIsOrderModalOpen(true)}
+        isDark={isDark}
+        onToggleTheme={() => setIsDark(!isDark)}
+      />
 
       {/* Global Order Modal */}
       <CreateOrderModal 

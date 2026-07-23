@@ -9,12 +9,14 @@ interface ProfileContextType {
   isUnlocked: boolean;
   hasPinSet: boolean;
   setMasterPin: (pin: string) => void;
+  isProfileModalOpen: boolean;
+  openProfileModal: () => void;
+  closeProfileModal: () => void;
 }
 
 const ProfileContext = createContext<ProfileContextType | undefined>(undefined);
 
 export const ProfileProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // Inicializa com producao por padrão, ou lê do localStorage se já tiver logado como chefe
   const [role, setRole] = useState<UserRole>(() => {
     return (localStorage.getItem('borda-role') as UserRole) || 'producao';
   });
@@ -23,12 +25,15 @@ export const ProfileProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return localStorage.getItem('borda-master-pin');
   });
 
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState<boolean>(false);
+
   const unlockChefe = (pin: string) => {
     if (masterPin === null) return false;
     
     if (pin === masterPin) {
       setRole('chefe');
       localStorage.setItem('borda-role', 'chefe');
+      setIsProfileModalOpen(false);
       return true;
     }
     return false;
@@ -37,15 +42,19 @@ export const ProfileProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const setMasterPin = (pin: string) => {
     localStorage.setItem('borda-master-pin', pin);
     setMasterPinState(pin);
-    // Automaticamente destrava após cadastrar
     setRole('chefe');
     localStorage.setItem('borda-role', 'chefe');
+    setIsProfileModalOpen(false);
   };
 
   const lockToProducao = () => {
     setRole('producao');
     localStorage.setItem('borda-role', 'producao');
+    setIsProfileModalOpen(false);
   };
+
+  const openProfileModal = () => setIsProfileModalOpen(true);
+  const closeProfileModal = () => setIsProfileModalOpen(false);
 
   return (
     <ProfileContext.Provider 
@@ -55,7 +64,10 @@ export const ProfileProvider: React.FC<{ children: React.ReactNode }> = ({ child
         lockToProducao,
         isUnlocked: role === 'chefe',
         hasPinSet: masterPin !== null,
-        setMasterPin
+        setMasterPin,
+        isProfileModalOpen,
+        openProfileModal,
+        closeProfileModal
       }}
     >
       {children}

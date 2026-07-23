@@ -3,6 +3,8 @@ import { X, DollarSign, Send, Save, RefreshCw, Check, MessageCircle } from 'luci
 import { supabase } from '@/integrations/supabase/client';
 import { useCompanySettings } from '@/contexts/CompanySettingsContext';
 import { toast } from 'sonner';
+import { motion, AnimatePresence } from 'framer-motion';
+import { parsePaymentMetadata, serializePaymentMetadata, updatePaymentMetadata } from '@/utils/paymentHelper';
 
 interface PaymentStatusModalProps {
   isOpen: boolean;
@@ -37,10 +39,11 @@ export const PaymentStatusModal: React.FC<PaymentStatusModalProps> = ({
       setStatus(initialStatus);
       setMethod(order.payment_method || 'pix');
 
+      const { metadata } = parsePaymentMetadata(order.notes);
       if (initialStatus === 'paid') {
         setCustomAmount(order.total_amount || 0);
       } else if (initialStatus === 'half_paid') {
-        setCustomAmount((order.total_amount || 0) / 2);
+        setCustomAmount(metadata.depositAmount || (order.total_amount || 0) / 2);
       } else {
         setCustomAmount(0);
       }
@@ -53,7 +56,8 @@ export const PaymentStatusModal: React.FC<PaymentStatusModalProps> = ({
     if (newStatus === 'paid') {
       setCustomAmount(order.total_amount || 0);
     } else if (newStatus === 'half_paid') {
-      setCustomAmount((order.total_amount || 0) / 2);
+      const { metadata } = parsePaymentMetadata(order.notes);
+      setCustomAmount(metadata.depositAmount || (order.total_amount || 0) / 2);
     } else {
       setCustomAmount(0);
     }
@@ -65,14 +69,25 @@ export const PaymentStatusModal: React.FC<PaymentStatusModalProps> = ({
     setSaving(true);
     try {
       const paidVal = Number(customAmount) || 0;
-      const noteAppend = ` [Pagamento Atualizado: ${status.toUpperCase()} - R$ ${paidVal.toFixed(2)} via ${method.toUpperCase()}]`;
+      
+      // Parse existing metadata and update it
+      const { cleanNotes, metadata: existingMetadata } = parsePaymentMetadata(order.notes);
+      const updatedMetadata = updatePaymentMetadata(
+        existingMetadata,
+        status,
+        order.total_amount,
+        method,
+        status === 'half_paid' ? paidVal : undefined
+      );
+      
+      const noteWithMetadata = serializePaymentMetadata(cleanNotes, updatedMetadata);
 
       const { error } = await supabase
         .from('orders')
         .update({
           payment_status: status,
           payment_method: method,
-          notes: (order.notes || '') + noteAppend
+          notes: noteWithMetadata
         })
         .eq('id', order.id);
 
@@ -96,6 +111,7 @@ export const PaymentStatusModal: React.FC<PaymentStatusModalProps> = ({
       setSaving(false);
     }
   };
+
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-in fade-in duration-200">
@@ -160,28 +176,38 @@ export const PaymentStatusModal: React.FC<PaymentStatusModalProps> = ({
           </div>
 
           {/* Campo de Entrada de Valor do Sinal / Pago */}
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <label className="text-[11px] font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400">
-                Valor Recebido / Entrada (R$)
-              </label>
-              <span className="text-[10px] font-bold text-slate-400 dark:text-zinc-500">
-                Total do Pedido: R$ {(order.total_amount || 0).toFixed(2)}
-              </span>
-            </div>
-            <div className="relative">
-              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-black text-slate-400 dark:text-zinc-500">
-                R$
-              </span>
-              <input
-                type="number"
-                step="0.01"
-                value={customAmount}
-                onChange={e => setCustomAmount(e.target.value === '' ? '' : Number(e.target.value))}
-                className="w-full bg-slate-50 dark:bg-white/5 border border-slate-300 dark:border-white/10 rounded-xl pl-10 pr-4 py-2.5 text-sm font-black text-slate-900 dark:text-white focus:outline-none focus:border-purple-500 transition-all"
-              />
-            </div>
-          </div>
+          <AnimatePresence>
+            {status === 'half_paid' && (
+              <motion.div
+                initial={{ opacity: 0, height: 0, marginTop: 0 }}
+                animate={{ opacity: 1, height: 'auto', marginTop: 12 }}
+                exit={{ opacity: 0, height: 0, marginTop: 0 }}
+                className="space-y-1.5 overflow-hidden"
+              >
+                <div className="flex items-center justify-between">
+                  <label className="text-[11px] font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400">
+                    Valor Recebido / Entrada (R$)
+                  </label>
+                  <span className="text-[10px] font-bold text-slate-400 dark:text-zinc-500">
+                    Total do Pedido: R$ {(order.total_amount || 0).toFixed(2)}
+                  </span>
+                </div>
+                <div className="relative">
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-black text-slate-400 dark:text-zinc-500">
+                    R$
+                  </span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={customAmount}
+                    onChange={e => setCustomAmount(e.target.value === '' ? '' : Number(e.target.value))}
+                    className="w-full bg-slate-50 dark:bg-white/5 border border-slate-300 dark:border-white/10 rounded-xl pl-10 pr-4 py-2.5 text-sm font-black text-slate-900 dark:text-white focus:outline-none focus:border-brand transition-all"
+                    style={{ borderColor: `${settings.primaryColor}30` }}
+                  />
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* Forma de Pagamento */}
           <div className="space-y-2">

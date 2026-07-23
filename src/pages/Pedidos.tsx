@@ -8,6 +8,8 @@ import { CreateOrderModal } from '@/components/orders/CreateOrderModal';
 import { PaymentStatusModal } from '@/components/orders/PaymentStatusModal';
 import { OrderDetailsModal } from '@/components/orders/OrderDetailsModal';
 import { toast } from 'sonner';
+import { parsePaymentMetadata } from '@/utils/paymentHelper';
+
 
 interface OrderItem {
   id: string;
@@ -34,6 +36,16 @@ interface Order {
   order_items?: OrderItem[];
 }
 
+const formatPaymentMethod = (method?: string): string => {
+  const map: Record<string, string> = {
+    pix: 'PIX',
+    credit_card: 'Cartão',
+    cash: 'Dinheiro',
+    transfer: 'Transferência',
+  };
+  return method ? (map[method] ?? method.toUpperCase()) : '';
+};
+
 export const Pedidos: React.FC = () => {
   const { settings } = useCompanySettings();
   const { isUnlocked } = useProfile();
@@ -44,6 +56,7 @@ export const Pedidos: React.FC = () => {
   const [search, setSearch] = useState('');
   const [filterPayment, setFilterPayment] = useState<string>('all');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [initialOrderData, setInitialOrderData] = useState<any>(null);
 
   // Modais de Status e Detalhes
   const [selectedOrderForStatus, setSelectedOrderForStatus] = useState<Order | null>(null);
@@ -233,64 +246,82 @@ export const Pedidos: React.FC = () => {
               {filteredOrders.map(order => {
                 const isPaid = order.payment_status === 'paid';
                 const isHalf = order.payment_status === 'half_paid';
+                const { cleanNotes, metadata } = parsePaymentMetadata(order.notes);
 
                 return (
                   <div
                     key={order.id}
                     onClick={() => setSelectedOrderForDetails(order)}
-                    className="glass-panel p-5 rounded-3xl border border-slate-200 dark:border-white/10 hover:border-purple-500/50 transition-all shadow-md hover:shadow-xl flex flex-col justify-between space-y-4 group cursor-pointer"
+                    className="glass-panel p-5 rounded-3xl border border-slate-200 dark:border-white/10 hover:border-brand/50 transition-all shadow-md hover:shadow-xl flex flex-col justify-between space-y-4 group cursor-pointer"
                   >
                     {/* Cabeçalho do Card */}
                     <div className="flex items-start justify-between border-b border-slate-200 dark:border-white/10 pb-3">
                       <div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-zinc-500">
                             PEDIDO #{order.id.slice(0, 6)}
                           </span>
                           <span className="text-[10px] text-slate-400 dark:text-zinc-500">
                             • {new Date(order.created_at).toLocaleDateString('pt-BR')}
                           </span>
+                          {metadata.isQuickEntry && (
+                            <span className="animate-pulse text-[9px] font-black uppercase bg-amber-500/20 border border-amber-500/30 text-amber-500 px-1.5 py-0.5 rounded-md leading-none">
+                              ⚠️ Sem Orçamento
+                            </span>
+                          )}
                         </div>
                         <h3 className="text-sm font-black text-slate-900 dark:text-white mt-0.5 flex items-center gap-1.5">
-                          <User className="h-3.5 w-3.5 text-purple-400" />
+                          <User className="h-3.5 w-3.5 text-brand" />
                           {order.client?.name || 'Cliente Geral'}
                         </h3>
                       </div>
 
                       {/* Status de Pagamento Interativo (Abre Modal de Status) */}
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSelectedOrderForStatus(order);
-                        }}
-                        title="Clique para gerenciar o pagamento"
-                        className={`px-3 py-1 rounded-xl text-[10px] font-black uppercase tracking-wider border transition-all flex items-center gap-1.5 ${
-                          isPaid
-                            ? 'bg-emerald-500/20 text-emerald-500 border-emerald-500/40 hover:bg-emerald-500/30'
-                            : isHalf
-                            ? 'bg-blue-500/20 text-blue-400 border-blue-500/40 hover:bg-blue-500/30'
-                            : 'bg-amber-500/20 text-amber-500 border-amber-500/40 hover:bg-amber-500/30'
-                        }`}
-                      >
-                        {isPaid ? (
-                          <>
-                            <CheckCircle2 className="h-3 w-3" /> PAGO (100%)
-                          </>
-                        ) : isHalf ? (
-                          <>
-                            <Clock className="h-3 w-3" /> SINAL (50%)
-                          </>
-                        ) : (
-                          <>
-                            <Clock className="h-3 w-3" /> PENDENTE
-                          </>
+                      <div className="flex flex-col items-end">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedOrderForStatus(order);
+                          }}
+                          title="Clique para gerenciar o pagamento"
+                          className={`px-3 py-1 rounded-xl text-[10px] font-black uppercase tracking-wider border transition-all flex items-center gap-1.5 ${
+                            isPaid
+                              ? 'bg-emerald-500/20 text-emerald-500 border-emerald-500/40 hover:bg-emerald-500/30'
+                              : isHalf
+                              ? 'bg-blue-500/20 text-blue-400 border-blue-500/40 hover:bg-blue-500/30'
+                              : 'bg-amber-500/20 text-amber-500 border-amber-500/40 hover:bg-amber-500/30'
+                          }`}
+                        >
+                          {isPaid ? (
+                            <>
+                              <CheckCircle2 className="h-3 w-3" /> PAGO
+                            </>
+                          ) : isHalf ? (
+                            <>
+                              <Clock className="h-3 w-3" /> SINAL
+                            </>
+                          ) : (
+                            <>
+                              <Clock className="h-3 w-3" /> PENDENTE
+                            </>
+                          )}
+                        </button>
+                        {isHalf && metadata.depositAmount && (
+                          <span className="text-[9px] font-bold text-blue-400 mt-1">
+                            Sinal: R$ {metadata.depositAmount.toFixed(2)} ({formatPaymentMethod(order.payment_method)})
+                          </span>
                         )}
-                      </button>
+                        {isPaid && order.payment_method && (
+                          <span className="text-[9px] font-bold text-emerald-400 mt-1">
+                            Quitado ({formatPaymentMethod(order.payment_method)})
+                          </span>
+                        )}
+                      </div>
                     </div>
 
                     {/* Itens do Pedido */}
-                    <div className="space-y-2 flex-1">
+                    <div className="space-y-2 flex-1 flex flex-col">
                       <p className="text-[10px] font-bold text-slate-400 dark:text-zinc-500 uppercase tracking-widest">
                         Peças / Matrizes:
                       </p>
@@ -308,9 +339,48 @@ export const Pedidos: React.FC = () => {
                           ))}
                         </div>
                       ) : (
-                        <p className="text-xs italic text-slate-400 dark:text-zinc-500">{order.notes || 'Sem itens individuais descritos.'}</p>
+                        <p className="text-xs italic text-slate-400 dark:text-zinc-500">Sem itens individuais descritos.</p>
+                      )}
+
+                      {/* Observações / Notas */}
+                      {cleanNotes && (
+                        <div className="mt-2 p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 mt-auto">
+                          <p className="text-[10px] font-black uppercase text-amber-600 dark:text-amber-500 mb-0.5">
+                            📝 Observações:
+                          </p>
+                          <p className="text-[11px] font-medium text-amber-700 dark:text-amber-400 line-clamp-3 leading-snug">
+                            {cleanNotes}
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Miniaturas de Anexos */}
+                      {metadata.attachmentUrls && metadata.attachmentUrls.length > 0 && (
+                        <div className="mt-2 flex items-center gap-2">
+                          <span className="text-[9px] font-black uppercase text-slate-400 dark:text-zinc-500 shrink-0">📎 Anexos:</span>
+                          <div className="flex items-center gap-1.5">
+                            {metadata.attachmentUrls.slice(0, 4).map((url: string, i: number) => (
+                              <a
+                                key={i}
+                                href={url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                className="w-9 h-9 rounded-lg border border-slate-200 dark:border-white/10 overflow-hidden hover:scale-110 hover:border-brand/50 transition-all shadow-sm shrink-0"
+                              >
+                                <img src={url} alt="" className="w-full h-full object-cover" />
+                              </a>
+                            ))}
+                            {metadata.attachmentUrls.length > 4 && (
+                              <span className="w-9 h-9 rounded-lg bg-slate-200 dark:bg-white/10 flex items-center justify-center text-[9px] font-black text-slate-500 dark:text-zinc-400">
+                                +{metadata.attachmentUrls.length - 4}
+                              </span>
+                            )}
+                          </div>
+                        </div>
                       )}
                     </div>
+
 
                     {/* Rodapé com Valor Total e Ações */}
                     <div className="pt-3 border-t border-slate-200 dark:border-white/10 flex items-center justify-between">
@@ -323,7 +393,12 @@ export const Pedidos: React.FC = () => {
                             </span>
                           </>
                         ) : (
-                          <span className="text-[11px] font-bold text-slate-400 dark:text-zinc-500">Valores Ocultos</span>
+                          <>
+                            <span className="text-[10px] font-bold text-slate-400 dark:text-zinc-500 uppercase tracking-widest block">Lote / Peças</span>
+                            <span className="text-xs font-bold text-slate-700 dark:text-zinc-300 flex items-center gap-1 mt-0.5">
+                              <span>📦</span> {order.order_items?.reduce((sum: number, item: any) => sum + (item.quantity || 1), 0) || 1} un
+                            </span>
+                          </>
                         )}
                       </div>
 
@@ -361,7 +436,11 @@ export const Pedidos: React.FC = () => {
       {/* Modal de Criação de Pedido */}
       <CreateOrderModal
         isOpen={isCreateModalOpen}
-        onClose={() => setIsCreateModalOpen(false)}
+        onClose={() => {
+          setIsCreateModalOpen(false);
+          setInitialOrderData(null);
+        }}
+        initialData={initialOrderData}
         onOrderCreated={fetchOrders}
       />
 
@@ -379,6 +458,17 @@ export const Pedidos: React.FC = () => {
         onClose={() => setSelectedOrderForDetails(null)}
         order={selectedOrderForDetails}
         onDelete={handleDeleteOrder}
+        onPriceOrder={(orderToPrice) => {
+          const { cleanNotes } = parsePaymentMetadata(orderToPrice.notes);
+          setInitialOrderData({
+            orderId: orderToPrice.id,
+            clientId: orderToPrice.client_id,
+            matrixName: cleanNotes,
+            quantity: orderToPrice.items?.[0]?.quantity || 1
+          });
+          setSelectedOrderForDetails(null);
+          setIsCreateModalOpen(true);
+        }}
       />
     </div>
   );

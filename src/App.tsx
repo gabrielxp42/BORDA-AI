@@ -16,6 +16,7 @@ import { Pedidos } from '@/pages/Pedidos';
 import { Maquinas } from '@/pages/Maquinas';
 import { Configuracoes } from '@/pages/Configuracoes';
 import { Faturamento } from '@/pages/Faturamento';
+import { Estoque } from '@/pages/Estoque';
 import { PerfilConfig } from '@/pages/PerfilConfig';
 import { Login } from '@/pages/Login';
 
@@ -46,6 +47,7 @@ export const App: React.FC = () => {
                           <Route path="/calculadora" element={<Calculadora />} />
                           <Route path="/clientes" element={<Clientes />} />
                           <Route path="/pedidos" element={<Pedidos />} />
+                          <Route path="/estoque" element={<Estoque />} />
                           <Route path="/faturamento" element={<Faturamento />} />
                           <Route path="/maquinas" element={<Maquinas />} />
                           <Route path="/configuracoes" element={<Configuracoes />} />
