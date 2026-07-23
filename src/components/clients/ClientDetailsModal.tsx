@@ -411,13 +411,13 @@ export const ClientDetailsModal: React.FC<ClientDetailsModalProps> = ({
                     <button
                       type="button"
                       onClick={handleCobrarWhatsApp}
-                      className="w-full py-4 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:brightness-110 text-white font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-xl active:scale-98 transition-all"
+                      className="w-full py-4 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:brightness-110 text-white font-black text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center gap-2 shadow-xl active:scale-98 transition-all"
                     >
                       <Send className="h-4 w-4" />
                       <span>
                         {selectedOrderIds.length > 0 
-                          ? `📱 Cobrar (${selectedOrderIds.length}) Selecionado(s) via WhatsApp` 
-                          : '📱 Cobrar Todos os Pendentes via WhatsApp'}
+                          ? `Cobrar (${selectedOrderIds.length}) Selecionado(s) - ${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(selectedTotal)} via WhatsApp` 
+                          : `Cobrar Todos os Pendentes (${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totalPendente)}) via WhatsApp`}
                       </span>
                     </button>
                   </div>
