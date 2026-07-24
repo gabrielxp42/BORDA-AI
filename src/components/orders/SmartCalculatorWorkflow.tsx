@@ -3,7 +3,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   X, UserPlus, Calendar, Plus, Trash2, Package, Save, Lock, Layers, Sparkles, 
   CheckCircle2, DollarSign, ChevronDown, Check, Upload, FileCheck, ChevronUp, 
-  Sliders, Send, Clock, CreditCard, Landmark, Coins, ArrowRight, ArrowLeft, Camera, Paperclip 
+  Sliders, Send, Clock, CreditCard, Landmark, Coins, ArrowRight, ArrowLeft, Camera, Paperclip,
+  MessageSquare, Image, FileText
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { calculateEmbroideryPrice } from '@/services/pricingEngine';
@@ -18,6 +19,8 @@ import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { serializePaymentMetadata, updatePaymentMetadata } from '@/utils/paymentHelper';
+import { sendEvolutionText, getWhatsAppWebLink, formatWhatsAppNumber } from '@/services/whatsappService';
+import { useBackgroundTasks } from '@/hooks/useBackgroundTasks';
 
 interface InitialOrderData {
   clientId?: string;
@@ -49,12 +52,22 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
   // Active step: 1 = Orçamento, 2 = Fechamento (only relevant if saving order)
   const [step, setStep] = useState<1 | 2>(1);
 
+  // Background Task Store
+  const addTask = useBackgroundTasks(state => state.addTask);
+  const updateTask = useBackgroundTasks(state => state.updateTask);
+  const updateStep = useBackgroundTasks(state => state.updateStep);
+
   // Input States
   const [selectedClientId, setSelectedClientId] = useState<string>('');
   const [matrixName, setMatrixName] = useState<string>('');
   const [stitchCount, setStitchCount] = useState<number | ''>('');
   const [colorCount, setColorCount] = useState<number | ''>('');
   const [quantity, setQuantity] = useState<number | ''>(1);
+
+  // WhatsApp Smart Automation Toggles (Chaves WhatsApp ao Salvar)
+  const [whatsappNotifyReceipt, setWhatsappNotifyReceipt] = useState<boolean>(true);
+  const [whatsappRequestRef, setWhatsappRequestRef] = useState<boolean>(false);
+  const [whatsappSendSummary, setWhatsappSendSummary] = useState<boolean>(false);
 
   // Addon States
   const [isBigHoop, setIsBigHoop] = useState<boolean>(false);
@@ -392,6 +405,57 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
       }
 
       toast.success(initialData?.orderId ? "Pedido atualizado com sucesso!" : "Pedido criado com sucesso!");
+
+      // --- DISPARO DA AUTOMAÇÃO WHATSAPP PELAS CHAVES SELECIONADAS ---
+      if ((whatsappNotifyReceipt || whatsappRequestRef || whatsappSendSummary) && selectedClientId) {
+        supabase
+          .from('clients')
+          .select('name, phone')
+          .eq('id', selectedClientId)
+          .single()
+          .then(({ data: clientData }) => {
+            if (clientData?.phone && clientData.phone.trim()) {
+              const clientName = clientData.name || 'Cliente';
+              const orderCode = order?.id ? `#${order.id.slice(0, 4)}` : '';
+              const itemDesc = matrixName || notes || 'Peças para bordado';
+
+              const msgLines: string[] = [
+                `*Entrada de Pedido - ${settings.systemName}* 🧵✨\n`,
+                `Olá, *${clientName}*!`
+              ];
+
+              if (whatsappNotifyReceipt) {
+                msgLines.push(`📦 *Confirmação de Recebimento:* Suas peças (*${itemDesc}*, ${quantity || 1}x) foram recebidas com sucesso em nossa oficina e deram entrada no sistema.`);
+              }
+
+              if (whatsappRequestRef) {
+                msgLines.push(`🖼️ *Solicitação de Imagem/Arte:* Por favor, nos envie aqui no WhatsApp a imagem/referência do seu bordado em alta resolução para a programação da matriz.`);
+              }
+
+              if (whatsappSendSummary) {
+                msgLines.push(`📋 *Ficha de Registro:* Entrada ${orderCode} registrada no sistema da oficina.`);
+              }
+
+              msgLines.push(`\nQualquer dúvida estamos à disposição!`);
+              const autoMsg = msgLines.join('\n\n');
+
+              sendEvolutionText(clientData.phone, autoMsg).then(() => {
+                const targetNum = formatWhatsAppNumber(clientData.phone);
+                const webLink = getWhatsAppWebLink(clientData.phone, autoMsg);
+                toast.success(`⚡ Mensagem automática enviada para o WhatsApp de ${clientName}!`, {
+                  action: {
+                    label: "Conferir Web",
+                    onClick: () => window.open(webLink, '_blank')
+                  }
+                });
+              }).catch(err => {
+                console.warn("Falha no disparo automático WhatsApp:", err);
+                const webLink = getWhatsAppWebLink(clientData.phone, autoMsg);
+                window.open(webLink, '_blank');
+              });
+            }
+          });
+      }
       
       if (onOrderCreated) {
         onOrderCreated();
@@ -410,17 +474,88 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
     }
   };
 
-  const handleShareWhatsApp = () => {
-    const text = `*Orçamento de Bordado - ${settings.systemName}*\n\n` +
-      `*Cliente:* ${selectedClientId ? 'Registrado' : 'Não informado'}\n` +
-      `*Matriz:* ${matrixName || 'Sem nome'}\n` +
-      `*Pontos:* ${stitchCount ? stitchCount.toLocaleString() : 0} pts\n` +
-      `*Cores:* ${colorCount || 1}\n` +
-      `*Quantidade:* ${quantity || 1} peças\n` +
-      `*Valor Unitário:* R$ ${calculation.unitPrice.toFixed(2)}\n` +
-      `*Valor Total:* R$ ${calculation.totalPrice.toFixed(2)}`;
-    
-    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+  const handleShareWhatsApp = async () => {
+    if (!selectedClientId) {
+      toast.error('Selecione um cliente para enviar a cobrança.');
+      return;
+    }
+
+    try {
+      const { data: client, error } = await supabase
+        .from('clients')
+        .select('name, phone, company_name')
+        .eq('id', selectedClientId)
+        .single();
+
+      if (error || !client) {
+        toast.error('Erro ao recuperar dados do cliente.');
+        return;
+      }
+
+      if (!client.phone || !client.phone.trim()) {
+        toast.error('O cliente selecionado não tem telefone/WhatsApp cadastrado.');
+        return;
+      }
+
+      const clientName = client.name || 'Cliente';
+      const formattedTotal = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(calculation.totalPrice);
+      const formattedUnit = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(calculation.unitPrice);
+
+      const message = `*Orçamento de Bordado - ${settings.systemName}* 🧵✨\n\n` +
+        `Olá, *${clientName}*! Seguem os detalhes do seu orçamento de produção:\n\n` +
+        `📋 *Matriz/Descrição:* ${matrixName || 'Bordado Personalizado'}\n` +
+        `🧵 *Pontos:* ${Number(stitchCount || 0).toLocaleString('pt-BR')} pts (${colorCount || 1} cores)\n` +
+        `📦 *Quantidade:* ${quantity || 1} peças\n` +
+        `💰 *Valor Unitário:* ${formattedUnit}\n` +
+        `💵 *VALOR TOTAL DO PEDIDO:* *${formattedTotal}*\n\n` +
+        `✨ Ficamos no aguardo da sua confirmação para iniciar a produção!`;
+
+      // 1. Adiciona a tarefa ao painel flutuante de TAREFAS EM SEGUNDO PLANO (TaskDock)
+      const taskId = addTask({
+        title: `Orçamento (${matrixName || 'Bordado'})`,
+        description: `Enviando para ${clientName}...`,
+        status: 'processing',
+        progress: 25,
+        steps: [
+          { id: 'prep', label: 'Gerando Orçamento', status: 'completed' },
+          { id: 'send', label: 'Conectando Evolution API', status: 'loading' },
+          { id: 'done', label: 'Envio WhatsApp', status: 'pending' },
+        ]
+      });
+
+      const toastId = toast.loading(`Enviando cobrança de ${formattedTotal} para ${clientName} via WhatsApp...`);
+      
+      try {
+        updateStep(taskId, 'send', 'completed');
+        updateStep(taskId, 'done', 'loading');
+        updateTask(taskId, { progress: 65, status: 'sending' });
+
+        await sendEvolutionText(client.phone, message);
+
+        updateStep(taskId, 'done', 'completed');
+        updateTask(taskId, {
+          progress: 100,
+          status: 'completed',
+          description: `Enviado com sucesso para ${clientName}!`
+        });
+
+        toast.success(`⚡ Orçamento enviado com sucesso para ${clientName}!`, { id: toastId });
+      } catch (evoErr: any) {
+        console.warn('Falha no envio direto via Evolution API, abrindo WhatsApp Web:', evoErr);
+        
+        updateTask(taskId, {
+          status: 'error',
+          progress: 100,
+          error: evoErr.message || 'Falha no envio direto'
+        });
+
+        const webLink = getWhatsAppWebLink(client.phone, message);
+        window.open(webLink, '_blank');
+        toast.info(`Evolution API indisponível. Abrindo WhatsApp Web para ${clientName}...`, { id: toastId });
+      }
+    } catch (err: any) {
+      toast.error('Erro ao processar cobrança via WhatsApp.');
+    }
   };
 
   const isFormValid = entryMode === 'quick'
@@ -1181,6 +1316,161 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
                     <span>💰 Cobrar Cliente</span>
                   </button>
                 )}
+              </div>
+
+              {/* SEÇÃO DE CHAVES DE AUTOMAÇÃO WHATSAPP (GABI AI) */}
+              <div className="pt-4 border-t border-slate-200 dark:border-white/10 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
+                    <MessageSquare className="h-3.5 w-3.5 text-emerald-400" /> Automação WhatsApp ao Salvar
+                  </span>
+                  <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">
+                    Gabi AI
+                  </span>
+                </div>
+
+                <div className="space-y-2.5">
+                  {/* Chave 1: Avisar Recebimento de Peças */}
+                  <div 
+                    onClick={() => setWhatsappNotifyReceipt(!whatsappNotifyReceipt)}
+                    className={`flex items-center justify-between p-3 rounded-2xl border transition-all cursor-pointer select-none ${
+                      whatsappNotifyReceipt 
+                        ? 'bg-emerald-500/10 border-emerald-500/40 shadow-sm shadow-emerald-500/10' 
+                        : 'bg-slate-100 dark:bg-white/5 border-slate-200 dark:border-white/10 hover:border-white/20'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 pr-2 min-w-0">
+                      <div className={`h-8 w-8 rounded-xl flex items-center justify-center shrink-0 border ${
+                        whatsappNotifyReceipt
+                          ? 'bg-emerald-500/20 border-emerald-500/30 text-emerald-400'
+                          : 'bg-white/5 border-white/10 text-zinc-400'
+                      }`}>
+                        <Package className="h-4 w-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <span className="font-bold text-slate-800 dark:text-zinc-100 block text-xs leading-tight">
+                          Avisar recebimento das peças
+                        </span>
+                        <span className="text-[10px] text-slate-500 dark:text-zinc-400 block mt-0.5 truncate">
+                          Notifica o cliente que as peças deram entrada
+                        </span>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={whatsappNotifyReceipt}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setWhatsappNotifyReceipt(!whatsappNotifyReceipt);
+                      }}
+                      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                        whatsappNotifyReceipt ? 'bg-emerald-500 shadow-sm shadow-emerald-500/40' : 'bg-zinc-700/80 dark:bg-white/10'
+                      }`}
+                    >
+                      <span
+                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
+                          whatsappNotifyReceipt ? 'translate-x-5' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
+                  </div>
+
+                  {/* Chave 2: Solicitar Imagem/Referência */}
+                  <div 
+                    onClick={() => setWhatsappRequestRef(!whatsappRequestRef)}
+                    className={`flex items-center justify-between p-3 rounded-2xl border transition-all cursor-pointer select-none ${
+                      whatsappRequestRef 
+                        ? 'bg-emerald-500/10 border-emerald-500/40 shadow-sm shadow-emerald-500/10' 
+                        : 'bg-slate-100 dark:bg-white/5 border-slate-200 dark:border-white/10 hover:border-white/20'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 pr-2 min-w-0">
+                      <div className={`h-8 w-8 rounded-xl flex items-center justify-center shrink-0 border ${
+                        whatsappRequestRef
+                          ? 'bg-emerald-500/20 border-emerald-500/30 text-emerald-400'
+                          : 'bg-white/5 border-white/10 text-zinc-400'
+                      }`}>
+                        <Image className="h-4 w-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <span className="font-bold text-slate-800 dark:text-zinc-100 block text-xs leading-tight">
+                          Solicitar imagem / referência
+                        </span>
+                        <span className="text-[10px] text-slate-500 dark:text-zinc-400 block mt-0.5 truncate">
+                          Pede a foto/logomarca do bordado no WhatsApp
+                        </span>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={whatsappRequestRef}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setWhatsappRequestRef(!whatsappRequestRef);
+                      }}
+                      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                        whatsappRequestRef ? 'bg-emerald-500 shadow-sm shadow-emerald-500/40' : 'bg-zinc-700/80 dark:bg-white/10'
+                      }`}
+                    >
+                      <span
+                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
+                          whatsappRequestRef ? 'translate-x-5' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
+                  </div>
+
+                  {/* Chave 3: Enviar Comprovante / Ficha */}
+                  <div 
+                    onClick={() => setWhatsappSendSummary(!whatsappSendSummary)}
+                    className={`flex items-center justify-between p-3 rounded-2xl border transition-all cursor-pointer select-none ${
+                      whatsappSendSummary 
+                        ? 'bg-emerald-500/10 border-emerald-500/40 shadow-sm shadow-emerald-500/10' 
+                        : 'bg-slate-100 dark:bg-white/5 border-slate-200 dark:border-white/10 hover:border-white/20'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 pr-2 min-w-0">
+                      <div className={`h-8 w-8 rounded-xl flex items-center justify-center shrink-0 border ${
+                        whatsappSendSummary
+                          ? 'bg-emerald-500/20 border-emerald-500/30 text-emerald-400'
+                          : 'bg-white/5 border-white/10 text-zinc-400'
+                      }`}>
+                        <FileText className="h-4 w-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <span className="font-bold text-slate-800 dark:text-zinc-100 block text-xs leading-tight">
+                          Enviar ficha de registro / recibo
+                        </span>
+                        <span className="text-[10px] text-slate-500 dark:text-zinc-400 block mt-0.5 truncate">
+                          Envia o resumo da entrada e quantidade
+                        </span>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={whatsappSendSummary}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setWhatsappSendSummary(!whatsappSendSummary);
+                      }}
+                      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                        whatsappSendSummary ? 'bg-emerald-500 shadow-sm shadow-emerald-500/40' : 'bg-zinc-700/80 dark:bg-white/10'
+                      }`}
+                    >
+                      <span
+                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
+                          whatsappSendSummary ? 'translate-x-5' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>

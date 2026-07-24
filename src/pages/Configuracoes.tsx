@@ -17,7 +17,7 @@ const initialRules: PricingRule[] = [
 ];
 
 export const Configuracoes: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'pricing' | 'whatsapp' | 'evolution'>('pricing');
+  const [activeTab, setActiveTab] = useState<'pricing' | 'whatsapp'>('pricing');
   const [rules, setRules] = useState<PricingRule[]>(initialRules);
   const [saved, setSaved] = useState(false);
 
@@ -39,7 +39,7 @@ export const Configuracoes: React.FC = () => {
             <Settings className="h-6 w-6 text-purple-400" /> Configurações do Sistema
           </h2>
           <p className="text-xs text-zinc-400 mt-1">
-            Gerencie as regras de precificação, pareamento com WhatsApp e integração com Evolution API.
+            Gerencie as regras de precificação por pontos e pareamento do WhatsApp com o seu ateliê.
           </p>
         </div>
       </div>
@@ -48,7 +48,7 @@ export const Configuracoes: React.FC = () => {
       <div className="flex items-center gap-2 border-b border-white/10 overflow-x-auto pb-2">
         <button
           onClick={() => setActiveTab('pricing')}
-          className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs transition-all whitespace-nowrap ${
+          className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs transition-all whitespace-nowrap cursor-pointer ${
             activeTab === 'pricing'
               ? 'bg-purple-600/20 text-purple-300 border border-purple-500/30 shadow-lg shadow-purple-500/10'
               : 'text-zinc-400 hover:text-white hover:bg-white/5'
@@ -59,24 +59,13 @@ export const Configuracoes: React.FC = () => {
 
         <button
           onClick={() => setActiveTab('whatsapp')}
-          className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs transition-all whitespace-nowrap ${
+          className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs transition-all whitespace-nowrap cursor-pointer ${
             activeTab === 'whatsapp'
               ? 'bg-emerald-600/20 text-emerald-300 border border-emerald-500/30 shadow-lg shadow-emerald-500/10'
               : 'text-zinc-400 hover:text-white hover:bg-white/5'
           }`}
         >
           <MessageSquare className="h-4 w-4" /> Conexão WhatsApp (QR Code)
-        </button>
-
-        <button
-          onClick={() => setActiveTab('evolution')}
-          className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs transition-all whitespace-nowrap ${
-            activeTab === 'evolution'
-              ? 'bg-indigo-600/20 text-indigo-300 border border-indigo-500/30 shadow-lg shadow-indigo-500/10'
-              : 'text-zinc-400 hover:text-white hover:bg-white/5'
-          }`}
-        >
-          <Server className="h-4 w-4" /> Servidor Evolution API (Admin)
         </button>
       </div>
 
@@ -90,7 +79,7 @@ export const Configuracoes: React.FC = () => {
 
             <button
               onClick={handleSaveRules}
-              className="inline-flex items-center justify-center gap-2 px-5 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-bold text-xs shadow-lg shadow-purple-500/25 hover:brightness-110 transition-all"
+              className="inline-flex items-center justify-center gap-2 px-5 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-bold text-xs shadow-lg shadow-purple-500/25 hover:brightness-110 transition-all cursor-pointer"
             >
               <Save className="h-4 w-4" /> Salvar Regras
             </button>
@@ -132,10 +121,7 @@ export const Configuracoes: React.FC = () => {
       {activeTab === 'whatsapp' && (
         <WhatsAppConnectionCard />
       )}
-
-      {activeTab === 'evolution' && (
-        <EvolutionServerConfigCard />
-      )}
     </div>
   );
 };
+

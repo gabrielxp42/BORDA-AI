@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Users, Plus, Search, Phone, Mail, Building, Repeat, Trash2, ChevronRight } from 'lucide-react';
+import { Users, Plus, Search, Phone, Mail, Building, Repeat, Trash2, ChevronRight, Pencil } from 'lucide-react';
 import { Client } from '@/types/borda';
 import { supabase } from '@/integrations/supabase/client';
 import { useCompanySettings } from '@/contexts/CompanySettingsContext';
@@ -13,6 +13,7 @@ export const Clientes: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [clientToEdit, setClientToEdit] = useState<Client | null>(null);
   const [selectedClientForDetails, setSelectedClientForDetails] = useState<Client | null>(null);
 
   useEffect(() => {
@@ -85,7 +86,10 @@ export const Clientes: React.FC = () => {
           </p>
         </div>
         <button
-          onClick={() => setIsCreateModalOpen(true)}
+          onClick={() => {
+            setClientToEdit(null);
+            setIsCreateModalOpen(true);
+          }}
           className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-2xl text-white font-bold text-xs shadow-lg hover:brightness-110 transition-all active:scale-95"
           style={{
             backgroundColor: settings.primaryColor,
@@ -161,12 +165,23 @@ export const Clientes: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5">
                   {c.is_recurring && (
                     <span className="px-2.5 py-1 rounded-full text-[9px] font-black uppercase bg-emerald-500/20 text-emerald-600 dark:text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
                       <Repeat className="h-3 w-3" /> Recorrente
                     </span>
                   )}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setClientToEdit(c);
+                      setIsCreateModalOpen(true);
+                    }}
+                    title="Editar cliente"
+                    className="p-1.5 rounded-xl text-zinc-500 hover:text-blue-400 hover:bg-blue-500/10 transition-colors"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </button>
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
@@ -210,15 +225,27 @@ export const Clientes: React.FC = () => {
         onClose={() => setSelectedClientForDetails(null)}
         client={selectedClientForDetails}
         onDeleteClient={handleDeleteClient}
+        onEditClient={(clientToEditObj) => {
+          setClientToEdit(clientToEditObj);
+          setIsCreateModalOpen(true);
+        }}
       />
 
-      {/* Modal de Cadastro Real de Cliente */}
+      {/* Modal de Cadastro/Edição de Cliente */}
       <CreateClientModal
         isOpen={isCreateModalOpen}
-        onClose={() => setIsCreateModalOpen(false)}
-        onClientCreated={() => {
-          fetchClients();
+        clientToEdit={clientToEdit}
+        onClose={() => {
           setIsCreateModalOpen(false);
+          setClientToEdit(null);
+        }}
+        onClientCreated={(updatedClient) => {
+          fetchClients();
+          if (selectedClientForDetails?.id === updatedClient.id) {
+            setSelectedClientForDetails(updatedClient);
+          }
+          setIsCreateModalOpen(false);
+          setClientToEdit(null);
         }}
       />
     </div>

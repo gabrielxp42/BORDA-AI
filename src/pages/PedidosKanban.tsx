@@ -1,27 +1,49 @@
 import React, { useState, useEffect } from 'react';
-import { ShoppingBag, Play, Package, Lock } from 'lucide-react';
+import { 
+  ShoppingBag, Play, Package, Lock, Printer, Send, FileText, 
+  Building, Phone, AlertTriangle, Calendar, Zap, Download, 
+  CheckCircle2, Clock, Eye 
+} from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useProfile } from '@/contexts/ProfileContext';
 import { useCompanySettings } from '@/contexts/CompanySettingsContext';
 import { parsePaymentMetadata } from '@/utils/paymentHelper';
-
+import { printOrderReceipt } from '@/services/pdfGenerator';
+import { sendEvolutionText, getWhatsAppWebLink } from '@/services/whatsappService';
+import { useBackgroundTasks } from '@/hooks/useBackgroundTasks';
+import { toast } from 'sonner';
 
 interface OrderItem {
   id: string;
   description: string;
   quantity: number;
+  unit_price?: number;
+  total_price?: number;
 }
 
 interface KanbanOrder {
   id: string;
+  order_number?: number;
   client_id: string;
   status: string;
+  payment_status?: string;
+  payment_method?: string;
   total_amount: number;
   due_date?: string;
   notes: string;
   created_at: string;
-  client: { name: string };
+  client?: {
+    id?: string;
+    name?: string;
+    phone?: string;
+    company_name?: string;
+  };
   items: OrderItem[];
+}
+
+interface PedidosKanbanProps {
+  onOpenDetails?: (order: any) => void;
+  onQuickPrice?: (order: any) => void;
 }
 
 const columns = [
@@ -31,7 +53,10 @@ const columns = [
   { id: 'completed', title: 'Concluído', color: 'border-emerald-500/30 text-emerald-400 bg-emerald-500/10' },
 ];
 
-export const PedidosKanban: React.FC = () => {
+export const PedidosKanban: React.FC<PedidosKanbanProps> = ({
+  onOpenDetails,
+  onQuickPrice
+}) => {
   const [orders, setOrders] = useState<KanbanOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const { isUnlocked } = useProfile();
@@ -40,9 +65,8 @@ export const PedidosKanban: React.FC = () => {
   useEffect(() => {
     fetchOrders();
     
-    // Subscribe to realtime changes on orders
     const channel = supabase
-      .channel('schema-db-changes')
+      .channel('schema-db-changes-kanban')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
         fetchOrders();
       })
@@ -55,25 +79,22 @@ export const PedidosKanban: React.FC = () => {
 
   const fetchOrders = async () => {
     try {
-      // Busca ordens com clientes
       const { data: ordersData, error: ordersError } = await supabase
         .from('orders')
         .select(`
-          id, client_id, status, total_amount, due_date, notes, created_at,
-          clients (name)
+          id, order_number, client_id, status, payment_status, payment_method, total_amount, due_date, notes, created_at,
+          clients (id, name, phone, company_name)
         `)
         .order('created_at', { ascending: false });
 
       if (ordersError) throw ordersError;
 
-      // Busca itens de ordem
       const { data: itemsData, error: itemsError } = await supabase
         .from('order_items')
-        .select('id, order_id, description, quantity');
+        .select('id, order_id, description, quantity, unit_price, total_price');
 
       if (itemsError) throw itemsError;
 
-      // Monta estrutura final
       const formattedOrders: KanbanOrder[] = (ordersData || []).map((o: any) => ({
         ...o,
         client: o.clients,
@@ -89,7 +110,6 @@ export const PedidosKanban: React.FC = () => {
   };
 
   const moveOrder = async (orderId: string, newStatus: string) => {
-    // Atualização Otimista
     setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
 
     try {
@@ -101,11 +121,97 @@ export const PedidosKanban: React.FC = () => {
       if (error) throw error;
     } catch (err) {
       console.error("Erro ao mover pedido:", err);
-      fetchOrders(); // reverte em caso de erro
+      fetchOrders();
     }
   };
 
-  // Funções Drag and Drop
+  const handlePrintPDF = (order: KanbanOrder) => {
+    printOrderReceipt({
+      id: order.id,
+      createdAt: order.created_at,
+      dueDate: order.due_date,
+      clientName: order.client?.name || 'Cliente',
+      clientPhone: order.client?.phone,
+      clientCompany: order.client?.company_name,
+      paymentStatus: order.payment_status || 'pending',
+      paymentMethod: order.payment_method,
+      totalAmount: order.total_amount || 0,
+      notes: order.notes,
+      items: order.items || [],
+      companyName: settings.systemName
+    });
+  };
+
+  const handleSendWhatsApp = async (order: KanbanOrder) => {
+    const phone = order.client?.phone;
+    const clientName = order.client?.name || 'Cliente';
+    if (!phone) {
+      toast.error('Este cliente não possui WhatsApp cadastrado.');
+      return;
+    }
+
+    const { addTask, updateTask, updateStep } = useBackgroundTasks.getState();
+
+    const itemsSummary = order.items?.map((it: any) => `- ${it.description} (${it.quantity}x)`).join('\n') || '';
+    const text = `*Ficha do Pedido #${order.order_number || order.id.slice(0, 6)} - ${settings.systemName}* 🧵✨\n\n` +
+      `Olá, *${clientName}*! Seguem os detalhes do seu pedido:\n\n` +
+      `*Cliente:* ${clientName}\n` +
+      `*Status:* ${order.payment_status === 'paid' ? 'Pago (100%)' : order.payment_status === 'half_paid' ? 'Sinal (50%)' : 'Pendente'}\n\n` +
+      `*Itens:* \n${itemsSummary}\n\n` +
+      `*Valor Total:* R$ ${Number(order.total_amount || 0).toFixed(2)}`;
+
+    const taskId = addTask({
+      title: `Ficha Pedido #${order.order_number || order.id.slice(0, 4)}`,
+      description: `Enviando para ${clientName}...`,
+      status: 'processing',
+      progress: 25,
+      steps: [
+        { id: 'prep', label: 'Gerando Resumo', status: 'completed' },
+        { id: 'send', label: 'Conectando Evolution API', status: 'loading' },
+        { id: 'done', label: 'Envio WhatsApp', status: 'pending' },
+      ]
+    });
+
+    const toastId = toast.loading(`Enviando ficha do pedido para ${clientName} via WhatsApp...`);
+
+    try {
+      updateStep(taskId, 'send', 'completed');
+      updateStep(taskId, 'done', 'loading');
+      updateTask(taskId, { progress: 65, status: 'sending' });
+
+      await sendEvolutionText(phone, text);
+
+      const webLink = getWhatsAppWebLink(phone, text);
+
+      updateStep(taskId, 'done', 'completed');
+      updateTask(taskId, {
+        progress: 100,
+        status: 'completed',
+        description: `Enviado com sucesso para ${clientName}!`
+      });
+
+      toast.success(`⚡ Ficha enviada via Evolution API para ${clientName}!`, { 
+        id: toastId,
+        duration: 6000,
+        action: {
+          label: "Abrir WhatsApp Web",
+          onClick: () => window.open(webLink, '_blank')
+        }
+      });
+    } catch (evoErr: any) {
+      console.warn('Falha no envio direto via Evolution API, abrindo WhatsApp Web:', evoErr);
+      updateTask(taskId, {
+        status: 'error',
+        progress: 100,
+        error: evoErr.message || 'Falha no envio direto'
+      });
+
+      const webLink = getWhatsAppWebLink(phone, text);
+      window.open(webLink, '_blank');
+      toast.info(`Evolution API indisponível. Abrindo WhatsApp Web para ${clientName}...`, { id: toastId });
+    }
+  };
+
   const handleDragStart = (e: React.DragEvent, orderId: string) => {
     e.dataTransfer.setData('orderId', orderId);
   };
@@ -126,10 +232,10 @@ export const PedidosKanban: React.FC = () => {
     <div className="space-y-6 h-full flex flex-col animate-in fade-in duration-300">
       <div>
         <h2 className="text-2xl font-black tracking-tight text-white flex items-center gap-3">
-          <ShoppingBag className="h-6 w-6 text-purple-400" /> Pedidos & Produção (Kanban)
+          <ShoppingBag className="h-6 w-6 text-purple-400" /> Pedidos & Produção (Kanban Operacional)
         </h2>
         <p className="text-xs text-zinc-400 mt-1">
-          Acompanhe o andamento dos pedidos de bordado. Arraste os cards para atualizar o status.
+          Arraste os cards ou use os atalhos rápidos para mover o pedido, imprimir recibo, enviar WhatsApp ou orçar.
         </p>
       </div>
 
@@ -139,7 +245,7 @@ export const PedidosKanban: React.FC = () => {
           return (
             <div 
               key={col.id} 
-              className="glass-panel p-4 rounded-3xl space-y-3 flex flex-col min-h-[500px]"
+              className="glass-panel p-4 rounded-3xl space-y-3 flex flex-col min-h-[520px]"
               onDragOver={handleDragOver}
               onDrop={(e) => handleDrop(e, col.id)}
             >
@@ -160,73 +266,156 @@ export const PedidosKanban: React.FC = () => {
                 ) : (
                   colOrders.map((ord) => {
                     const { cleanNotes, metadata } = parsePaymentMetadata(ord.notes);
+                    const isUnpriced = metadata.isQuickEntry || ord.total_amount === 0;
+
                     return (
                       <div 
                         key={ord.id} 
                         draggable
                         onDragStart={(e) => handleDragStart(e, ord.id)}
-                        className="glass-card p-4 rounded-2xl space-y-3 relative group border border-white/5 cursor-grab active:cursor-grabbing hover:border-brand/30 transition-colors"
+                        onClick={() => onOpenDetails && onOpenDetails(ord)}
+                        className="glass-card p-4 rounded-2xl space-y-3 relative group border border-white/10 cursor-pointer hover:border-purple-500/40 hover:scale-[1.01] transition-all shadow-md"
                       >
-                        <div className="flex items-start justify-between">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="text-[10px] font-black uppercase text-brand">
-                              {new Date(ord.created_at).toLocaleDateString()}
-                            </span>
-                            {metadata.isQuickEntry && (
-                              <span className="animate-pulse text-[8px] font-black uppercase bg-amber-500/20 border border-amber-500/30 text-amber-500 px-1 rounded-md leading-none">
+                        {/* Header do Card no Kanban */}
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <div className={`h-8 w-8 rounded-xl border flex items-center justify-center shrink-0 font-black text-[11px] ${
+                              isUnpriced
+                                ? 'bg-amber-500/20 border-amber-500/30 text-amber-400'
+                                : 'bg-white/5 border-white/10 text-white'
+                            }`}>
+                              #{ord.order_number || ord.id.slice(0, 4)}
+                            </div>
+                            <div className="min-w-0">
+                              <h4 className="text-xs font-bold text-white truncate max-w-[130px]" title={ord.client?.name}>
+                                {ord.client?.name || 'Cliente'}
+                              </h4>
+                              <p className="text-[10px] text-zinc-400 truncate flex items-center gap-1">
+                                <Building className="h-2.5 w-2.5" /> {ord.client?.company_name || 'Particular'}
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Preço / Tag de Pagamento */}
+                          <div className="text-right shrink-0">
+                            {isUnlocked ? (
+                              ord.total_amount > 0 ? (
+                                <span className="text-xs font-black text-emerald-400 block">
+                                  {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(ord.total_amount)}
+                                </span>
+                              ) : (
+                                <span className="text-[10px] font-bold text-amber-400 block">Aguardando</span>
+                              )
+                            ) : null}
+
+                            {/* Badge de Status de Pagamento */}
+                            {isUnpriced ? (
+                              <span className="inline-block mt-0.5 animate-pulse px-1.5 py-0.5 rounded-md text-[8px] font-black uppercase bg-amber-500/20 text-amber-400 border border-amber-500/30">
                                 ⚠️ Sem Orçamento
+                              </span>
+                            ) : ord.payment_status === 'paid' ? (
+                              <span className="inline-block mt-0.5 px-1.5 py-0.5 rounded-md text-[8px] font-bold uppercase bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                                ✓ Pago 100%
+                              </span>
+                            ) : ord.payment_status === 'half_paid' ? (
+                              <span className="inline-block mt-0.5 px-1.5 py-0.5 rounded-md text-[8px] font-bold uppercase bg-cyan-500/20 text-cyan-400 border border-cyan-500/30">
+                                ⚡ Sinal 50%
+                              </span>
+                            ) : (
+                              <span className="inline-block mt-0.5 px-1.5 py-0.5 rounded-md text-[8px] font-bold uppercase bg-orange-500/20 text-orange-400 border border-orange-500/30">
+                                ⏳ Pendente
                               </span>
                             )}
                           </div>
-                          
-                          {isUnlocked ? (
-                            <span className="text-xs font-black text-emerald-400">
-                              {ord.total_amount > 0 ? (
-                                new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(ord.total_amount)
-                              ) : (
-                                <span className="text-amber-500 font-bold text-[10px]">Aguardando</span>
-                              )}
-                            </span>
-                          ) : (
-                            <span className="text-[10px] font-bold text-zinc-400">
-                              🧵 #{ord.id.slice(0, 4)}
-                            </span>
-                          )}
                         </div>
 
-                        <div>
-                          <h4 className="text-xs font-bold text-white truncate" title={ord.client?.name}>
-                            {ord.client?.name || 'Cliente Desconhecido'}
-                          </h4>
-                        </div>
-
-                        {/* Lista curta de itens (o que tem na sacola) */}
+                        {/* Itens do Bordado */}
                         {ord.items && ord.items.length > 0 && (
-                          <div className="bg-black/20 p-2 rounded-xl space-y-1">
-                            {ord.items.slice(0, 3).map((item, idx) => (
-                              <div key={idx} className="flex items-center gap-2 text-[10px] text-zinc-400">
-                                <Package className="h-3 w-3 text-zinc-500" />
-                                <span className="font-bold text-zinc-300">{item.quantity}x</span>
-                                <span className="truncate">{item.description}</span>
+                          <div className="bg-black/30 p-2 rounded-xl space-y-1 border border-white/5">
+                            {ord.items.slice(0, 2).map((item, idx) => (
+                              <div key={idx} className="flex items-center gap-1.5 text-[10px] text-zinc-300">
+                                <Package className="h-3 w-3 text-purple-400 shrink-0" />
+                                <span className="font-bold text-white shrink-0">{item.quantity}x</span>
+                                <span className="truncate text-zinc-300">{item.description}</span>
                               </div>
                             ))}
-                            {ord.items.length > 3 && (
-                              <div className="text-[9px] text-zinc-500 italic pl-5">
-                                + {ord.items.length - 3} outros itens
+                            {ord.items.length > 2 && (
+                              <div className="text-[9px] text-zinc-500 italic pl-4">
+                                + {ord.items.length - 2} itens adicionais
                               </div>
                             )}
                           </div>
                         )}
 
+                        {/* Observações / Descrição da Matriz */}
                         {cleanNotes && (
-                          <p className="text-[10px] text-zinc-500 italic border-l-2 border-white/10 pl-2">
-                            {cleanNotes}
+                          <p className="text-[10px] text-zinc-400 italic border-l-2 border-purple-500/40 pl-2 line-clamp-2">
+                            "{cleanNotes}"
                           </p>
                         )}
 
-                        <div className="pt-2 border-t border-white/5 flex items-center justify-between">
+                        {/* Botão de Orçar em Destaque (Salto Sutil) */}
+                        {isUnpriced && onQuickPrice && (
                           <button
-                            onClick={() => {
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onQuickPrice(ord);
+                            }}
+                            className="w-full py-1.5 px-3 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-[11px] font-bold flex items-center justify-center gap-1.5 transition-all animate-subtle-bounce active:scale-95 cursor-pointer"
+                          >
+                            ⚡ Orçar Pedido Agora
+                          </button>
+                        )}
+
+                        {/* BARRA DE ATALHOS RÁPIDOS DO CARD DO KANBAN */}
+                        <div className="pt-2 border-t border-white/10 flex items-center justify-between gap-1">
+                          <div className="flex items-center gap-1">
+                            {/* Atalho 1: Ficha / Detalhes */}
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onOpenDetails && onOpenDetails(ord);
+                              }}
+                              title="Abrir Ficha do Pedido & Detalhes"
+                              className="p-1.5 rounded-lg bg-white/5 hover:bg-white/15 text-zinc-300 hover:text-white border border-white/10 transition-colors"
+                            >
+                              <FileText className="h-3.5 w-3.5" />
+                            </button>
+
+                            {/* Atalho 2: Imprimir Recibo */}
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handlePrintPDF(ord);
+                              }}
+                              title="Imprimir Recibo do Pedido"
+                              className="p-1.5 rounded-lg bg-white/5 hover:bg-white/15 text-zinc-300 hover:text-white border border-white/10 transition-colors"
+                            >
+                              <Printer className="h-3.5 w-3.5" />
+                            </button>
+
+                            {/* Atalho 3: Enviar WhatsApp */}
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleSendWhatsApp(ord);
+                              }}
+                              title="Enviar Ficha via WhatsApp"
+                              className="p-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 transition-colors"
+                            >
+                              <Send className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+
+                          {/* Avançar Status no Kanban */}
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
                               const nextStatusMap: Record<string, string> = {
                                 pending: 'production',
                                 production: 'embroidering',
@@ -235,12 +424,10 @@ export const PedidosKanban: React.FC = () => {
                               };
                               moveOrder(ord.id, nextStatusMap[ord.status]);
                             }}
-                            className="text-[10px] font-bold hover:opacity-80 flex items-center gap-1 sm:hidden md:flex lg:flex"
-                            style={{ color: settings.primaryColor }}
+                            className="text-[10px] font-bold px-2 py-1 rounded-lg bg-purple-500/10 hover:bg-purple-500/20 text-purple-300 border border-purple-500/30 flex items-center gap-1 transition-all active:scale-95"
                           >
-                            <Play className="h-3 w-3" /> {ord.status === 'completed' ? 'Reiniciar' : 'Avançar'}
+                            <Play className="h-3 w-3 fill-purple-300" /> {ord.status === 'completed' ? 'Reiniciar' : 'Avançar'}
                           </button>
-                          <div className="text-[9px] text-zinc-600 hidden lg:block">Arraste para mover</div>
                         </div>
                       </div>
                     );

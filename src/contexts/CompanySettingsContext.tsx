@@ -7,6 +7,7 @@ interface CompanySettings {
   systemSubtitle: string;
   primaryColor: string;
   logoUrl: string | null;
+  pixKey?: string | null;
 }
 
 interface CompanySettingsContextType {
@@ -20,6 +21,7 @@ const defaultSettings: CompanySettings = {
   systemSubtitle: 'INDUSTRIAL EMBROIDERIES ERP',
   primaryColor: '#9333ea',
   logoUrl: null,
+  pixKey: '',
 };
 
 const CompanySettingsContext = createContext<CompanySettingsContextType | undefined>(undefined);
@@ -27,12 +29,13 @@ const CompanySettingsContext = createContext<CompanySettingsContextType | undefi
 export const CompanySettingsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user } = useAuth();
 
-  // Inicialização síncrona lendo direto do localStorage para eliminar 100% o piscar do roxo no F5
+  // Inicialização síncrona lendo direto do localStorage para eliminar 100% o piscar no F5
   const [settings, setSettings] = useState<CompanySettings>(() => {
     const cachedColor = localStorage.getItem('cached_primary_color');
     const cachedName = localStorage.getItem('cached_system_name');
     const cachedSubtitle = localStorage.getItem('cached_system_subtitle');
     const cachedLogo = localStorage.getItem('cached_logo_url');
+    const cachedPix = localStorage.getItem('cached_pix_key');
 
     if (cachedColor) {
       document.documentElement.style.setProperty('--brand-primary', cachedColor);
@@ -43,6 +46,7 @@ export const CompanySettingsProvider: React.FC<{ children: React.ReactNode }> = 
       systemSubtitle: cachedSubtitle || defaultSettings.systemSubtitle,
       primaryColor: cachedColor || defaultSettings.primaryColor,
       logoUrl: cachedLogo || null,
+      pixKey: cachedPix || '',
     };
   });
 
@@ -52,6 +56,11 @@ export const CompanySettingsProvider: React.FC<{ children: React.ReactNode }> = 
     localStorage.setItem('cached_primary_color', newSettings.primaryColor);
     localStorage.setItem('cached_system_name', newSettings.systemName);
     localStorage.setItem('cached_system_subtitle', newSettings.systemSubtitle);
+    if (newSettings.pixKey) {
+      localStorage.setItem('cached_pix_key', newSettings.pixKey);
+    } else {
+      localStorage.removeItem('cached_pix_key');
+    }
     if (newSettings.logoUrl) {
       localStorage.setItem('cached_logo_url', newSettings.logoUrl);
     } else {
@@ -64,6 +73,7 @@ export const CompanySettingsProvider: React.FC<{ children: React.ReactNode }> = 
     localStorage.removeItem('cached_system_name');
     localStorage.removeItem('cached_system_subtitle');
     localStorage.removeItem('cached_logo_url');
+    localStorage.removeItem('cached_pix_key');
   };
 
   // Sempre que o usuário autenticado mudar (login/logout/troca de conta):
@@ -99,6 +109,7 @@ export const CompanySettingsProvider: React.FC<{ children: React.ReactNode }> = 
           systemSubtitle: data.system_subtitle || defaultSettings.systemSubtitle,
           primaryColor: data.primary_color || defaultSettings.primaryColor,
           logoUrl: data.logo_url || null,
+          pixKey: data.pix_key || localStorage.getItem('cached_pix_key') || '',
         };
         setSettings(loaded);
         saveToCache(loaded);
@@ -132,6 +143,7 @@ export const CompanySettingsProvider: React.FC<{ children: React.ReactNode }> = 
         system_name: newSettings.systemName ?? settings.systemName,
         system_subtitle: newSettings.systemSubtitle ?? settings.systemSubtitle,
         primary_color: newSettings.primaryColor ?? settings.primaryColor,
+        pix_key: newSettings.pixKey ?? settings.pixKey,
         logo_url: logoUrl,
         updated_at: new Date().toISOString(),
       };
@@ -147,6 +159,7 @@ export const CompanySettingsProvider: React.FC<{ children: React.ReactNode }> = 
         systemSubtitle: updated.system_subtitle,
         primaryColor: updated.primary_color,
         logoUrl,
+        pixKey: updated.pix_key,
       };
 
       setSettings(newCompanySettings);

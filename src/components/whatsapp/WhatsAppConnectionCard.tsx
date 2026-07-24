@@ -14,11 +14,13 @@ import {
   Sparkles,
   Send
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import { 
   createEvolutionInstance, 
   checkEvolutionStatus, 
-  deleteEvolutionInstance 
+  deleteEvolutionInstance,
+  sendEvolutionText
 } from '@/services/whatsappService';
 import { WhatsAppStatus } from '@/types/borda';
 
@@ -30,6 +32,27 @@ export const WhatsAppConnectionCard: React.FC = () => {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [lastChecked, setLastChecked] = useState<Date | null>(null);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Estados para teste de envio de mensagem
+  const [testPhone, setTestPhone] = useState('');
+  const [testMessage, setTestMessage] = useState('Olá! Esta é uma mensagem de teste enviada via Evolution API do Borda AI 🧵✨');
+  const [sendingTest, setSendingTest] = useState(false);
+
+  const handleSendTestMessage = async () => {
+    if (!testPhone.trim()) {
+      toast.error('Informe o número de telefone com DDD.');
+      return;
+    }
+    setSendingTest(true);
+    try {
+      await sendEvolutionText(testPhone, testMessage);
+      toast.success('Mensagem de teste enviada com sucesso no WhatsApp!');
+    } catch (err: any) {
+      toast.error('Erro ao enviar mensagem: ' + (err.message || 'Falha na Evolution API'));
+    } finally {
+      setSendingTest(false);
+    }
+  };
 
   const stopPolling = useCallback(() => {
     if (pollingRef.current) {
@@ -120,6 +143,14 @@ export const WhatsAppConnectionCard: React.FC = () => {
         : (profile?.whatsapp_instance_id || `borda_${cleanCompanyName}`);
 
       const res = await createEvolutionInstance(instanceId, force);
+
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user?.id) {
+        await supabase.from('profiles').update({
+          whatsapp_instance_id: instanceId,
+          whatsapp_status: 'connecting'
+        }).eq('id', user.id);
+      }
 
       const qr = typeof res.qrcode === 'string' 
         ? res.qrcode 
@@ -272,9 +303,9 @@ export const WhatsAppConnectionCard: React.FC = () => {
             <div className="glass-card p-4 rounded-2xl space-y-2">
               <div className="flex items-center gap-2 text-purple-400">
                 <Zap className="h-4 w-4" />
-                <span className="text-xs font-black uppercase tracking-wider">Envio Nulo de Latência</span>
+                <span className="text-xs font-black uppercase tracking-wider">Envio Automático</span>
               </div>
-              <p className="text-xs text-zinc-400">Orçamentos com aprovação em 1 clique direto no celular do cliente.</p>
+              <p className="text-xs text-zinc-400">Orçamentos e notificações de bordado enviadas direto ao cliente.</p>
             </div>
 
             <div className="glass-card p-4 rounded-2xl space-y-2">
@@ -282,7 +313,7 @@ export const WhatsAppConnectionCard: React.FC = () => {
                 <Smartphone className="h-4 w-4" />
                 <span className="text-xs font-black uppercase tracking-wider">Multi-Dispositivo</span>
               </div>
-              <p className="text-xs text-zinc-400">Mantém seu celular livre enquanto o servidor responde aos pedidos.</p>
+              <p className="text-xs text-zinc-400">Mantém seu celular livre enquanto o servidor envia os comprovantes.</p>
             </div>
 
             <div className="glass-card p-4 rounded-2xl space-y-2">
@@ -290,7 +321,39 @@ export const WhatsAppConnectionCard: React.FC = () => {
                 <ShieldCheck className="h-4 w-4" />
                 <span className="text-xs font-black uppercase tracking-wider">Criptografia Segura</span>
               </div>
-              <p className="text-xs text-zinc-400">Instância isolada de Baileys mantida em ambiente isolado.</p>
+              <p className="text-xs text-zinc-400">Instância isolada de Baileys mantida na Evolution API v2.</p>
+            </div>
+          </div>
+
+          {/* Test Message Sending Form */}
+          <div className="p-5 rounded-2xl bg-white/5 border border-white/10 space-y-3">
+            <h5 className="text-xs font-black uppercase tracking-widest text-emerald-400 flex items-center gap-2">
+              <Send className="h-4 w-4" /> Testar Envio de Mensagem WhatsApp
+            </h5>
+            <div className="flex flex-col sm:flex-row items-center gap-3">
+              <input
+                type="text"
+                placeholder="DDD + Número (ex: 11999999999)"
+                value={testPhone}
+                onChange={(e) => setTestPhone(e.target.value)}
+                className="w-full sm:w-64 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
+              />
+              <input
+                type="text"
+                placeholder="Mensagem de teste..."
+                value={testMessage}
+                onChange={(e) => setTestMessage(e.target.value)}
+                className="w-full flex-1 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
+              />
+              <button
+                type="button"
+                onClick={handleSendTestMessage}
+                disabled={sendingTest || !testPhone}
+                className="w-full sm:w-auto px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs shadow-lg shadow-emerald-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+              >
+                {sendingTest ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+                <span>Enviar Teste</span>
+              </button>
             </div>
           </div>
         </div>

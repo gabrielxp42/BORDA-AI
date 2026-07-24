@@ -4,7 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 
 export const EvolutionServerConfigCard: React.FC = () => {
-  const { profile } = useAuth();
+  const { profile, refreshProfile } = useAuth();
   const [apiUrl, setApiUrl] = useState('');
   const [apiKey, setApiKey] = useState('');
   const [loading, setLoading] = useState(false);
@@ -25,14 +25,21 @@ export const EvolutionServerConfigCard: React.FC = () => {
     setTestResult(null);
 
     try {
-      if (profile?.id) {
-        const { error } = await supabase.from('profiles').update({
-          whatsapp_api_url: apiUrl.trim(),
-          whatsapp_api_key: apiKey.trim(),
-        }).eq('id', profile.id);
+      const { data: { user } } = await supabase.auth.getUser();
+      const targetId = profile?.id || user?.id;
 
-        if (error) throw error;
+      if (!targetId) {
+        throw new Error('Usuário não autenticado.');
       }
+
+      const { error } = await supabase.from('profiles').update({
+        whatsapp_api_url: apiUrl.trim(),
+        whatsapp_api_key: apiKey.trim(),
+      }).eq('id', targetId);
+
+      if (error) throw error;
+
+      await refreshProfile();
       setSaved(true);
       setTimeout(() => setSaved(false), 4000);
     } catch (err: any) {

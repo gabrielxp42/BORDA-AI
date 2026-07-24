@@ -1,6 +1,19 @@
-export const maskPhone = (value: string) => {
+export const normalizePhone = (value: string): string => {
   let v = value.replace(/\D/g, "");
+  // Se começa com 55 e tem 12 ou 13 dígitos, remove o DDI 55 para exibição limpa
+  if (v.startsWith("55") && (v.length === 12 || v.length === 13)) {
+    v = v.slice(2);
+  }
+  // Se começa com 0 (ex: 021), remove o 0 inicial
+  if (v.startsWith("0") && v.length > 10) {
+    v = v.slice(1);
+  }
   if (v.length > 11) v = v.slice(0, 11);
+  return v;
+};
+
+export const maskPhone = (value: string) => {
+  let v = normalizePhone(value);
   
   if (v.length > 10) {
     v = v.replace(/^(\d{2})(\d{5})(\d{4})/, "($1) $2-$3");

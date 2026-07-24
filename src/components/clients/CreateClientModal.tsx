@@ -6,18 +6,22 @@ import { maskPhone, maskCpfCnpj } from '../../utils/masks';
 
 import { createPortal } from 'react-dom';
 
+import { toast } from 'sonner';
+
 interface CreateClientModalProps {
   isOpen: boolean;
   onClose: () => void;
   onClientCreated: (client: Client) => void;
   initialName?: string;
+  clientToEdit?: Client | null;
 }
 
 export const CreateClientModal: React.FC<CreateClientModalProps> = ({ 
   isOpen, 
   onClose, 
   onClientCreated,
-  initialName = ''
+  initialName = '',
+  clientToEdit = null
 }) => {
   const [name, setName] = useState(initialName);
   const [companyName, setCompanyName] = useState('');
@@ -28,55 +32,95 @@ export const CreateClientModal: React.FC<CreateClientModalProps> = ({
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  if (!isOpen) return null;
-
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault();
-    e.stopPropagation(); // Impede que o evento de submit suba para o formulário Pai no React Tree!
-    
-    if (!name.trim()) return;
-
-    setIsSaving(true);
-    setError(null);
-
-    try {
-      const { data, error: insertError } = await supabase
-        .from('clients')
-        .insert({
-          name: name.trim(),
-          company_name: companyName.trim() || null,
-          document: documentStr.trim() || null,
-          phone: phone.trim() || null,
-          notes: notes.trim() || null,
-          is_recurring: isRecurring
-        })
-        .select()
-        .single();
-
-      if (insertError) throw insertError;
-
-      if (data) {
-        onClientCreated(data as Client);
-        setName('');
+  React.useEffect(() => {
+    if (isOpen) {
+      if (clientToEdit) {
+        setName(clientToEdit.name || '');
+        setCompanyName(clientToEdit.company_name || '');
+        setDocumentStr(clientToEdit.document || '');
+        setPhone(clientToEdit.phone || '');
+        setNotes(clientToEdit.notes || '');
+        setIsRecurring(!!clientToEdit.is_recurring);
+      } else {
+        setName(initialName || '');
         setCompanyName('');
         setDocumentStr('');
         setPhone('');
         setNotes('');
         setIsRecurring(false);
+      }
+      setError(null);
+    }
+  }, [isOpen, clientToEdit, initialName]);
+
+  if (!isOpen) return null;
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    if (!name.trim()) return;
+
+    const cleanPhoneDigits = phone.replace(/\D/g, '');
+    if (!phone.trim() || cleanPhoneDigits.length < 10) {
+      setError('O número de WhatsApp do cliente é OBRIGATÓRIO (mínimo 10 dígitos com DDD) para as automações da GABI!');
+      return;
+    }
+
+    setIsSaving(true);
+    setError(null);
+
+    try {
+      let data: any;
+      let dbError: any;
+
+      const payload = {
+        name: name.trim(),
+        company_name: companyName.trim() || null,
+        document: documentStr.trim() || null,
+        phone: maskPhone(phone),
+        notes: notes.trim() || null,
+        is_recurring: isRecurring
+      };
+
+      if (clientToEdit) {
+        const res = await supabase
+          .from('clients')
+          .update(payload)
+          .eq('id', clientToEdit.id)
+          .select()
+          .single();
+        data = res.data;
+        dbError = res.error;
+      } else {
+        const res = await supabase
+          .from('clients')
+          .insert(payload)
+          .select()
+          .single();
+        data = res.data;
+        dbError = res.error;
+      }
+
+      if (dbError) throw dbError;
+
+      if (data) {
+        toast.success(clientToEdit ? `Cliente "${data.name}" atualizado!` : `Cliente "${data.name}" cadastrado!`);
+        onClientCreated(data as Client);
         onClose();
       }
     } catch (err: any) {
-      console.error("Erro ao criar cliente:", err);
-      setError(err.message || "Erro desconhecido ao cadastrar cliente.");
+      console.error("Erro ao salvar cliente:", err);
+      setError(err.message || "Erro desconhecido ao salvar cliente.");
     } finally {
       setIsSaving(false);
     }
   };
 
   const modalContent = (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-[999999] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
       <div 
-        className="w-full max-w-2xl bg-[#0f0f13] border border-white/10 rounded-3xl overflow-hidden shadow-2xl shadow-black/80 flex flex-col max-h-[90vh]"
+        className="w-full max-w-2xl bg-white dark:bg-[#0f0f13] border border-slate-200 dark:border-white/10 rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
@@ -86,8 +130,12 @@ export const CreateClientModal: React.FC<CreateClientModalProps> = ({
               <Users className="h-5 w-5 text-blue-400" />
             </div>
             <div>
-              <h2 className="text-lg font-black text-white tracking-wider">Novo Cliente</h2>
-              <p className="text-xs text-zinc-400">Cadastre os dados essenciais do cliente para faturamento e produção.</p>
+              <h2 className="text-lg font-black text-white tracking-wider">
+                {clientToEdit ? 'Editar Cliente' : 'Novo Cliente'}
+              </h2>
+              <p className="text-xs text-zinc-400">
+                {clientToEdit ? 'Atualize as informações do cliente para faturamento e comunicação.' : 'Cadastre os dados essenciais do cliente para faturamento e produção.'}
+              </p>
             </div>
           </div>
           <button 
@@ -140,15 +188,16 @@ export const CreateClientModal: React.FC<CreateClientModalProps> = ({
 
               {/* WhatsApp */}
               <div className="space-y-1.5">
-                <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest flex items-center gap-2">
-                  <Phone className="h-3 w-3" /> WhatsApp / Telefone
+                <label className="text-[10px] font-black text-purple-400 uppercase tracking-widest flex items-center gap-2">
+                  <Phone className="h-3 w-3 text-purple-400" /> WhatsApp / Telefone * (GABI Automação)
                 </label>
                 <input 
                   type="text" 
+                  required
                   value={phone}
                   onChange={(e) => setPhone(maskPhone(e.target.value))}
                   placeholder="(00) 00000-0000"
-                  className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500/50"
+                  className="w-full bg-black/40 border border-purple-500/30 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-purple-500"
                 />
               </div>
 

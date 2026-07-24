@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import ReactDOM from 'react-dom';
 import { X, FileText, Printer, Send, Trash2, Calendar, User, Package, DollarSign, Layers, CheckCircle2, AlertCircle, Download } from 'lucide-react';
 import { printOrderReceipt } from '@/services/pdfGenerator';
+import { sendEvolutionText, getWhatsAppWebLink } from '@/services/whatsappService';
+import { useBackgroundTasks } from '@/hooks/useBackgroundTasks';
 import { supabase } from '@/integrations/supabase/client';
 import { useCompanySettings } from '@/contexts/CompanySettingsContext';
 import { useProfile } from '@/contexts/ProfileContext';
@@ -27,6 +29,7 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
 }) => {
   const { settings } = useCompanySettings();
   const { isUnlocked } = useProfile();
+
   const [matrixUrls, setMatrixUrls] = useState<Record<string, string>>({});
   const [matrixPreviews, setMatrixPreviews] = useState<Record<string, string>>({});
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
@@ -116,21 +119,65 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
     });
   };
 
-  const handleSendWhatsApp = () => {
+  const handleSendWhatsApp = async () => {
     const phone = order.clients?.phone;
+    const clientName = order.clients?.name || 'Cliente';
     if (!phone) {
       toast.error("Este cliente não possui WhatsApp cadastrado.");
       return;
     }
 
+    const { addTask, updateTask, updateStep } = useBackgroundTasks.getState();
+
     const itemsSummary = order.order_items?.map((it: any) => `- ${it.description} (${it.quantity}x)`).join('\n') || '';
-    const text = `*Ficha do Pedido #${order.id.slice(0, 6)} - ${settings.systemName}*\n\n` +
-      `*Cliente:* ${order.clients?.name}\n` +
-      `*Status de Pagamento:* ${order.payment_status === 'paid' ? 'Pago (100%)' : order.payment_status === 'half_paid' ? 'Sinal (50%)' : 'Pendente'}\n\n` +
+    const text = `*Ficha do Pedido #${order.id.slice(0, 6)} - ${settings.systemName}* 🧵✨\n\n` +
+      `Olá, *${clientName}*! Seguem os detalhes do seu pedido:\n\n` +
+      `*Cliente:* ${clientName}\n` +
+      `*Status:* ${order.payment_status === 'paid' ? 'Pago (100%)' : order.payment_status === 'half_paid' ? 'Sinal (50%)' : 'Pendente'}\n\n` +
       `*Itens:* \n${itemsSummary}\n\n` +
       `*Valor Total:* R$ ${Number(order.total_amount || 0).toFixed(2)}`;
 
-    window.open(`https://wa.me/${phone.replace(/\D/g, '')}?text=${encodeURIComponent(text)}`, '_blank');
+    const taskId = addTask({
+      title: `Ficha Pedido #${order.id.slice(0, 4)}`,
+      description: `Enviando para ${clientName}...`,
+      status: 'processing',
+      progress: 25,
+      steps: [
+        { id: 'prep', label: 'Gerando Resumo', status: 'completed' },
+        { id: 'send', label: 'Conectando Evolution API', status: 'loading' },
+        { id: 'done', label: 'Envio WhatsApp', status: 'pending' },
+      ]
+    });
+
+    const toastId = toast.loading(`Enviando ficha do pedido para ${clientName} via WhatsApp...`);
+
+    try {
+      updateStep(taskId, 'send', 'completed');
+      updateStep(taskId, 'done', 'loading');
+      updateTask(taskId, { progress: 65, status: 'sending' });
+
+      await sendEvolutionText(phone, text);
+
+      updateStep(taskId, 'done', 'completed');
+      updateTask(taskId, {
+        progress: 100,
+        status: 'completed',
+        description: `Enviado com sucesso para ${clientName}!`
+      });
+
+      toast.success(`⚡ Ficha enviada com sucesso no WhatsApp de ${clientName}!`, { id: toastId });
+    } catch (evoErr: any) {
+      console.warn('Falha no envio direto via Evolution API, abrindo WhatsApp Web:', evoErr);
+      updateTask(taskId, {
+        status: 'error',
+        progress: 100,
+        error: evoErr.message || 'Falha no envio direto'
+      });
+
+      const webLink = getWhatsAppWebLink(phone, text);
+      window.open(webLink, '_blank');
+      toast.info(`Evolution API indisponível. Abrindo WhatsApp Web para ${clientName}...`, { id: toastId });
+    }
   };
 
   const paymentLabels: Record<string, string> = {

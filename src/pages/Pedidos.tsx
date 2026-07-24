@@ -1,5 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { ShoppingBag, Kanban, LayoutGrid, Plus, Search, Filter, Calendar, CheckCircle2, Clock, DollarSign, User, Package, FileText, ChevronRight, RefreshCw, Trash2, Edit3, ArrowUpRight } from 'lucide-react';
+import {
+  ShoppingBag, Kanban, LayoutGrid, Plus, Search, Filter, Calendar,
+  CheckCircle2, Clock, DollarSign, User, Package, FileText, ChevronRight,
+  RefreshCw, Trash2, Edit3, ArrowUpRight, ChevronDown, ChevronUp,
+  AlertTriangle, Paperclip, MessageSquare, ExternalLink, Shield, Maximize2, Minimize2, Phone,
+  Zap, Sparkles
+} from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useCompanySettings } from '@/contexts/CompanySettingsContext';
 import { useProfile } from '@/contexts/ProfileContext';
@@ -9,7 +15,8 @@ import { PaymentStatusModal } from '@/components/orders/PaymentStatusModal';
 import { OrderDetailsModal } from '@/components/orders/OrderDetailsModal';
 import { toast } from 'sonner';
 import { parsePaymentMetadata } from '@/utils/paymentHelper';
-
+import { sendEvolutionText, getWhatsAppWebLink, formatWhatsAppNumber } from '@/services/whatsappService';
+import { useBackgroundTasks } from '@/hooks/useBackgroundTasks';
 
 interface OrderItem {
   id: string;
@@ -49,7 +56,7 @@ const formatPaymentMethod = (method?: string): string => {
 export const Pedidos: React.FC = () => {
   const { settings } = useCompanySettings();
   const { isUnlocked } = useProfile();
-  
+
   const [activeTab, setActiveTab] = useState<'cards' | 'kanban'>('cards');
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
@@ -58,9 +65,101 @@ export const Pedidos: React.FC = () => {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [initialOrderData, setInitialOrderData] = useState<any>(null);
 
+  // Estado para controlar quais cards estão expandidos no modo Acordeon
+  const [expandedOrderIds, setExpandedOrderIds] = useState<Record<string, boolean>>({});
+
   // Modais de Status e Detalhes
   const [selectedOrderForStatus, setSelectedOrderForStatus] = useState<Order | null>(null);
   const [selectedOrderForDetails, setSelectedOrderForDetails] = useState<Order | null>(null);
+
+  // Background Task Store
+  const addTask = useBackgroundTasks(state => state.addTask);
+  const updateTask = useBackgroundTasks(state => state.updateTask);
+  const updateStep = useBackgroundTasks(state => state.updateStep);
+
+  const handleCobrarPedido = async (order: Order, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+
+    const clientName = order.clients?.name || order.client?.name || 'Cliente';
+    const clientPhone = order.clients?.phone || order.client?.phone;
+
+    if (!clientPhone || !clientPhone.trim()) {
+      toast.error(`O cliente "${clientName}" não possui WhatsApp cadastrado.`);
+      return;
+    }
+
+    const orderNum = order.order_number ? `#${order.order_number}` : `#${order.id.slice(0, 4)}`;
+    const totalStr = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(order.total_amount || 0);
+
+    const itemDescriptions = order.order_items?.map((it: any) => `• ${it.description} (${it.quantity}x)`).join('\n') ||
+                             order.items?.map((it: any) => `• ${it.description} (${it.quantity}x)`).join('\n') ||
+                             '• Bordado Personalizado';
+
+    const isPaid = order.payment_status === 'paid';
+    const isHalf = order.payment_status === 'half_paid';
+    const statusLabel = isPaid ? 'PAGO (100%)' : isHalf ? 'SINAL (50%)' : 'PENDENTE DE PAGAMENTO';
+
+    const message = `*Cobrança de Pedido - ${settings.systemName}* 🧵✨\n\n` +
+      `Olá, *${clientName}*! Seguem os detalhes da sua conta:\n\n` +
+      `📋 *Pedido:* ${orderNum}\n` +
+      `📌 *Status:* ${statusLabel}\n` +
+      `📦 *Itens:*\n${itemDescriptions}\n\n` +
+      `💵 *VALOR TOTAL:* *${totalStr}*\n\n` +
+      `✨ Aguardamos a confirmação para dar andamento na sua produção!`;
+
+    // Registra no TaskDock de Tarefas em Segundo Plano (canto inferior esquerdo)
+    const taskId = addTask({
+      title: `Pedido ${orderNum}`,
+      description: `Enviando para ${clientName}...`,
+      status: 'processing',
+      progress: 25,
+      steps: [
+        { id: 'prep', label: 'Gerando Resumo', status: 'completed' },
+        { id: 'send', label: 'Conectando Evolution API', status: 'loading' },
+        { id: 'done', label: 'Envio WhatsApp', status: 'pending' },
+      ]
+    });
+
+    const toastId = toast.loading(`Enviando cobrança do pedido ${orderNum} para ${clientName}...`);
+
+    try {
+      updateStep(taskId, 'send', 'completed');
+      updateStep(taskId, 'done', 'loading');
+      updateTask(taskId, { progress: 65, status: 'sending' });
+
+      await sendEvolutionText(clientPhone, message);
+
+      const targetNum = formatWhatsAppNumber(clientPhone);
+      const webLink = getWhatsAppWebLink(clientPhone, message);
+
+      updateStep(taskId, 'done', 'completed');
+      updateTask(taskId, {
+        progress: 100,
+        status: 'completed',
+        description: `Enviado para +${targetNum}`
+      });
+
+      toast.success(`⚡ Cobrança enviada via Evolution API para ${clientName} (+${targetNum})!`, { 
+        id: toastId,
+        duration: 8000,
+        action: {
+          label: "Abrir WhatsApp Web",
+          onClick: () => window.open(webLink, '_blank')
+        }
+      });
+    } catch (evoErr: any) {
+      console.warn('Falha no envio direto via Evolution API, abrindo WhatsApp Web:', evoErr);
+      updateTask(taskId, {
+        status: 'error',
+        progress: 100,
+        error: evoErr.message || 'Falha no envio direto'
+      });
+
+      const webLink = getWhatsAppWebLink(clientPhone, message);
+      window.open(webLink, '_blank');
+      toast.info(`Evolution API indisponível. Abrindo WhatsApp Web para ${clientName}...`, { id: toastId });
+    }
+  };
 
   useEffect(() => {
     fetchOrders();
@@ -83,7 +182,7 @@ export const Pedidos: React.FC = () => {
       const { data: ordersData, error: ordersError } = await supabase
         .from('orders')
         .select(`
-          id, client_id, status, payment_status, payment_method, total_amount, due_date, notes, created_at,
+          id, order_number, client_id, status, payment_status, payment_method, total_amount, due_date, notes, created_at,
           clients (name, phone, company_name)
         `)
         .order('created_at', { ascending: false });
@@ -131,10 +230,30 @@ export const Pedidos: React.FC = () => {
     }
   };
 
+  const toggleExpandOrder = (id: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setExpandedOrderIds(prev => ({
+      ...prev,
+      [id]: !prev[id]
+    }));
+  };
+
+  const expandAll = () => {
+    const allExpanded: Record<string, boolean> = {};
+    orders.forEach(o => { allExpanded[o.id] = true; });
+    setExpandedOrderIds(allExpanded);
+  };
+
+  const collapseAll = () => {
+    setExpandedOrderIds({});
+  };
+
   const filteredOrders = orders.filter(o => {
-    const matchesSearch = 
-      o.client?.name?.toLowerCase().includes(search.toLowerCase()) ||
+    const clientName = o.client?.name || o.client?.company_name || '';
+    const matchesSearch =
+      clientName.toLowerCase().includes(search.toLowerCase()) ||
       o.id.toLowerCase().includes(search.toLowerCase()) ||
+      (o.order_number && o.order_number.toString().includes(search)) ||
       o.notes?.toLowerCase().includes(search.toLowerCase());
 
     if (filterPayment === 'all') return matchesSearch;
@@ -146,32 +265,41 @@ export const Pedidos: React.FC = () => {
       {/* Top Header & Abas */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white flex items-center gap-3">
-            <ShoppingBag className="h-6 w-6 text-purple-400" /> Gestão de Pedidos
-          </h2>
+          <div className="flex items-center gap-2">
+            <h2 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white flex items-center gap-3">
+              <ShoppingBag className="h-6 w-6 text-purple-500" /> Gestão de Pedidos
+            </h2>
+            {!isUnlocked && (
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 flex items-center gap-1">
+                <Shield className="h-3 w-3" /> Modo Operador
+              </span>
+            )}
+          </div>
           <p className="text-xs text-slate-600 dark:text-zinc-400 mt-1">
-            Acompanhe orçamentos fechados, baixa de pagamentos e a esteira de produção.
+            {isUnlocked
+              ? 'Acompanhe orçamentos fechados, baixa de pagamentos e a esteira de produção.'
+              : 'Fila de pedidos para produção e separação na oficina de bordado.'}
           </p>
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Seletor de Visão (Cards DIRECT AI vs Fila Kanban) */}
-          <div className="p-1 rounded-2xl bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 flex items-center gap-1 shadow-inner">
+          {/* Seletor de Visão (Cards com Acordeon vs Fila Kanban) */}
+          <div className="p-1 rounded-2xl bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 flex items-center gap-1 shadow-xs">
             <button
               onClick={() => setActiveTab('cards')}
               className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
                 activeTab === 'cards'
-                  ? 'bg-white dark:bg-purple-600 text-slate-900 dark:text-white shadow-sm'
+                  ? 'bg-white dark:bg-purple-600 text-slate-900 dark:text-white shadow-xs'
                   : 'text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
-              <LayoutGrid className="h-3.5 w-3.5" /> Visão em Cards
+              <LayoutGrid className="h-3.5 w-3.5" /> Visão em Cards (Acordeon)
             </button>
             <button
               onClick={() => setActiveTab('kanban')}
               className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
                 activeTab === 'kanban'
-                  ? 'bg-white dark:bg-purple-600 text-slate-900 dark:text-white shadow-sm'
+                  ? 'bg-white dark:bg-purple-600 text-slate-900 dark:text-white shadow-xs'
                   : 'text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
@@ -182,7 +310,7 @@ export const Pedidos: React.FC = () => {
           <button
             type="button"
             onClick={() => setIsCreateModalOpen(true)}
-            className="px-4 py-2 rounded-2xl text-xs font-bold text-white shadow-lg shadow-purple-500/25 hover:opacity-90 transition-all flex items-center gap-2"
+            className="px-4 py-2.5 rounded-2xl text-xs font-bold text-white shadow-lg transition-all hover:scale-105 active:scale-95 flex items-center gap-2 cursor-pointer"
             style={{ backgroundColor: settings.primaryColor }}
           >
             <Plus className="h-4 w-4" /> Novo Pedido
@@ -190,25 +318,46 @@ export const Pedidos: React.FC = () => {
         </div>
       </div>
 
-      {/* Conteúdo da Aba 1: Cards DIRECT AI */}
+      {/* Conteúdo da Aba 1: Cards em Acordeon */}
       {activeTab === 'cards' && (
         <div className="space-y-4 animate-in fade-in duration-200">
-          
-          {/* Filtros e Busca */}
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-4 rounded-3xl glass-panel border border-slate-200 dark:border-white/10">
-            <div className="relative w-full sm:w-80">
-              <Search className="h-4 w-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-zinc-500" />
-              <input
-                type="text"
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                placeholder="Buscar por cliente, peça ou notas..."
-                className="w-full bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl pl-10 pr-4 py-2 text-xs text-slate-900 dark:text-white focus:outline-none"
-              />
+
+          {/* Barra de Filtros, Busca e Ações em Lote do Acordeon */}
+          <div className="flex flex-col lg:flex-row items-center justify-between gap-3 p-4 rounded-3xl glass-panel border border-slate-200 dark:border-white/10">
+            <div className="flex flex-col sm:flex-row items-center gap-3 w-full lg:w-auto">
+              <div className="relative w-full sm:w-80">
+                <Search className="h-4 w-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-zinc-500" />
+                <input
+                  type="text"
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  placeholder="Buscar por cliente, nº do pedido ou notas..."
+                  className="w-full bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl pl-10 pr-4 py-2 text-xs text-slate-900 dark:text-white focus:outline-none"
+                />
+              </div>
+
+              {/* Botões de Expandir / Encolher Todos */}
+              <div className="flex items-center gap-1.5 w-full sm:w-auto">
+                <button
+                  onClick={expandAll}
+                  className="flex-1 sm:flex-none px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-white/5 dark:hover:bg-white/10 border border-slate-200 dark:border-white/10 text-[11px] font-bold text-slate-700 dark:text-zinc-300 flex items-center justify-center gap-1 transition-all cursor-pointer"
+                  title="Expandir todos os cards"
+                >
+                  <Maximize2 className="h-3 w-3" /> Expandir Todos
+                </button>
+                <button
+                  onClick={collapseAll}
+                  className="flex-1 sm:flex-none px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-white/5 dark:hover:bg-white/10 border border-slate-200 dark:border-white/10 text-[11px] font-bold text-slate-700 dark:text-zinc-300 flex items-center justify-center gap-1 transition-all cursor-pointer"
+                  title="Encolher todos os cards"
+                >
+                  <Minimize2 className="h-3 w-3" /> Encolher Todos
+                </button>
+              </div>
             </div>
 
-            <div className="flex items-center gap-2 w-full sm:w-auto overflow-x-auto">
-              <span className="text-[11px] font-bold text-slate-500 dark:text-zinc-400">Pagamento:</span>
+            {/* Filtros de Pagamento */}
+            <div className="flex items-center gap-2 w-full lg:w-auto overflow-x-auto">
+              <span className="text-[11px] font-bold text-slate-500 dark:text-zinc-400 shrink-0">Status:</span>
               {[
                 { id: 'all', label: 'Todos' },
                 { id: 'pending', label: 'Pendentes' },
@@ -218,9 +367,9 @@ export const Pedidos: React.FC = () => {
                 <button
                   key={f.id}
                   onClick={() => setFilterPayment(f.id)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all border ${
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all border shrink-0 cursor-pointer ${
                     filterPayment === f.id
-                      ? 'bg-purple-500/20 text-purple-400 border-purple-500/40 shadow-sm'
+                      ? 'bg-purple-500/20 text-purple-600 dark:text-purple-400 border-purple-500/40 shadow-xs'
                       : 'border-slate-200 dark:border-white/5 text-slate-500 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-white/5'
                   }`}
                 >
@@ -230,7 +379,7 @@ export const Pedidos: React.FC = () => {
             </div>
           </div>
 
-          {/* Grid de Cards de Pedidos */}
+          {/* Lista de Cards com Sistema de Acordeon (Sanfona) */}
           {loading ? (
             <div className="flex items-center justify-center p-12 text-slate-500">
               <RefreshCw className="h-6 w-6 animate-spin" />
@@ -239,183 +388,279 @@ export const Pedidos: React.FC = () => {
             <div className="p-12 text-center glass-panel rounded-3xl border border-slate-200 dark:border-white/10">
               <Package className="h-10 w-10 mx-auto text-slate-400 mb-3" />
               <p className="text-sm font-bold text-slate-700 dark:text-zinc-300">Nenhum pedido encontrado.</p>
-              <p className="text-xs text-slate-500 dark:text-zinc-500 mt-1">Crie um novo pedido na Calculadora ou no botão acima.</p>
+              <p className="text-xs text-slate-500 dark:text-zinc-500 mt-1">Crie um novo pedido no botão acima ou altere os filtros de busca.</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="space-y-3">
               {filteredOrders.map(order => {
                 const isPaid = order.payment_status === 'paid';
                 const isHalf = order.payment_status === 'half_paid';
+                const isExpanded = !!expandedOrderIds[order.id];
+
                 const { cleanNotes, metadata } = parsePaymentMetadata(order.notes);
+
+                // Verificação de alertas importantes
+                const isQuickEntryWithoutPrice = metadata.isQuickEntry || order.total_amount === 0;
+                const hasObservations = Boolean(cleanNotes && cleanNotes.trim().length > 0);
+                const hasAttachments = Boolean(metadata.attachmentUrls && metadata.attachmentUrls.length > 0);
+
+                // Cálculo total de peças do pedido
+                const totalPiecesCount = order.order_items?.reduce((sum: number, item: any) => sum + (item.quantity || 1), 0) || order.items?.length || 1;
+
+                const clientName = order.client?.name || order.client?.company_name || 'Cliente Geral';
+                const clientPhone = order.client?.phone;
+                const whatsappUrl = clientPhone ? `https://wa.me/55${clientPhone.replace(/\D/g, '')}` : null;
 
                 return (
                   <div
                     key={order.id}
-                    onClick={() => setSelectedOrderForDetails(order)}
-                    className="glass-panel p-5 rounded-3xl border border-slate-200 dark:border-white/10 hover:border-brand/50 transition-all shadow-md hover:shadow-xl flex flex-col justify-between space-y-4 group cursor-pointer"
+                    className={`glass-panel rounded-3xl border transition-all overflow-hidden ${
+                      isQuickEntryWithoutPrice
+                        ? 'border-amber-500/40 bg-amber-500/5 dark:bg-amber-500/5'
+                        : 'border-slate-200 dark:border-white/10 hover:border-purple-500/40'
+                    }`}
                   >
-                    {/* Cabeçalho do Card */}
-                    <div className="flex items-start justify-between border-b border-slate-200 dark:border-white/10 pb-3">
-                      <div>
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-zinc-500">
-                            PEDIDO #{order.id.slice(0, 6)}
-                          </span>
-                          <span className="text-[10px] text-slate-400 dark:text-zinc-500">
-                            • {new Date(order.created_at).toLocaleDateString('pt-BR')}
-                          </span>
-                          {metadata.isQuickEntry && (
-                            <span className="animate-pulse text-[9px] font-black uppercase bg-amber-500/20 border border-amber-500/30 text-amber-500 px-1.5 py-0.5 rounded-md leading-none">
-                              ⚠️ Sem Orçamento
+
+                    {/* CABEÇALHO DO CARD (Sempre Visível - Toque para Expandir/Encolher) */}
+                    <div
+                      onClick={(e) => toggleExpandOrder(order.id, e)}
+                      className="p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 cursor-pointer hover:bg-slate-50/50 dark:hover:bg-white/5 transition-colors select-none"
+                    >
+                      {/* Lado Esquerdo: Número, Cliente e Avisos Visíveis no Topo */}
+                      <div className="flex items-center gap-3 min-w-0">
+                        {/* Avatar do Número do Pedido */}
+                        <div className={`h-11 w-11 rounded-2xl border flex items-center justify-center shrink-0 font-black text-xs ${
+                          isQuickEntryWithoutPrice
+                            ? 'bg-amber-500/20 border-amber-500/30 text-amber-600 dark:text-amber-400'
+                            : 'bg-slate-100 dark:bg-zinc-800 border-slate-200 dark:border-white/10 text-slate-800 dark:text-white'
+                        }`}>
+                          #{order.order_number || order.id.slice(0, 4)}
+                        </div>
+
+                        <div className="min-w-0 space-y-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 dark:text-zinc-500">
+                              {new Date(order.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
                             </span>
-                          )}
+
+                            {/* AVISOS VISÍVEIS MESMO QUANDO ENCOLHIDO */}
+                            {isQuickEntryWithoutPrice && (
+                              <span className="animate-pulse px-2 py-0.5 rounded-md text-[9px] font-black uppercase bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30 flex items-center gap-1">
+                                <AlertTriangle className="h-3 w-3" /> Sem Orçamento
+                              </span>
+                            )}
+
+                            {hasObservations && (
+                              <span className="px-2 py-0.5 rounded-md text-[9px] font-bold bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 flex items-center gap-1">
+                                <FileText className="h-3 w-3" /> Obs
+                              </span>
+                            )}
+
+                            {hasAttachments && (
+                              <span className="px-2 py-0.5 rounded-md text-[9px] font-bold bg-violet-500/10 text-violet-600 dark:text-violet-400 border border-violet-500/20 flex items-center gap-1">
+                                <Paperclip className="h-3 w-3" /> Anexo ({metadata.attachmentUrls.length})
+                              </span>
+                            )}
+
+                            <span className="px-2 py-0.5 rounded-md text-[9px] font-bold bg-slate-100 dark:bg-white/10 text-slate-700 dark:text-zinc-300 border border-slate-200 dark:border-white/10">
+                              📦 {totalPiecesCount} {totalPiecesCount === 1 ? 'peça' : 'peças'}
+                            </span>
+                          </div>
+
+                          <h3 className="text-sm sm:text-base font-black text-slate-900 dark:text-white truncate flex items-center gap-1.5">
+                            <User className="h-4 w-4 text-purple-500 shrink-0" />
+                            {clientName}
+                          </h3>
                         </div>
-                        <h3 className="text-sm font-black text-slate-900 dark:text-white mt-0.5 flex items-center gap-1.5">
-                          <User className="h-3.5 w-3.5 text-brand" />
-                          {order.client?.name || 'Cliente Geral'}
-                        </h3>
                       </div>
 
-                      {/* Status de Pagamento Interativo (Abre Modal de Status) */}
-                      <div className="flex flex-col items-end">
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedOrderForStatus(order);
-                          }}
-                          title="Clique para gerenciar o pagamento"
-                          className={`px-3 py-1 rounded-xl text-[10px] font-black uppercase tracking-wider border transition-all flex items-center gap-1.5 ${
-                            isPaid
-                              ? 'bg-emerald-500/20 text-emerald-500 border-emerald-500/40 hover:bg-emerald-500/30'
-                              : isHalf
-                              ? 'bg-blue-500/20 text-blue-400 border-blue-500/40 hover:bg-blue-500/30'
-                              : 'bg-amber-500/20 text-amber-500 border-amber-500/40 hover:bg-amber-500/30'
-                          }`}
-                        >
-                          {isPaid ? (
-                            <>
-                              <CheckCircle2 className="h-3 w-3" /> PAGO
-                            </>
-                          ) : isHalf ? (
-                            <>
-                              <Clock className="h-3 w-3" /> SINAL
-                            </>
-                          ) : (
-                            <>
-                              <Clock className="h-3 w-3" /> PENDENTE
-                            </>
-                          )}
-                        </button>
-                        {isHalf && metadata.depositAmount && (
-                          <span className="text-[9px] font-bold text-blue-400 mt-1">
-                            Sinal: R$ {metadata.depositAmount.toFixed(2)} ({formatPaymentMethod(order.payment_method)})
-                          </span>
-                        )}
-                        {isPaid && order.payment_method && (
-                          <span className="text-[9px] font-bold text-emerald-400 mt-1">
-                            Quitado ({formatPaymentMethod(order.payment_method)})
-                          </span>
-                        )}
-                      </div>
-                    </div>
+                      {/* Lado Direito: Status de Pagamento, Valor/Resumo e Toggle Acordeon */}
+                      <div className="flex items-center justify-between md:justify-end gap-3 shrink-0 pt-2 md:pt-0 border-t md:border-t-0 border-slate-100 dark:border-white/5">
+                        <div className="flex items-center gap-3">
+                          {/* Botão de Status */}
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedOrderForStatus(order);
+                            }}
+                            title="Gerenciar pagamento"
+                            className={`px-3 py-1 rounded-xl text-[10px] font-black uppercase tracking-wider border transition-all flex items-center gap-1.5 cursor-pointer ${
+                              isPaid
+                                ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20'
+                                : isHalf
+                                ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30 hover:bg-blue-500/20'
+                                : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30 hover:bg-rose-500/20'
+                            }`}
+                          >
+                            {isPaid ? (
+                              <><CheckCircle2 className="h-3 w-3" /> PAGO</>
+                            ) : isHalf ? (
+                              <><Clock className="h-3 w-3" /> SINAL 50%</>
+                            ) : (
+                              <><Clock className="h-3 w-3" /> PENDENTE</>
+                            )}
+                          </button>
 
-                    {/* Itens do Pedido */}
-                    <div className="space-y-2 flex-1 flex flex-col">
-                      <p className="text-[10px] font-bold text-slate-400 dark:text-zinc-500 uppercase tracking-widest">
-                        Peças / Matrizes:
-                      </p>
-                      {order.items && order.items.length > 0 ? (
-                        <div className="space-y-1.5 max-h-28 overflow-y-auto custom-scrollbar">
-                          {order.items.map(item => (
-                            <div key={item.id} className="p-2 rounded-xl bg-slate-100 dark:bg-white/5 flex items-center justify-between text-xs">
-                              <span className="font-semibold text-slate-800 dark:text-zinc-200 truncate max-w-[180px]">
-                                {item.description}
-                              </span>
-                              <span className="font-mono text-[11px] font-bold text-slate-500 dark:text-zinc-400">
-                                {item.quantity}x
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <p className="text-xs italic text-slate-400 dark:text-zinc-500">Sem itens individuais descritos.</p>
-                      )}
+                          {/* Botão ⚡ Cobrar (Segundo Plano) */}
+                          <button
+                            type="button"
+                            onClick={(e) => handleCobrarPedido(order, e)}
+                            title="Enviar cobrança automática via WhatsApp"
+                            className="px-3 py-1 rounded-xl bg-orange-500 hover:bg-orange-600 text-white text-[10px] font-black uppercase tracking-wider shadow-md shadow-orange-500/20 flex items-center gap-1 cursor-pointer transition-all active:scale-95"
+                          >
+                            ⚡ Cobrar
+                          </button>
 
-                      {/* Observações / Notas */}
-                      {cleanNotes && (
-                        <div className="mt-2 p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 mt-auto">
-                          <p className="text-[10px] font-black uppercase text-amber-600 dark:text-amber-500 mb-0.5">
-                            📝 Observações:
-                          </p>
-                          <p className="text-[11px] font-medium text-amber-700 dark:text-amber-400 line-clamp-3 leading-snug">
-                            {cleanNotes}
-                          </p>
-                        </div>
-                      )}
-
-                      {/* Miniaturas de Anexos */}
-                      {metadata.attachmentUrls && metadata.attachmentUrls.length > 0 && (
-                        <div className="mt-2 flex items-center gap-2">
-                          <span className="text-[9px] font-black uppercase text-slate-400 dark:text-zinc-500 shrink-0">📎 Anexos:</span>
-                          <div className="flex items-center gap-1.5">
-                            {metadata.attachmentUrls.slice(0, 4).map((url: string, i: number) => (
-                              <a
-                                key={i}
-                                href={url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                onClick={(e) => e.stopPropagation()}
-                                className="w-9 h-9 rounded-lg border border-slate-200 dark:border-white/10 overflow-hidden hover:scale-110 hover:border-brand/50 transition-all shadow-sm shrink-0"
-                              >
-                                <img src={url} alt="" className="w-full h-full object-cover" />
-                              </a>
-                            ))}
-                            {metadata.attachmentUrls.length > 4 && (
-                              <span className="w-9 h-9 rounded-lg bg-slate-200 dark:bg-white/10 flex items-center justify-center text-[9px] font-black text-slate-500 dark:text-zinc-400">
-                                +{metadata.attachmentUrls.length - 4}
-                              </span>
+                          {/* Valor do Pedido (Visível se unlocked/chefe) */}
+                          <div className="text-right">
+                            {isUnlocked ? (
+                              <p className="text-sm sm:text-base font-black text-slate-900 dark:text-white" style={{ color: settings.primaryColor }}>
+                                R$ {Number(order.total_amount || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                              </p>
+                            ) : (
+                              <p className="text-xs font-bold text-slate-600 dark:text-zinc-300">
+                                🧵 {totalPiecesCount} un
+                              </p>
                             )}
                           </div>
                         </div>
-                      )}
+
+                        {/* Ícone de Expansão do Acordeon */}
+                        <div className="h-8 w-8 rounded-xl bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 flex items-center justify-center text-slate-500 dark:text-zinc-400 group-hover:text-slate-900 dark:group-hover:text-white transition-colors">
+                          {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                        </div>
+                      </div>
                     </div>
 
+                    {/* CONTEÚDO EXPANDIDO DO CARD (Revela os detalhes completos) */}
+                    {isExpanded && (
+                      <div className="p-4 sm:p-5 pt-0 border-t border-slate-100 dark:border-white/5 space-y-4 animate-in slide-in-from-top-2 duration-200">
 
-                    {/* Rodapé com Valor Total e Ações */}
-                    <div className="pt-3 border-t border-slate-200 dark:border-white/10 flex items-center justify-between">
-                      <div>
-                        {isUnlocked ? (
-                          <>
-                            <span className="text-[10px] font-bold text-slate-400 dark:text-zinc-500 uppercase tracking-widest block">Total</span>
-                            <span className="text-base font-black text-slate-900 dark:text-white" style={{ color: settings.primaryColor }}>
-                              {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(order.total_amount || 0)}
-                            </span>
-                          </>
-                        ) : (
-                          <>
-                            <span className="text-[10px] font-bold text-slate-400 dark:text-zinc-500 uppercase tracking-widest block">Lote / Peças</span>
-                            <span className="text-xs font-bold text-slate-700 dark:text-zinc-300 flex items-center gap-1 mt-0.5">
-                              <span>📦</span> {order.order_items?.reduce((sum: number, item: any) => sum + (item.quantity || 1), 0) || 1} un
-                            </span>
-                          </>
+                        {/* Grade com Itens do Pedido */}
+                        <div className="space-y-2 pt-3">
+                          <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-zinc-400 flex items-center gap-1.5">
+                            <Package className="h-3.5 w-3.5 text-purple-500" /> Peças & Descrição de Bordado:
+                          </p>
+
+                          {order.items && order.items.length > 0 ? (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                              {order.items.map(item => (
+                                <div key={item.id} className="p-3 rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-200/80 dark:border-white/10 flex items-center justify-between text-xs">
+                                  <span className="font-semibold text-slate-800 dark:text-zinc-200 truncate pr-2">
+                                    {item.description}
+                                  </span>
+                                  <div className="flex items-center gap-2 shrink-0">
+                                    <span className="px-2 py-0.5 rounded-lg bg-slate-200 dark:bg-white/10 text-[11px] font-bold text-slate-700 dark:text-zinc-300">
+                                      {item.quantity}x
+                                    </span>
+                                    {isUnlocked && (
+                                      <span className="font-bold text-slate-900 dark:text-white">
+                                        R$ {Number(item.total_price || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-xs italic text-slate-400 dark:text-zinc-500 p-2">Sem descrição individual de itens.</p>
+                          )}
+                        </div>
+
+                        {/* Caixa de Observações Especiais do Cliente */}
+                        {cleanNotes && (
+                          <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/20 space-y-1">
+                            <p className="text-[10px] font-black uppercase text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                              📝 Observações / Instruções:
+                            </p>
+                            <p className="text-xs font-medium text-amber-800 dark:text-amber-300 leading-relaxed whitespace-pre-wrap">
+                              {cleanNotes}
+                            </p>
+                          </div>
                         )}
-                      </div>
 
-                      <div className="flex items-center gap-1.5">
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDeleteOrder(order.id);
-                          }}
-                          className="p-2 rounded-xl text-red-400 hover:bg-red-500/10 transition-colors"
-                          title="Excluir Pedido"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
+                        {/* Miniaturas de Anexos (se houver) */}
+                        {hasAttachments && (
+                          <div className="space-y-2">
+                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-zinc-400 flex items-center gap-1">
+                              📎 Imagens / Anexos do Cliente:
+                            </p>
+                            <div className="flex flex-wrap items-center gap-2">
+                              {metadata.attachmentUrls.map((url: string, i: number) => (
+                                <a
+                                  key={i}
+                                  href={url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="h-16 w-16 rounded-xl border border-slate-200 dark:border-white/10 overflow-hidden hover:scale-105 transition-all shadow-xs block group relative"
+                                >
+                                  <img src={url} alt="Anexo" className="w-full h-full object-cover" />
+                                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                                    <ExternalLink className="h-4 w-4 text-white" />
+                                  </div>
+                                </a>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* BARRA DE AÇÕES DO CARD EXPANDIDO */}
+                        <div className="pt-3 border-t border-slate-200 dark:border-white/10 flex flex-wrap items-center justify-between gap-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                             {/* Botão de Orçar se for Entrada Rápida sem Preço (Salto Sutil na Cor Padrão) */}
+                            {isQuickEntryWithoutPrice && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setInitialOrderData({
+                                    orderId: order.id,
+                                    clientId: order.client_id,
+                                    matrixName: cleanNotes,
+                                    quantity: order.items?.[0]?.quantity || 1
+                                  });
+                                  setIsCreateModalOpen(true);
+                                }}
+                                className="px-3.5 py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-700 dark:text-amber-300 border border-amber-500/40 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer animate-subtle-bounce active:scale-95"
+                              >
+                                ⚡ Orçar Pedido Agora
+                              </button>
+                            )}
+
+                            {/* Botão de Cobrança Automática (Gabi / Evolution API) */}
+                            <button
+                              type="button"
+                              onClick={(e) => handleCobrarPedido(order, e)}
+                              className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-orange-500 to-amber-600 hover:opacity-90 text-white text-xs font-bold flex items-center gap-1.5 transition-all shadow-md shadow-orange-500/20 cursor-pointer active:scale-95"
+                            >
+                              ⚡ Cobrar Cliente (Gabi)
+                            </button>
+
+                            {/* Botão de Ver Ficha Completa / PDF */}
+                            <button
+                              type="button"
+                              onClick={() => setSelectedOrderForDetails(order)}
+                              className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-white/10 dark:hover:bg-white/15 border border-slate-200 dark:border-white/10 text-slate-800 dark:text-white text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+                            >
+                              <FileText className="h-3.5 w-3.5" /> Ficha de Produção & PDF
+                            </button>
+                          </div>
+
+                          {/* Botão de Excluir (Apenas perfil Chefe / Unlocked) */}
+                          {isUnlocked && (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteOrder(order.id)}
+                              className="p-2 rounded-xl text-rose-500 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                              title="Excluir Pedido"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          )}
+                        </div>
+
                       </div>
-                    </div>
+                    )}
 
                   </div>
                 );
@@ -429,7 +674,19 @@ export const Pedidos: React.FC = () => {
       {/* Conteúdo da Aba 2: Fila Kanban Operacional */}
       {activeTab === 'kanban' && (
         <div className="animate-in fade-in duration-200">
-          <PedidosKanban />
+          <PedidosKanban 
+            onOpenDetails={(order) => setSelectedOrderForDetails(order)}
+            onQuickPrice={(orderData) => {
+              const { cleanNotes } = parsePaymentMetadata(orderData.notes);
+              setInitialOrderData({
+                orderId: orderData.id,
+                clientId: orderData.client_id,
+                matrixName: cleanNotes,
+                quantity: orderData.items?.[0]?.quantity || 1
+              });
+              setIsCreateModalOpen(true);
+            }}
+          />
         </div>
       )}
 
@@ -473,3 +730,4 @@ export const Pedidos: React.FC = () => {
     </div>
   );
 };
+

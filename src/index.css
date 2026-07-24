@@ -212,3 +212,17 @@
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(139, 92, 246, 0.6);
 }
+
+/* Animação sutil de salto leve para o Botão "Orçar Pedido Agora" */
+@keyframes subtleBounce {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+.animate-subtle-bounce {
+  animation: subtleBounce 2.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}

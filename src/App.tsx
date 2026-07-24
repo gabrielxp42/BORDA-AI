@@ -18,9 +18,11 @@ import { Configuracoes } from '@/pages/Configuracoes';
 import { Faturamento } from '@/pages/Faturamento';
 import { Estoque } from '@/pages/Estoque';
 import { PerfilConfig } from '@/pages/PerfilConfig';
+import { Admin } from '@/pages/Admin';
 import { Login } from '@/pages/Login';
 
 import { Toaster } from 'sonner';
+import { TaskDock } from '@/components/TaskDock';
 
 export const App: React.FC = () => {
   return (
@@ -41,6 +43,7 @@ export const App: React.FC = () => {
                   element={
                     <ProtectedRoute>
                       <AppLayout>
+                        <TaskDock />
                         <Routes>
                           <Route path="/" element={<Dashboard />} />
                           <Route path="/matrizes" element={<Matrizes />} />
@@ -52,6 +55,7 @@ export const App: React.FC = () => {
                           <Route path="/maquinas" element={<Maquinas />} />
                           <Route path="/configuracoes" element={<Configuracoes />} />
                           <Route path="/perfil" element={<PerfilConfig />} />
+                          <Route path="/admin" element={<Admin />} />
                         </Routes>
                       </AppLayout>
                     </ProtectedRoute>

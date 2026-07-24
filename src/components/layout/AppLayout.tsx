@@ -61,7 +61,7 @@ const navItems: NavItem[] = [
   { label: 'Tabela de Preços', path: '/configuracoes', icon: Settings },
 ];
 
-import { LogOut } from 'lucide-react';
+import { LogOut, ShieldCheck, Crown } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCompanySettings } from '@/contexts/CompanySettingsContext';
 import { useProfile } from '@/contexts/ProfileContext';
@@ -71,7 +71,7 @@ import { useNavigate } from 'react-router-dom';
 export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { settings } = useCompanySettings();
   const { isUnlocked } = useProfile();
-  const { signOut } = useAuth();
+  const { user, profile: authProfile, signOut } = useAuth();
   const navigate = useNavigate();
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -83,6 +83,14 @@ export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children })
 
   const OPERADOR_ALLOWED_PATHS = ['/pedidos', '/matrizes', '/maquinas'];
 
+  const isAdmin = useMemo(() => {
+    return (
+      user?.email?.toLowerCase() === 'gabrielxp45@gmail.com' ||
+      authProfile?.email?.toLowerCase() === 'gabrielxp45@gmail.com' ||
+      authProfile?.role === 'admin'
+    );
+  }, [user, authProfile]);
+
   // Redireciona Operador se tentar acessar rota restrita
   useEffect(() => {
     if (!isUnlocked && !OPERADOR_ALLOWED_PATHS.includes(location.pathname)) {
@@ -92,9 +100,18 @@ export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children })
 
   // Filtra itens do menu conforme o perfil
   const visibleNavItems = useMemo(() => {
-    if (isUnlocked) return navItems;
-    return navItems.filter((item: NavItem) => OPERADOR_ALLOWED_PATHS.includes(item.path));
-  }, [isUnlocked]);
+    let items = navItems;
+    if (!isUnlocked) {
+      items = navItems.filter((item: NavItem) => OPERADOR_ALLOWED_PATHS.includes(item.path));
+    }
+    if (isAdmin) {
+      items = [
+        ...items,
+        { label: 'Painel Master Admin', path: '/admin', icon: ShieldCheck, badge: <Crown className="h-3.5 w-3.5 text-amber-400" /> }
+      ];
+    }
+    return items;
+  }, [isUnlocked, isAdmin]);
 
   useEffect(() => {
     const root = document.documentElement;

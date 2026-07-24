@@ -20,7 +20,8 @@ import {
   History,
   Trash2,
   Check,
-  ArrowRight
+  ArrowRight,
+  Pencil
 } from 'lucide-react';
 import { Client } from '@/types/borda';
 import { supabase } from '@/integrations/supabase/client';
@@ -35,13 +36,15 @@ interface ClientDetailsModalProps {
   onClose: () => void;
   client: Client | null;
   onDeleteClient?: (id: string, name: string) => void;
+  onEditClient?: (client: Client) => void;
 }
 
 export const ClientDetailsModal: React.FC<ClientDetailsModalProps> = ({
   isOpen,
   onClose,
   client,
-  onDeleteClient
+  onDeleteClient,
+  onEditClient
 }) => {
   const { settings } = useCompanySettings();
   const { isUnlocked } = useProfile();
@@ -153,12 +156,23 @@ export const ClientDetailsModal: React.FC<ClientDetailsModalProps> = ({
       >
         {/* Header Elegante Minimalista */}
         <div className="p-5 sm:p-6 border-b border-white/10 bg-white/[0.02] relative shrink-0">
-          <button 
-            onClick={onClose}
-            className="absolute top-5 right-5 p-2 rounded-xl bg-white/5 hover:bg-white/10 text-zinc-400 hover:text-white transition-all"
-          >
-            <X className="h-4 w-4" />
-          </button>
+          <div className="absolute top-5 right-5 flex items-center gap-2">
+            {onEditClient && (
+              <button 
+                onClick={() => onEditClient(client)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 text-blue-400 font-bold text-xs transition-all active:scale-95"
+                title="Editar informações do cliente"
+              >
+                <Pencil className="h-3.5 w-3.5" /> Editar Cadastro
+              </button>
+            )}
+            <button 
+              onClick={onClose}
+              className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-zinc-400 hover:text-white transition-all"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
 
           <div className="flex items-center gap-3.5">
             <div className="h-12 w-12 rounded-2xl bg-gradient-to-tr from-purple-600 to-indigo-500 flex items-center justify-center font-black text-lg text-white shadow-lg shadow-purple-500/20 shrink-0">
