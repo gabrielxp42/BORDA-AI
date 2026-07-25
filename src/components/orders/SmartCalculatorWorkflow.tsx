@@ -406,55 +406,98 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
 
       toast.success(initialData?.orderId ? "Pedido atualizado com sucesso!" : "Pedido criado com sucesso!");
 
-      // --- DISPARO DA AUTOMAÇÃO WHATSAPP PELAS CHAVES SELECIONADAS ---
-      if ((whatsappNotifyReceipt || whatsappRequestRef || whatsappSendSummary) && selectedClientId) {
-        supabase
-          .from('clients')
-          .select('name, phone')
-          .eq('id', selectedClientId)
-          .single()
-          .then(({ data: clientData }) => {
-            if (clientData?.phone && clientData.phone.trim()) {
-              const clientName = clientData.name || 'Cliente';
-              const orderCode = order?.id ? `#${order.id.slice(0, 4)}` : '';
-              const itemDesc = matrixName || notes || 'Peças para bordado';
+      // --- DISPARO DA AUTOMAÇÃO WHATSAPP PELAS CHAVES SELECIONADAS (COM TASK DOCK EM SEGUNDO PLANO) ---
+      if ((whatsappNotifyReceipt || whatsappRequestRef || whatsappSendSummary || whatsappSendPix) && selectedClientId) {
+        try {
+          const { data: clientData } = await supabase
+            .from('clients')
+            .select('name, phone')
+            .eq('id', selectedClientId)
+            .maybeSingle();
 
-              const msgLines: string[] = [
-                `*Entrada de Pedido - ${settings.systemName}* 🧵✨\n`,
-                `Olá, *${clientName}*!`
-              ];
+          if (clientData?.phone && clientData.phone.trim()) {
+            const clientName = clientData.name || 'Cliente';
+            const orderCode = order?.id ? `#${order.id.slice(0, 4)}` : '';
+            const itemDesc = matrixName || notes || 'Peças para bordado';
 
-              if (whatsappNotifyReceipt) {
-                msgLines.push(`📦 *Confirmação de Recebimento:* Suas peças (*${itemDesc}*, ${quantity || 1}x) foram recebidas com sucesso em nossa oficina e deram entrada no sistema.`);
-              }
+            const msgLines: string[] = [
+              `*Entrada de Pedido - ${settings.systemName}* 🧵✨\n`,
+              `Olá, *${clientName}*!`
+            ];
 
-              if (whatsappRequestRef) {
-                msgLines.push(`🖼️ *Solicitação de Imagem/Arte:* Por favor, nos envie aqui no WhatsApp a imagem/referência do seu bordado em alta resolução para a programação da matriz.`);
-              }
-
-              if (whatsappSendSummary) {
-                msgLines.push(`📋 *Ficha de Registro:* Entrada ${orderCode} registrada no sistema da oficina.`);
-              }
-
-              msgLines.push(`\nQualquer dúvida estamos à disposição!`);
-              const autoMsg = msgLines.join('\n\n');
-
-              sendEvolutionText(clientData.phone, autoMsg).then(() => {
-                const targetNum = formatWhatsAppNumber(clientData.phone);
-                const webLink = getWhatsAppWebLink(clientData.phone, autoMsg);
-                toast.success(`⚡ Mensagem automática enviada para o WhatsApp de ${clientName}!`, {
-                  action: {
-                    label: "Conferir Web",
-                    onClick: () => window.open(webLink, '_blank')
-                  }
-                });
-              }).catch(err => {
-                console.warn("Falha no disparo automático WhatsApp:", err);
-                const webLink = getWhatsAppWebLink(clientData.phone, autoMsg);
-                window.open(webLink, '_blank');
-              });
+            if (whatsappNotifyReceipt) {
+              msgLines.push(`📦 *Confirmação de Recebimento:* Suas peças (*${itemDesc}*, ${quantity || 1}x) foram recebidas com sucesso em nossa oficina e deram entrada no sistema.`);
             }
-          });
+
+            if (whatsappRequestRef) {
+              msgLines.push(`🖼️ *Solicitação de Imagem/Arte:* Por favor, nos envie aqui no WhatsApp a imagem/referência do seu bordado em alta resolução para a programação da matriz.`);
+            }
+
+            if (whatsappSendSummary) {
+              msgLines.push(`📋 *Ficha de Registro:* Entrada ${orderCode} registrada no sistema da oficina.`);
+            }
+
+            if (whatsappSendPix) {
+              msgLines.push(`💳 *Dados para Pagamento via PIX:*\nChave PIX: *${settings.pixKey || 'Consulte a chave no ateliê'}*`);
+            }
+
+            msgLines.push(`\nQualquer dúvida estamos à disposição!`);
+            const autoMsg = msgLines.join('\n\n');
+
+            // Adiciona a tarefa ao painel flutuante de TAREFAS EM SEGUNDO PLANO (TaskDock)
+            const taskId = addTask({
+              title: `Automação WhatsApp (${clientName})`,
+              description: `Enviando confirmação de entrada para ${clientName}...`,
+              status: 'processing',
+              progress: 30,
+              steps: [
+                { id: 'prep', label: 'Montando Ficha de Entrada', status: 'completed' },
+                { id: 'send', label: 'Conectando Evolution API', status: 'loading' },
+                { id: 'done', label: 'Entrega no WhatsApp', status: 'pending' },
+              ]
+            });
+
+            const toastId = toast.loading(`Disparando WhatsApp para ${clientName}...`);
+
+            try {
+              updateStep(taskId, 'send', 'completed');
+              updateStep(taskId, 'done', 'loading');
+              updateTask(taskId, { progress: 70, status: 'sending' });
+
+              await sendEvolutionText(clientData.phone, autoMsg);
+
+              updateStep(taskId, 'done', 'completed');
+              updateTask(taskId, {
+                progress: 100,
+                status: 'completed',
+                description: `Notificação enviada com sucesso para ${clientName}!`
+              });
+
+              const webLink = getWhatsAppWebLink(clientData.phone, autoMsg);
+              toast.success(`⚡ Automação enviada com sucesso para ${clientName}!`, {
+                id: toastId,
+                action: {
+                  label: "Conferir Web",
+                  onClick: () => window.open(webLink, '_blank')
+                }
+              });
+            } catch (err: any) {
+              console.warn("Falha no disparo automático WhatsApp:", err);
+
+              updateTask(taskId, {
+                status: 'error',
+                progress: 100,
+                error: err.message || 'Falha no envio direto'
+              });
+
+              const webLink = getWhatsAppWebLink(clientData.phone, autoMsg);
+              window.open(webLink, '_blank');
+              toast.info(`Evolution API indisponível. Abrindo WhatsApp Web para ${clientName}...`, { id: toastId });
+            }
+          }
+        } catch (autoErr) {
+          console.warn("Erro ao buscar dados do cliente para notificação:", autoErr);
+        }
       }
       
       if (onOrderCreated) {
