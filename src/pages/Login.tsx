@@ -13,9 +13,15 @@ export const Login: React.FC = () => {
   const [name, setName] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const { signIn, signUp } = useAuth();
+  const { signIn, signUp, user } = useAuth();
   const { settings } = useCompanySettings();
   const navigate = useNavigate();
+
+  React.useEffect(() => {
+    if (user) {
+      navigate('/', { replace: true });
+    }
+  }, [user, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
