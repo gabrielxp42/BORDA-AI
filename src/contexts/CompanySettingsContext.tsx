@@ -15,6 +15,8 @@ interface CompanySettings {
   workingHours?: string | null;
   fiscalApiToken?: string | null;
   fiscalEnvironment?: 'homologacao' | 'producao';
+  machineSpeedSpm?: number;
+  colorChangeTimeSec?: number;
 }
 
 interface CompanySettingsContextType {
@@ -35,7 +37,9 @@ const defaultSettings: CompanySettings = {
   document: '',
   workingHours: 'Seg à Sex: 08h às 18h | Sáb: 08h às 12h',
   fiscalApiToken: '',
-  fiscalEnvironment: 'homologacao'
+  fiscalEnvironment: 'homologacao',
+  machineSpeedSpm: 800,
+  colorChangeTimeSec: 30
 };
 
 const CompanySettingsContext = createContext<CompanySettingsContextType | undefined>(undefined);
@@ -57,6 +61,8 @@ export const CompanySettingsProvider: React.FC<{ children: React.ReactNode }> = 
     const cachedHours = localStorage.getItem('cached_company_hours');
     const cachedFiscalToken = localStorage.getItem('cached_fiscal_token');
     const cachedFiscalEnv = localStorage.getItem('cached_fiscal_env') as 'homologacao' | 'producao' | null;
+    const cachedMachineSpeed = localStorage.getItem('cached_machine_speed_spm');
+    const cachedColorTime = localStorage.getItem('cached_color_change_sec');
 
     if (cachedColor) {
       document.documentElement.style.setProperty('--brand-primary', cachedColor);
@@ -74,7 +80,9 @@ export const CompanySettingsProvider: React.FC<{ children: React.ReactNode }> = 
       document: cachedDoc || '',
       workingHours: cachedHours || defaultSettings.workingHours,
       fiscalApiToken: cachedFiscalToken || '',
-      fiscalEnvironment: cachedFiscalEnv || 'homologacao'
+      fiscalEnvironment: cachedFiscalEnv || 'homologacao',
+      machineSpeedSpm: cachedMachineSpeed ? Number(cachedMachineSpeed) : 800,
+      colorChangeTimeSec: cachedColorTime ? Number(cachedColorTime) : 30,
     };
   });
 
@@ -92,6 +100,8 @@ export const CompanySettingsProvider: React.FC<{ children: React.ReactNode }> = 
     if (newSettings.workingHours) localStorage.setItem('cached_company_hours', newSettings.workingHours);
     if (newSettings.fiscalApiToken) localStorage.setItem('cached_fiscal_token', newSettings.fiscalApiToken);
     if (newSettings.fiscalEnvironment) localStorage.setItem('cached_fiscal_env', newSettings.fiscalEnvironment);
+    if (newSettings.machineSpeedSpm) localStorage.setItem('cached_machine_speed_spm', String(newSettings.machineSpeedSpm));
+    if (newSettings.colorChangeTimeSec !== undefined) localStorage.setItem('cached_color_change_sec', String(newSettings.colorChangeTimeSec));
     if (newSettings.logoUrl) {
       localStorage.setItem('cached_logo_url', newSettings.logoUrl);
     } else {
@@ -189,6 +199,8 @@ export const CompanySettingsProvider: React.FC<{ children: React.ReactNode }> = 
         working_hours: newSettings.workingHours ?? settings.workingHours,
         fiscal_api_token: newSettings.fiscalApiToken ?? settings.fiscalApiToken,
         fiscal_environment: newSettings.fiscalEnvironment ?? settings.fiscalEnvironment,
+        machine_speed_spm: newSettings.machineSpeedSpm ?? settings.machineSpeedSpm,
+        color_change_time_sec: newSettings.colorChangeTimeSec ?? settings.colorChangeTimeSec,
         logo_url: logoUrl,
         updated_at: new Date().toISOString(),
       };
@@ -212,6 +224,8 @@ export const CompanySettingsProvider: React.FC<{ children: React.ReactNode }> = 
         workingHours: updated.working_hours,
         fiscalApiToken: updated.fiscal_api_token,
         fiscalEnvironment: updated.fiscal_environment as any,
+        machineSpeedSpm: updated.machine_speed_spm,
+        colorChangeTimeSec: updated.color_change_time_sec,
       };
 
       setSettings(newCompanySettings);

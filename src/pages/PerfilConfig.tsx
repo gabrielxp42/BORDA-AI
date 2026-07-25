@@ -18,6 +18,7 @@ import {
   FileText, 
   ShieldCheck,
   Sparkles,
+  Gauge,
   Image as ImageIcon
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -47,6 +48,8 @@ export const PerfilConfig: React.FC = () => {
   const [workingHours, setWorkingHours] = useState(settings.workingHours || '');
   const [fiscalApiToken, setFiscalApiToken] = useState(settings.fiscalApiToken || '');
   const [fiscalEnvironment, setFiscalEnvironment] = useState<'homologacao' | 'producao'>(settings.fiscalEnvironment || 'homologacao');
+  const [machineSpeedSpm, setMachineSpeedSpm] = useState<number>(settings.machineSpeedSpm || 800);
+  const [colorChangeTimeSec, setColorChangeTimeSec] = useState<number>(settings.colorChangeTimeSec !== undefined ? settings.colorChangeTimeSec : 30);
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(settings.logoUrl);
   const [isSaving, setIsSaving] = useState(false);
@@ -86,7 +89,9 @@ export const PerfilConfig: React.FC = () => {
         document: docNumber, 
         workingHours,
         fiscalApiToken,
-        fiscalEnvironment
+        fiscalEnvironment,
+        machineSpeedSpm,
+        colorChangeTimeSec
       },
       logoFile || undefined
     );
@@ -484,6 +489,95 @@ export const PerfilConfig: React.FC = () => {
                   <option value="homologacao">🧪 Homologação (Testes)</option>
                   <option value="producao">🚀 Produção (Notas Reais)</option>
                 </select>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ⚙️ DIV / SEÇÃO 6: CONFIGURAÇÃO DE MAQUINÁRIO & VELOCIDADE (SPM) */}
+        <div className="bg-white dark:bg-zinc-900/70 border border-slate-200 dark:border-white/10 rounded-3xl p-6 md:p-8 shadow-xl backdrop-blur-xl space-y-6">
+          <div className="flex items-center justify-between border-b border-slate-200 dark:border-white/10 pb-4">
+            <div className="flex items-center gap-3">
+              <div className="h-11 w-11 rounded-2xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400">
+                <Gauge className="h-6 w-6" />
+              </div>
+              <div>
+                <h2 className="text-lg font-black text-slate-900 dark:text-white">
+                  Configuração de Maquinário & Velocidade da Oficina
+                </h2>
+                <p className="text-xs text-slate-500 dark:text-zinc-400">
+                  Defina a velocidade média das suas bordadeiras para calcular o tempo estimado de produção exato nos orçamentos.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-6">
+            {/* Presets Rápidos de Máquinas */}
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-slate-700 dark:text-zinc-300 uppercase tracking-wider block">
+                ⚡ Perfis de Velocidade Rápidos (SPM - Pontos Por Minuto)
+              </label>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                {[
+                  { label: '600 SPM', name: 'Doméstica / Entrada', spm: 600 },
+                  { label: '800 SPM', name: 'Semi-Industrial', spm: 800 },
+                  { label: '1000 SPM', name: 'Industrial Tajima/Barudan', spm: 1000 },
+                  { label: '1200 SPM', name: 'Alta Performance', spm: 1200 },
+                ].map(preset => (
+                  <button
+                    key={preset.spm}
+                    type="button"
+                    onClick={() => setMachineSpeedSpm(preset.spm)}
+                    className={`p-3 rounded-2xl border text-left transition-all ${
+                      machineSpeedSpm === preset.spm
+                        ? 'border-cyan-500 bg-cyan-500/10 text-cyan-400 font-black shadow-md'
+                        : 'border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-black/30 text-slate-600 dark:text-zinc-400 hover:border-cyan-500/40'
+                    }`}
+                  >
+                    <p className="text-xs font-black">{preset.label}</p>
+                    <p className="text-[10px] text-slate-400 dark:text-zinc-500 mt-0.5">{preset.name}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Inputs Diretos */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-700 dark:text-zinc-300 uppercase tracking-wider block">
+                  🪡 Velocidade Personalizada da Máquina (SPM)
+                </label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    value={machineSpeedSpm}
+                    onChange={(e) => setMachineSpeedSpm(Number(e.target.value) || 800)}
+                    className="w-full bg-slate-50 dark:bg-black/50 border border-slate-300 dark:border-white/10 rounded-2xl px-4 py-3 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:border-cyan-500 transition-colors"
+                    placeholder="Ex: 850"
+                  />
+                  <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-black text-cyan-500">
+                    SPM (pts/min)
+                  </span>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-700 dark:text-zinc-300 uppercase tracking-wider block">
+                  ⏱️ Tempo Estimado por Troca de Cor (Segundos)
+                </label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    value={colorChangeTimeSec}
+                    onChange={(e) => setColorChangeTimeSec(Number(e.target.value) || 0)}
+                    className="w-full bg-slate-50 dark:bg-black/50 border border-slate-300 dark:border-white/10 rounded-2xl px-4 py-3 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:border-cyan-500 transition-colors"
+                    placeholder="Ex: 30"
+                  />
+                  <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-black text-cyan-500">
+                    Segundos
+                  </span>
+                </div>
               </div>
             </div>
           </div>
