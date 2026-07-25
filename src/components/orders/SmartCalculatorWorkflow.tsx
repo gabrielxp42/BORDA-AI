@@ -116,14 +116,13 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
     rules
   );
 
-  // Tempo Estimado de Máquina (Base industrial 700 pts/min + 1 min por troca de cor)
+  // Tempo Estimado de Máquina (Unificado com a Biblioteca de Matrizes: ~1400 pts/min)
   const estimatedMinutesPerPiece = useMemo(() => {
     const stitches = Number(stitchCount) || 0;
-    const colors = Math.max(1, Number(colorCount) || 1);
     if (stitches <= 0) return 0;
-    const mins = Math.ceil(stitches / 700) + (colors > 1 ? colors * 1 : 0);
-    return Math.max(1, mins);
-  }, [stitchCount, colorCount]);
+    const baseMins = Math.round((stitches / 1000) * 0.7);
+    return Math.max(1, baseMins);
+  }, [stitchCount]);
 
   const totalEstimatedMinutes = useMemo(() => {
     const qty = Math.max(1, Number(quantity) || 1);
