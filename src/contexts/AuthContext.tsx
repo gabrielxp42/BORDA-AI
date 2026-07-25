@@ -60,28 +60,38 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     let mounted = true;
 
-    // Busca a sessão inicial
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!mounted) return;
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        fetchProfile(session.user.id, session.user);
-      }
-      setLoading(false);
-    });
+    // Detecta se a URL contém tokens de retorno do OAuth (Google)
+    const hasAuthParams = 
+      window.location.hash.includes('access_token=') || 
+      window.location.search.includes('code=') ||
+      window.location.search.includes('error=');
 
-    // Subscrição única de mudanças de estado de autenticação
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    // Listener para mudanças de estado de autenticação
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!mounted) return;
       setSession(session);
       setUser(session?.user ?? null);
+
       if (session?.user) {
-        fetchProfile(session.user.id, session.user);
+        await fetchProfile(session.user.id, session.user);
       } else {
         setProfile(null);
       }
       setLoading(false);
+    });
+
+    // Busca a sessão inicial
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (!mounted) return;
+      if (session) {
+        setSession(session);
+        setUser(session.user);
+        await fetchProfile(session.user.id, session.user);
+        setLoading(false);
+      } else if (!hasAuthParams) {
+        // Apenas encerra o carregamento se NÃO for um retorno de OAuth processando na URL
+        setLoading(false);
+      }
     });
 
     return () => {
