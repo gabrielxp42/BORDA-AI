@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Users, Plus, Search, Phone, Mail, Building, Repeat, Trash2, ChevronRight, Pencil } from 'lucide-react';
+import { Users, Plus, Search, Phone, Mail, Building, Repeat, Trash2, ChevronRight, Pencil, Clock, CheckCircle2 } from 'lucide-react';
 import { Client } from '@/types/borda';
 import { supabase } from '@/integrations/supabase/client';
 import { useCompanySettings } from '@/contexts/CompanySettingsContext';
@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 export const Clientes: React.FC = () => {
   const { settings } = useCompanySettings();
   const [clients, setClients] = useState<Client[]>([]);
+  const [clientPendingMap, setClientPendingMap] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -34,13 +35,31 @@ export const Clientes: React.FC = () => {
   const fetchClients = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
+      const { data: clientsData, error: clientsError } = await supabase
         .from('clients')
         .select('*')
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
-      setClients((data as Client[]) || []);
+      if (clientsError) throw clientsError;
+
+      // Busca ordens para calcular saldo pendente por cliente
+      const { data: ordersData } = await supabase
+        .from('orders')
+        .select('client_id, total_amount, payment_status');
+
+      const pendingMap: Record<string, number> = {};
+      (ordersData || []).forEach((o: any) => {
+        if (!o.client_id) return;
+        const amt = Number(o.total_amount || 0);
+        if (o.payment_status === 'pending') {
+          pendingMap[o.client_id] = (pendingMap[o.client_id] || 0) + amt;
+        } else if (o.payment_status === 'half_paid') {
+          pendingMap[o.client_id] = (pendingMap[o.client_id] || 0) + (amt * 0.5);
+        }
+      });
+
+      setClientPendingMap(pendingMap);
+      setClients((clientsData as Client[]) || []);
     } catch (err: any) {
       console.error('Erro ao carregar clientes:', err);
       toast.error('Erro ao carregar lista de clientes.');
@@ -212,6 +231,30 @@ export const Clientes: React.FC = () => {
                   <p className="text-[11px] text-slate-500 dark:text-zinc-500 italic mt-1 leading-snug line-clamp-2">
                     "{c.notes}"
                   </p>
+                )}
+              </div>
+
+              {/* Badge de Pendência Financeira com a Cor Principal da Marca do Usuário */}
+              <div className="pt-2.5 flex items-center justify-between border-t border-slate-200/60 dark:border-white/5">
+                <span className="text-[10px] font-black text-slate-500 dark:text-zinc-500 uppercase tracking-wider">
+                  Saldo Financeiro:
+                </span>
+                {clientPendingMap[c.id] && clientPendingMap[c.id] > 0 ? (
+                  <span 
+                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black border shadow-sm animate-pulse"
+                    style={{
+                      backgroundColor: `${settings.primaryColor}15`,
+                      borderColor: `${settings.primaryColor}50`,
+                      color: settings.primaryColor,
+                    }}
+                  >
+                    <Clock className="h-3.5 w-3.5 stroke-[2.5]" />
+                    Pendente: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(clientPendingMap[c.id])}
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold text-emerald-500 bg-emerald-500/10 border border-emerald-500/20">
+                    <CheckCircle2 className="h-3 w-3" /> Conta em Dia
+                  </span>
                 )}
               </div>
             </div>

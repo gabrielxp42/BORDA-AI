@@ -4,7 +4,7 @@ import {
   X, UserPlus, Calendar, Plus, Trash2, Package, Save, Lock, Layers, Sparkles, 
   CheckCircle2, DollarSign, ChevronDown, Check, Upload, FileCheck, ChevronUp, 
   Sliders, Send, Clock, CreditCard, Landmark, Coins, ArrowRight, ArrowLeft, Camera, Paperclip,
-  MessageSquare, Image, FileText
+  MessageSquare, Image, FileText, QrCode
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { calculateEmbroideryPrice } from '@/services/pricingEngine';
@@ -68,6 +68,7 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
   const [whatsappNotifyReceipt, setWhatsappNotifyReceipt] = useState<boolean>(true);
   const [whatsappRequestRef, setWhatsappRequestRef] = useState<boolean>(false);
   const [whatsappSendSummary, setWhatsappSendSummary] = useState<boolean>(false);
+  const [whatsappSendPix, setWhatsappSendPix] = useState<boolean>(false);
 
   // Addon States
   const [isBigHoop, setIsBigHoop] = useState<boolean>(false);
@@ -406,108 +407,111 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
 
       toast.success(initialData?.orderId ? "Pedido atualizado com sucesso!" : "Pedido criado com sucesso!");
 
-      // --- DISPARO DA AUTOMAÇÃO WHATSAPP PELAS CHAVES SELECIONADAS (COM TASK DOCK EM SEGUNDO PLANO) ---
-      if ((whatsappNotifyReceipt || whatsappRequestRef || whatsappSendSummary || whatsappSendPix) && selectedClientId) {
-        try {
-          const { data: clientData } = await supabase
-            .from('clients')
-            .select('name, phone')
-            .eq('id', selectedClientId)
-            .maybeSingle();
-
-          if (clientData?.phone && clientData.phone.trim()) {
-            const clientName = clientData.name || 'Cliente';
-            const orderCode = order?.id ? `#${order.id.slice(0, 4)}` : '';
-            const itemDesc = matrixName || notes || 'Peças para bordado';
-
-            const msgLines: string[] = [
-              `*Entrada de Pedido - ${settings.systemName}* 🧵✨\n`,
-              `Olá, *${clientName}*!`
-            ];
-
-            if (whatsappNotifyReceipt) {
-              msgLines.push(`📦 *Confirmação de Recebimento:* Suas peças (*${itemDesc}*, ${quantity || 1}x) foram recebidas com sucesso em nossa oficina e deram entrada no sistema.`);
-            }
-
-            if (whatsappRequestRef) {
-              msgLines.push(`🖼️ *Solicitação de Imagem/Arte:* Por favor, nos envie aqui no WhatsApp a imagem/referência do seu bordado em alta resolução para a programação da matriz.`);
-            }
-
-            if (whatsappSendSummary) {
-              msgLines.push(`📋 *Ficha de Registro:* Entrada ${orderCode} registrada no sistema da oficina.`);
-            }
-
-            if (whatsappSendPix) {
-              msgLines.push(`💳 *Dados para Pagamento via PIX:*\nChave PIX: *${settings.pixKey || 'Consulte a chave no ateliê'}*`);
-            }
-
-            msgLines.push(`\nQualquer dúvida estamos à disposição!`);
-            const autoMsg = msgLines.join('\n\n');
-
-            // Adiciona a tarefa ao painel flutuante de TAREFAS EM SEGUNDO PLANO (TaskDock)
-            const taskId = addTask({
-              title: `Automação WhatsApp (${clientName})`,
-              description: `Enviando confirmação de entrada para ${clientName}...`,
-              status: 'processing',
-              progress: 30,
-              steps: [
-                { id: 'prep', label: 'Montando Ficha de Entrada', status: 'completed' },
-                { id: 'send', label: 'Conectando Evolution API', status: 'loading' },
-                { id: 'done', label: 'Entrega no WhatsApp', status: 'pending' },
-              ]
-            });
-
-            const toastId = toast.loading(`Disparando WhatsApp para ${clientName}...`);
-
-            try {
-              updateStep(taskId, 'send', 'completed');
-              updateStep(taskId, 'done', 'loading');
-              updateTask(taskId, { progress: 70, status: 'sending' });
-
-              await sendEvolutionText(clientData.phone, autoMsg);
-
-              updateStep(taskId, 'done', 'completed');
-              updateTask(taskId, {
-                progress: 100,
-                status: 'completed',
-                description: `Notificação enviada com sucesso para ${clientName}!`
-              });
-
-              const webLink = getWhatsAppWebLink(clientData.phone, autoMsg);
-              toast.success(`⚡ Automação enviada com sucesso para ${clientName}!`, {
-                id: toastId,
-                action: {
-                  label: "Conferir Web",
-                  onClick: () => window.open(webLink, '_blank')
-                }
-              });
-            } catch (err: any) {
-              console.warn("Falha no disparo automático WhatsApp:", err);
-
-              updateTask(taskId, {
-                status: 'error',
-                progress: 100,
-                error: err.message || 'Falha no envio direto'
-              });
-
-              const webLink = getWhatsAppWebLink(clientData.phone, autoMsg);
-              window.open(webLink, '_blank');
-              toast.info(`Evolution API indisponível. Abrindo WhatsApp Web para ${clientName}...`, { id: toastId });
-            }
-          }
-        } catch (autoErr) {
-          console.warn("Erro ao buscar dados do cliente para notificação:", autoErr);
-        }
-      }
-      
+      // 4. Fecha a modal e atualiza a interface INSTANTANEAMENTE (sem travar no botão de registrando)
       if (onOrderCreated) {
         onOrderCreated();
       }
       
       if (mode === 'modal' && onClose) {
         onClose();
-      } else {
+      } else if (mode === 'standalone') {
         navigate('/pedidos');
+      }
+
+      // 5. DISPARO DA AUTOMAÇÃO WHATSAPP EM SEGUNDO PLANO (TASK DOCK)
+      if ((whatsappNotifyReceipt || whatsappRequestRef || whatsappSendSummary || whatsappSendPix) && selectedClientId) {
+        (async () => {
+          try {
+            const { data: clientData } = await supabase
+              .from('clients')
+              .select('name, phone')
+              .eq('id', selectedClientId)
+              .maybeSingle();
+
+            if (clientData?.phone && clientData.phone.trim()) {
+              const clientName = clientData.name || 'Cliente';
+              const orderCode = order?.id ? `#${order.id.slice(0, 4)}` : '';
+              const itemDesc = matrixName || notes || 'Peças para bordado';
+
+              const msgLines: string[] = [
+                `*Entrada de Pedido - ${settings.systemName}* 🧵✨\n`,
+                `Olá, *${clientName}*!`
+              ];
+
+              if (whatsappNotifyReceipt) {
+                msgLines.push(`📦 *Confirmação de Recebimento:* Suas peças (*${itemDesc}*, ${quantity || 1}x) foram recebidas com sucesso em nossa oficina e deram entrada no sistema.`);
+              }
+
+              if (whatsappRequestRef) {
+                msgLines.push(`🖼️ *Solicitação de Imagem/Arte:* Por favor, nos envie aqui no WhatsApp a imagem/referência do seu bordado em alta resolução para a programação da matriz.`);
+              }
+
+              if (whatsappSendSummary) {
+                msgLines.push(`📋 *Ficha de Registro:* Entrada ${orderCode} registrada no sistema da oficina.`);
+              }
+
+              if (whatsappSendPix) {
+                msgLines.push(`💳 *Dados para Pagamento via PIX:*\nChave PIX: *${settings.pixKey || 'Consulte a chave no ateliê'}*`);
+              }
+
+              msgLines.push(`\nQualquer dúvida estamos à disposição!`);
+              const autoMsg = msgLines.join('\n\n');
+
+              // Adiciona a tarefa ao painel flutuante de TAREFAS EM SEGUNDO PLANO (TaskDock)
+              const taskId = addTask({
+                title: `Automação WhatsApp (${clientName})`,
+                description: `Enviando confirmação de entrada para ${clientName}...`,
+                status: 'processing',
+                progress: 30,
+                steps: [
+                  { id: 'prep', label: 'Montando Ficha de Entrada', status: 'completed' },
+                  { id: 'send', label: 'Conectando Evolution API', status: 'loading' },
+                  { id: 'done', label: 'Entrega no WhatsApp', status: 'pending' },
+                ]
+              });
+
+              const toastId = toast.loading(`Disparando WhatsApp para ${clientName}...`);
+
+              try {
+                updateStep(taskId, 'send', 'completed');
+                updateStep(taskId, 'done', 'loading');
+                updateTask(taskId, { progress: 70, status: 'sending' });
+
+                await sendEvolutionText(clientData.phone, autoMsg);
+
+                updateStep(taskId, 'done', 'completed');
+                updateTask(taskId, {
+                  progress: 100,
+                  status: 'completed',
+                  description: `Notificação enviada com sucesso para ${clientName}!`
+                });
+
+                const webLink = getWhatsAppWebLink(clientData.phone, autoMsg);
+                toast.success(`⚡ Automação enviada com sucesso para ${clientName}!`, {
+                  id: toastId,
+                  action: {
+                    label: "Conferir Web",
+                    onClick: () => window.open(webLink, '_blank')
+                  }
+                });
+              } catch (err: any) {
+                console.warn("Falha no disparo automático WhatsApp:", err);
+
+                updateTask(taskId, {
+                  status: 'error',
+                  progress: 100,
+                  error: err.message || 'Falha no envio direto'
+                });
+
+                const webLink = getWhatsAppWebLink(clientData.phone, autoMsg);
+                window.open(webLink, '_blank');
+                toast.info(`Evolution API indisponível. Abrindo WhatsApp Web para ${clientName}...`, { id: toastId });
+              }
+            }
+          } catch (autoErr) {
+            console.warn("Erro ao buscar dados do cliente para notificação:", autoErr);
+          }
+        })();
       }
     } catch (err) {
       console.error("Erro ao registrar pedido:", err);
@@ -1509,6 +1513,53 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
                       <span
                         className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
                           whatsappSendSummary ? 'translate-x-5' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
+                  </div>
+
+                  {/* Chave 4: Enviar Chave PIX (Destaque Dourado/Âmbar) */}
+                  <div 
+                    onClick={() => setWhatsappSendPix(!whatsappSendPix)}
+                    className={`flex items-center justify-between p-3 rounded-2xl border transition-all cursor-pointer select-none ${
+                      whatsappSendPix 
+                        ? 'bg-amber-500/10 border-amber-500/40 shadow-sm shadow-amber-500/10' 
+                        : 'bg-slate-100 dark:bg-white/5 border-slate-200 dark:border-white/10 hover:border-white/20'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 pr-2 min-w-0">
+                      <div className={`h-8 w-8 rounded-xl flex items-center justify-center shrink-0 border ${
+                        whatsappSendPix
+                          ? 'bg-amber-500/20 border-amber-500/30 text-amber-400'
+                          : 'bg-white/5 border-white/10 text-zinc-400'
+                      }`}>
+                        <QrCode className="h-4 w-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <span className="font-bold text-slate-800 dark:text-zinc-100 block text-xs leading-tight flex items-center gap-1.5">
+                          🔑 Enviar Chave PIX <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30">Destaque</span>
+                        </span>
+                        <span className="text-[10px] text-slate-500 dark:text-zinc-400 block mt-0.5 truncate">
+                          Inclui os dados da Chave PIX no texto
+                        </span>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={whatsappSendPix}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setWhatsappSendPix(!whatsappSendPix);
+                      }}
+                      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                        whatsappSendPix ? 'bg-amber-500 shadow-sm shadow-amber-500/40' : 'bg-zinc-700/80 dark:bg-white/10'
+                      }`}
+                    >
+                      <span
+                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
+                          whatsappSendPix ? 'translate-x-5' : 'translate-x-0'
                         }`}
                       />
                     </button>

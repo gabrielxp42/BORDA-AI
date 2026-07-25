@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import {
-  ShoppingBag, Kanban, LayoutGrid, Plus, Search, Filter, Calendar,
+  ShoppingBag, Kanban, LayoutGrid, List, Plus, Search, Filter, Calendar,
   CheckCircle2, Clock, DollarSign, User, Package, FileText, ChevronRight,
   RefreshCw, Trash2, Edit3, ArrowUpRight, ChevronDown, ChevronUp,
   AlertTriangle, Paperclip, MessageSquare, ExternalLink, Shield, Maximize2, Minimize2, Phone,
-  Zap, Sparkles
+  Zap, Sparkles, Printer
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useCompanySettings } from '@/contexts/CompanySettingsContext';
@@ -13,6 +13,8 @@ import { PedidosKanban } from './PedidosKanban';
 import { CreateOrderModal } from '@/components/orders/CreateOrderModal';
 import { PaymentStatusModal } from '@/components/orders/PaymentStatusModal';
 import { OrderDetailsModal } from '@/components/orders/OrderDetailsModal';
+import { PedidoGridCard } from '@/components/orders/PedidoGridCard';
+import { CollectionActionModal } from '@/components/orders/CollectionActionModal';
 import { toast } from 'sonner';
 import { parsePaymentMetadata } from '@/utils/paymentHelper';
 import { sendEvolutionText, getWhatsAppWebLink, formatWhatsAppNumber } from '@/services/whatsappService';
@@ -58,6 +60,7 @@ export const Pedidos: React.FC = () => {
   const { isUnlocked } = useProfile();
 
   const [activeTab, setActiveTab] = useState<'cards' | 'kanban'>('cards');
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid'); // Grid de Miniaturas (Cards) como PADRÃO PRIMÁRIO!
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -68,106 +71,28 @@ export const Pedidos: React.FC = () => {
   // Estado para controlar quais cards estão expandidos no modo Acordeon
   const [expandedOrderIds, setExpandedOrderIds] = useState<Record<string, boolean>>({});
 
-  // Modais de Status e Detalhes
+  // Modais de Status, Detalhes e Cobrança
   const [selectedOrderForStatus, setSelectedOrderForStatus] = useState<Order | null>(null);
   const [selectedOrderForDetails, setSelectedOrderForDetails] = useState<Order | null>(null);
+  const [selectedOrderForCobrar, setSelectedOrderForCobrar] = useState<Order | null>(null);
 
   // Background Task Store
   const addTask = useBackgroundTasks(state => state.addTask);
   const updateTask = useBackgroundTasks(state => state.updateTask);
   const updateStep = useBackgroundTasks(state => state.updateStep);
 
-  const handleCobrarPedido = async (order: Order, e?: React.MouseEvent) => {
+  const handleCobrarPedido = (order: Order, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
-
-    const clientName = order.clients?.name || order.client?.name || 'Cliente';
-    const clientPhone = order.clients?.phone || order.client?.phone;
-
-    if (!clientPhone || !clientPhone.trim()) {
-      toast.error(`O cliente "${clientName}" não possui WhatsApp cadastrado.`);
-      return;
-    }
-
-    const orderNum = order.order_number ? `#${order.order_number}` : `#${order.id.slice(0, 4)}`;
-    const totalStr = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(order.total_amount || 0);
-
-    const itemDescriptions = order.order_items?.map((it: any) => `• ${it.description} (${it.quantity}x)`).join('\n') ||
-                             order.items?.map((it: any) => `• ${it.description} (${it.quantity}x)`).join('\n') ||
-                             '• Bordado Personalizado';
-
-    const isPaid = order.payment_status === 'paid';
-    const isHalf = order.payment_status === 'half_paid';
-    const statusLabel = isPaid ? 'PAGO (100%)' : isHalf ? 'SINAL (50%)' : 'PENDENTE DE PAGAMENTO';
-
-    const message = `*Cobrança de Pedido - ${settings.systemName}* 🧵✨\n\n` +
-      `Olá, *${clientName}*! Seguem os detalhes da sua conta:\n\n` +
-      `📋 *Pedido:* ${orderNum}\n` +
-      `📌 *Status:* ${statusLabel}\n` +
-      `📦 *Itens:*\n${itemDescriptions}\n\n` +
-      `💵 *VALOR TOTAL:* *${totalStr}*\n\n` +
-      `✨ Aguardamos a confirmação para dar andamento na sua produção!`;
-
-    // Registra no TaskDock de Tarefas em Segundo Plano (canto inferior esquerdo)
-    const taskId = addTask({
-      title: `Pedido ${orderNum}`,
-      description: `Enviando para ${clientName}...`,
-      status: 'processing',
-      progress: 25,
-      steps: [
-        { id: 'prep', label: 'Gerando Resumo', status: 'completed' },
-        { id: 'send', label: 'Conectando Evolution API', status: 'loading' },
-        { id: 'done', label: 'Envio WhatsApp', status: 'pending' },
-      ]
-    });
-
-    const toastId = toast.loading(`Enviando cobrança do pedido ${orderNum} para ${clientName}...`);
-
-    try {
-      updateStep(taskId, 'send', 'completed');
-      updateStep(taskId, 'done', 'loading');
-      updateTask(taskId, { progress: 65, status: 'sending' });
-
-      await sendEvolutionText(clientPhone, message);
-
-      const targetNum = formatWhatsAppNumber(clientPhone);
-      const webLink = getWhatsAppWebLink(clientPhone, message);
-
-      updateStep(taskId, 'done', 'completed');
-      updateTask(taskId, {
-        progress: 100,
-        status: 'completed',
-        description: `Enviado para +${targetNum}`
-      });
-
-      toast.success(`⚡ Cobrança enviada via Evolution API para ${clientName} (+${targetNum})!`, { 
-        id: toastId,
-        duration: 8000,
-        action: {
-          label: "Abrir WhatsApp Web",
-          onClick: () => window.open(webLink, '_blank')
-        }
-      });
-    } catch (evoErr: any) {
-      console.warn('Falha no envio direto via Evolution API, abrindo WhatsApp Web:', evoErr);
-      updateTask(taskId, {
-        status: 'error',
-        progress: 100,
-        error: evoErr.message || 'Falha no envio direto'
-      });
-
-      const webLink = getWhatsAppWebLink(clientPhone, message);
-      window.open(webLink, '_blank');
-      toast.info(`Evolution API indisponível. Abrindo WhatsApp Web para ${clientName}...`, { id: toastId });
-    }
+    setSelectedOrderForCobrar(order);
   };
 
   useEffect(() => {
-    fetchOrders();
+    fetchOrders(true);
 
     const channel = supabase
       .channel('realtime-orders-list')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
-        fetchOrders();
+        fetchOrders(false);
       })
       .subscribe();
 
@@ -176,8 +101,8 @@ export const Pedidos: React.FC = () => {
     };
   }, []);
 
-  const fetchOrders = async () => {
-    setLoading(true);
+  const fetchOrders = async (showLoading = true) => {
+    if (showLoading) setLoading(true);
     try {
       const { data: ordersData, error: ordersError } = await supabase
         .from('orders')
@@ -209,7 +134,7 @@ export const Pedidos: React.FC = () => {
     } catch (err) {
       console.error("Erro ao buscar lista de pedidos:", err);
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
   };
 
@@ -283,27 +208,40 @@ export const Pedidos: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Seletor de Visão (Cards com Acordeon vs Fila Kanban) */}
+          {/* Seletor de Visão: 📱 Miniaturas (Padrão Primário) vs 📋 Lista vs 📊 Kanban */}
           <div className="p-1 rounded-2xl bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 flex items-center gap-1 shadow-xs">
             <button
-              onClick={() => setActiveTab('cards')}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
-                activeTab === 'cards'
-                  ? 'bg-white dark:bg-purple-600 text-slate-900 dark:text-white shadow-xs'
+              onClick={() => { setActiveTab('cards'); setViewMode('grid'); }}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                activeTab === 'cards' && viewMode === 'grid'
+                  ? 'bg-purple-600 text-white shadow-xs'
                   : 'text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white'
               }`}
+              title="Visão Primária em Miniaturas / Cards"
             >
-              <LayoutGrid className="h-3.5 w-3.5" /> Visão em Cards (Acordeon)
+              <LayoutGrid className="h-3.5 w-3.5 text-purple-300" /> 📱 Miniaturas (Cards)
+            </button>
+            <button
+              onClick={() => { setActiveTab('cards'); setViewMode('list'); }}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                activeTab === 'cards' && viewMode === 'list'
+                  ? 'bg-purple-600 text-white shadow-xs'
+                  : 'text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white'
+              }`}
+              title="Visão em Lista / Acordeon"
+            >
+              <List className="h-3.5 w-3.5" /> 📋 Lista
             </button>
             <button
               onClick={() => setActiveTab('kanban')}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
                 activeTab === 'kanban'
-                  ? 'bg-white dark:bg-purple-600 text-slate-900 dark:text-white shadow-xs'
+                  ? 'bg-purple-600 text-white shadow-xs'
                   : 'text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white'
               }`}
+              title="Esteira Kanban de Produção"
             >
-              <Kanban className="h-3.5 w-3.5" /> Fila Kanban
+              <Kanban className="h-3.5 w-3.5" /> 📊 Kanban
             </button>
           </div>
 
@@ -318,11 +256,11 @@ export const Pedidos: React.FC = () => {
         </div>
       </div>
 
-      {/* Conteúdo da Aba 1: Cards em Acordeon */}
+      {/* Conteúdo da Aba 1: Gestão de Pedidos (Miniaturas ou Lista) */}
       {activeTab === 'cards' && (
         <div className="space-y-4 animate-in fade-in duration-200">
 
-          {/* Barra de Filtros, Busca e Ações em Lote do Acordeon */}
+          {/* Barra de Filtros, Busca e Ações */}
           <div className="flex flex-col lg:flex-row items-center justify-between gap-3 p-4 rounded-3xl glass-panel border border-slate-200 dark:border-white/10">
             <div className="flex flex-col sm:flex-row items-center gap-3 w-full lg:w-auto">
               <div className="relative w-full sm:w-80">
@@ -336,23 +274,25 @@ export const Pedidos: React.FC = () => {
                 />
               </div>
 
-              {/* Botões de Expandir / Encolher Todos */}
-              <div className="flex items-center gap-1.5 w-full sm:w-auto">
-                <button
-                  onClick={expandAll}
-                  className="flex-1 sm:flex-none px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-white/5 dark:hover:bg-white/10 border border-slate-200 dark:border-white/10 text-[11px] font-bold text-slate-700 dark:text-zinc-300 flex items-center justify-center gap-1 transition-all cursor-pointer"
-                  title="Expandir todos os cards"
-                >
-                  <Maximize2 className="h-3 w-3" /> Expandir Todos
-                </button>
-                <button
-                  onClick={collapseAll}
-                  className="flex-1 sm:flex-none px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-white/5 dark:hover:bg-white/10 border border-slate-200 dark:border-white/10 text-[11px] font-bold text-slate-700 dark:text-zinc-300 flex items-center justify-center gap-1 transition-all cursor-pointer"
-                  title="Encolher todos os cards"
-                >
-                  <Minimize2 className="h-3 w-3" /> Encolher Todos
-                </button>
-              </div>
+              {/* Botões de Expandir / Encolher Todos (Apenas no Modo Lista) */}
+              {viewMode === 'list' && (
+                <div className="flex items-center gap-1.5 w-full sm:w-auto">
+                  <button
+                    onClick={expandAll}
+                    className="flex-1 sm:flex-none px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-white/5 dark:hover:bg-white/10 border border-slate-200 dark:border-white/10 text-[11px] font-bold text-slate-700 dark:text-zinc-300 flex items-center justify-center gap-1 transition-all cursor-pointer"
+                    title="Expandir todos os cards"
+                  >
+                    <Maximize2 className="h-3 w-3" /> Expandir Todos
+                  </button>
+                  <button
+                    onClick={collapseAll}
+                    className="flex-1 sm:flex-none px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-white/5 dark:hover:bg-white/10 border border-slate-200 dark:border-white/10 text-[11px] font-bold text-slate-700 dark:text-zinc-300 flex items-center justify-center gap-1 transition-all cursor-pointer"
+                    title="Encolher todos os cards"
+                  >
+                    <Minimize2 className="h-3 w-3" /> Encolher Todos
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Filtros de Pagamento */}
@@ -379,7 +319,7 @@ export const Pedidos: React.FC = () => {
             </div>
           </div>
 
-          {/* Lista de Cards com Sistema de Acordeon (Sanfona) */}
+          {/* Renderização Condicional: Modo Grid de Miniaturas (Cards) vs Modo Lista */}
           {loading ? (
             <div className="flex items-center justify-center p-12 text-slate-500">
               <RefreshCw className="h-6 w-6 animate-spin" />
@@ -390,7 +330,36 @@ export const Pedidos: React.FC = () => {
               <p className="text-sm font-bold text-slate-700 dark:text-zinc-300">Nenhum pedido encontrado.</p>
               <p className="text-xs text-slate-500 dark:text-zinc-500 mt-1">Crie um novo pedido no botão acima ou altere os filtros de busca.</p>
             </div>
+          ) : viewMode === 'grid' ? (
+            /* Modo 1: GRID DE MINIATURAS (PADRÃO PRIMÁRIO NOVO - ESTILO DIRECT AI PARA BORDADOS) */
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 animate-in fade-in duration-200">
+              {filteredOrders.map(order => (
+                <PedidoGridCard
+                  key={order.id}
+                  order={order}
+                  onOpenDetails={(o) => setSelectedOrderForDetails(o)}
+                  onOpenStatusModal={(o) => setSelectedOrderForStatus(o)}
+                  onOpenEditModal={(o) => {
+                    setInitialOrderData({
+                      orderId: o.id,
+                      clientId: o.client_id,
+                      notes: o.notes
+                    });
+                    setIsCreateModalOpen(true);
+                  }}
+                  onDeleteOrder={handleDeleteOrder}
+                  onCobrarOrder={handleCobrarPedido}
+                  onPrintReceipt={(o) => {
+                    setSelectedOrderForDetails(o);
+                    setTimeout(() => window.print(), 300);
+                  }}
+                  pixKey={settings.pixKey}
+                  systemName={settings.systemName}
+                />
+              ))}
+            </div>
           ) : (
+            /* Modo 2: LISTA / ACORDEON */
             <div className="space-y-3">
               {filteredOrders.map(order => {
                 const isPaid = order.payment_status === 'paid';
@@ -726,6 +695,14 @@ export const Pedidos: React.FC = () => {
           setSelectedOrderForDetails(null);
           setIsCreateModalOpen(true);
         }}
+      />
+
+      {/* Modal de Cobrança Inteligente WhatsApp */}
+      <CollectionActionModal
+        isOpen={!!selectedOrderForCobrar}
+        onClose={() => setSelectedOrderForCobrar(null)}
+        order={selectedOrderForCobrar}
+        onMessageSent={fetchOrders}
       />
     </div>
   );

@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCompanySettings } from '@/contexts/CompanySettingsContext';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 import { Sparkles, Lock, Mail, User, ArrowRight, ShieldCheck } from 'lucide-react';
 
 export const Login: React.FC = () => {
@@ -146,6 +148,72 @@ export const Login: React.FC = () => {
             <ArrowRight className="h-4 w-4" />
           </button>
         </form>
+
+        {/* Divisor Visual Elegante */}
+        <div className="relative flex items-center justify-center my-4">
+          <div className="border-t border-white/10 w-full" />
+          <span className="bg-[#12121a] px-3 text-[10px] font-black tracking-widest text-zinc-500 uppercase shrink-0">
+            ou continuar com
+          </span>
+          <div className="border-t border-white/10 w-full" />
+        </div>
+
+        {/* 🚀 BOTÃO DE LOGIN COM GOOGLE MODERNO, ANIMADO E INTUITIVO */}
+        <button
+          type="button"
+          onClick={async () => {
+            try {
+              setIsSubmitting(true);
+              const { error } = await supabase.auth.signInWithOAuth({
+                provider: 'google',
+                options: {
+                  redirectTo: `${window.location.origin}/`,
+                },
+              });
+              if (error) throw error;
+            } catch (err: any) {
+              console.error('Erro no login com Google:', err);
+              if (err?.message?.includes('provider is not enabled')) {
+                toast.error('O login do Google precisa ser ativado no Supabase Dashboard (Authentication -> Providers -> Google).', { duration: 6000 });
+              } else {
+                toast.error('Erro ao conectar com Google: ' + (err.message || 'Falha de autenticação'));
+              }
+            } finally {
+              setIsSubmitting(false);
+            }
+          }}
+          disabled={isSubmitting}
+          className="group relative w-full overflow-hidden p-3.5 rounded-2xl bg-zinc-950/80 border border-white/15 hover:border-white/40 transition-all duration-300 shadow-xl hover:shadow-2xl hover:scale-[1.01] active:scale-[0.98] flex items-center justify-center gap-3 cursor-pointer"
+        >
+          {/* Efeito Neon Glow Suave no Hover */}
+          <div className="absolute inset-0 bg-gradient-to-r from-blue-500/10 via-red-500/10 via-amber-500/10 to-emerald-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
+
+          {/* Ícone do Google em SVG com 4 Cores Oficiais */}
+          <div className="relative z-10 flex items-center justify-center h-5 w-5 group-hover:scale-110 transition-transform duration-300 shrink-0">
+            <svg className="h-5 w-5" viewBox="0 0 24 24">
+              <path
+                fill="#4285F4"
+                d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17z"
+              />
+              <path
+                fill="#34A853"
+                d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.11-6.72-4.96H1.29v3.13C3.26 21.3 7.31 24 12 24z"
+              />
+              <path
+                fill="#FBBC05"
+                d="M5.28 14.24c-.25-.72-.38-1.49-.38-2.24s.13-1.52.38-2.24V6.63H1.29C.47 8.24 0 10.06 0 12s.47 3.76 1.29 5.37l3.99-3.13z"
+              />
+              <path
+                fill="#EA4335"
+                d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.31 0 3.26 2.7 1.29 6.63l3.99 3.13c.95-2.85 3.6-4.96 6.72-4.96z"
+              />
+            </svg>
+          </div>
+
+          <span className="relative z-10 font-bold text-xs text-zinc-100 group-hover:text-white tracking-wide transition-colors">
+            Continuar com o Google
+          </span>
+        </button>
 
         <div className="pt-4 border-t border-white/5 text-center">
           <p className="text-[10px] text-zinc-500 flex items-center justify-center gap-1">

@@ -8,6 +8,13 @@ interface CompanySettings {
   primaryColor: string;
   logoUrl: string | null;
   pixKey?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  address?: string | null;
+  document?: string | null;
+  workingHours?: string | null;
+  fiscalApiToken?: string | null;
+  fiscalEnvironment?: 'homologacao' | 'producao';
 }
 
 interface CompanySettingsContextType {
@@ -17,11 +24,18 @@ interface CompanySettingsContextType {
 }
 
 const defaultSettings: CompanySettings = {
-  systemName: 'BORDA AI',
+  systemName: 'GUAÇU BORDADOS',
   systemSubtitle: 'INDUSTRIAL EMBROIDERIES ERP',
   primaryColor: '#9333ea',
   logoUrl: null,
   pixKey: '',
+  phone: '',
+  email: '',
+  address: '',
+  document: '',
+  workingHours: 'Seg à Sex: 08h às 18h | Sáb: 08h às 12h',
+  fiscalApiToken: '',
+  fiscalEnvironment: 'homologacao'
 };
 
 const CompanySettingsContext = createContext<CompanySettingsContextType | undefined>(undefined);
@@ -29,13 +43,20 @@ const CompanySettingsContext = createContext<CompanySettingsContextType | undefi
 export const CompanySettingsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user } = useAuth();
 
-  // Inicialização síncrona lendo direto do localStorage para eliminar 100% o piscar no F5
+  // Inicialização síncrona lendo direto do localStorage
   const [settings, setSettings] = useState<CompanySettings>(() => {
     const cachedColor = localStorage.getItem('cached_primary_color');
     const cachedName = localStorage.getItem('cached_system_name');
     const cachedSubtitle = localStorage.getItem('cached_system_subtitle');
     const cachedLogo = localStorage.getItem('cached_logo_url');
     const cachedPix = localStorage.getItem('cached_pix_key');
+    const cachedPhone = localStorage.getItem('cached_company_phone');
+    const cachedEmail = localStorage.getItem('cached_company_email');
+    const cachedAddress = localStorage.getItem('cached_company_address');
+    const cachedDoc = localStorage.getItem('cached_company_document');
+    const cachedHours = localStorage.getItem('cached_company_hours');
+    const cachedFiscalToken = localStorage.getItem('cached_fiscal_token');
+    const cachedFiscalEnv = localStorage.getItem('cached_fiscal_env') as 'homologacao' | 'producao' | null;
 
     if (cachedColor) {
       document.documentElement.style.setProperty('--brand-primary', cachedColor);
@@ -47,6 +68,13 @@ export const CompanySettingsProvider: React.FC<{ children: React.ReactNode }> = 
       primaryColor: cachedColor || defaultSettings.primaryColor,
       logoUrl: cachedLogo || null,
       pixKey: cachedPix || '',
+      phone: cachedPhone || '',
+      email: cachedEmail || '',
+      address: cachedAddress || '',
+      document: cachedDoc || '',
+      workingHours: cachedHours || defaultSettings.workingHours,
+      fiscalApiToken: cachedFiscalToken || '',
+      fiscalEnvironment: cachedFiscalEnv || 'homologacao'
     };
   });
 
@@ -56,11 +84,14 @@ export const CompanySettingsProvider: React.FC<{ children: React.ReactNode }> = 
     localStorage.setItem('cached_primary_color', newSettings.primaryColor);
     localStorage.setItem('cached_system_name', newSettings.systemName);
     localStorage.setItem('cached_system_subtitle', newSettings.systemSubtitle);
-    if (newSettings.pixKey) {
-      localStorage.setItem('cached_pix_key', newSettings.pixKey);
-    } else {
-      localStorage.removeItem('cached_pix_key');
-    }
+    if (newSettings.pixKey) localStorage.setItem('cached_pix_key', newSettings.pixKey);
+    if (newSettings.phone) localStorage.setItem('cached_company_phone', newSettings.phone);
+    if (newSettings.email) localStorage.setItem('cached_company_email', newSettings.email);
+    if (newSettings.address) localStorage.setItem('cached_company_address', newSettings.address);
+    if (newSettings.document) localStorage.setItem('cached_company_document', newSettings.document);
+    if (newSettings.workingHours) localStorage.setItem('cached_company_hours', newSettings.workingHours);
+    if (newSettings.fiscalApiToken) localStorage.setItem('cached_fiscal_token', newSettings.fiscalApiToken);
+    if (newSettings.fiscalEnvironment) localStorage.setItem('cached_fiscal_env', newSettings.fiscalEnvironment);
     if (newSettings.logoUrl) {
       localStorage.setItem('cached_logo_url', newSettings.logoUrl);
     } else {
@@ -110,6 +141,13 @@ export const CompanySettingsProvider: React.FC<{ children: React.ReactNode }> = 
           primaryColor: data.primary_color || defaultSettings.primaryColor,
           logoUrl: data.logo_url || null,
           pixKey: data.pix_key || localStorage.getItem('cached_pix_key') || '',
+          phone: data.phone || localStorage.getItem('cached_company_phone') || '',
+          email: data.email || localStorage.getItem('cached_company_email') || '',
+          address: data.address || localStorage.getItem('cached_company_address') || '',
+          document: data.document || localStorage.getItem('cached_company_document') || '',
+          workingHours: data.working_hours || localStorage.getItem('cached_company_hours') || defaultSettings.workingHours,
+          fiscalApiToken: data.fiscal_api_token || localStorage.getItem('cached_fiscal_token') || '',
+          fiscalEnvironment: data.fiscal_environment || (localStorage.getItem('cached_fiscal_env') as any) || 'homologacao',
         };
         setSettings(loaded);
         saveToCache(loaded);
@@ -144,6 +182,13 @@ export const CompanySettingsProvider: React.FC<{ children: React.ReactNode }> = 
         system_subtitle: newSettings.systemSubtitle ?? settings.systemSubtitle,
         primary_color: newSettings.primaryColor ?? settings.primaryColor,
         pix_key: newSettings.pixKey ?? settings.pixKey,
+        phone: newSettings.phone ?? settings.phone,
+        email: newSettings.email ?? settings.email,
+        address: newSettings.address ?? settings.address,
+        document: newSettings.document ?? settings.document,
+        working_hours: newSettings.workingHours ?? settings.workingHours,
+        fiscal_api_token: newSettings.fiscalApiToken ?? settings.fiscalApiToken,
+        fiscal_environment: newSettings.fiscalEnvironment ?? settings.fiscalEnvironment,
         logo_url: logoUrl,
         updated_at: new Date().toISOString(),
       };
@@ -160,6 +205,13 @@ export const CompanySettingsProvider: React.FC<{ children: React.ReactNode }> = 
         primaryColor: updated.primary_color,
         logoUrl,
         pixKey: updated.pix_key,
+        phone: updated.phone,
+        email: updated.email,
+        address: updated.address,
+        document: updated.document,
+        workingHours: updated.working_hours,
+        fiscalApiToken: updated.fiscal_api_token,
+        fiscalEnvironment: updated.fiscal_environment as any,
       };
 
       setSettings(newCompanySettings);

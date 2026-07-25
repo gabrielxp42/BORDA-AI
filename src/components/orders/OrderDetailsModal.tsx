@@ -105,17 +105,32 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
   const handlePrintPDF = () => {
     printOrderReceipt({
       id: order.id,
+      orderNumber: order.order_number || order.id.slice(0, 6),
       createdAt: order.created_at,
       dueDate: order.due_date,
-      clientName: order.clients?.name || 'Cliente',
-      clientPhone: order.clients?.phone,
-      clientCompany: order.clients?.company_name,
+      clientName: order.clients?.name || order.client?.name || 'Cliente',
+      clientPhone: order.clients?.phone || order.client?.phone,
+      clientCompany: order.clients?.company_name || order.client?.company_name,
       paymentStatus: order.payment_status || 'pending',
       paymentMethod: order.payment_method,
       totalAmount: order.total_amount || 0,
       notes: order.notes,
-      items: order.order_items || [],
-      companyName: settings.systemName
+      items: (order.order_items || order.items || []).map((i: any) => ({
+        description: i.description,
+        quantity: i.quantity || 1,
+        unitPrice: i.unit_price || 0,
+        totalPrice: i.total_price || 0
+      })),
+      companyName: settings.systemName,
+      companySubtitle: settings.systemSubtitle,
+      companyLogo: settings.logoUrl,
+      companyColor: settings.primaryColor,
+      companyPhone: settings.phone || undefined,
+      companyEmail: settings.email || undefined,
+      companyAddress: settings.address || undefined,
+      companyDocument: settings.document || undefined,
+      pixKey: settings.pixKey || undefined,
+      workingHours: settings.workingHours || undefined
     });
   };
 
