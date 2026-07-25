@@ -116,6 +116,30 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
     rules
   );
 
+  // Tempo Estimado de Máquina (Base industrial 700 pts/min + 1 min por troca de cor)
+  const estimatedMinutesPerPiece = useMemo(() => {
+    const stitches = Number(stitchCount) || 0;
+    const colors = Math.max(1, Number(colorCount) || 1);
+    if (stitches <= 0) return 0;
+    const mins = Math.ceil(stitches / 700) + (colors > 1 ? colors * 1 : 0);
+    return Math.max(1, mins);
+  }, [stitchCount, colorCount]);
+
+  const totalEstimatedMinutes = useMemo(() => {
+    const qty = Math.max(1, Number(quantity) || 1);
+    return estimatedMinutesPerPiece * qty;
+  }, [estimatedMinutesPerPiece, quantity]);
+
+  const formatTimeLabel = (minutes: number) => {
+    if (minutes <= 0) return '0 min';
+    const hrs = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    if (hrs > 0) {
+      return mins > 0 ? `${hrs}h ${mins}min` : `${hrs}h`;
+    }
+    return `${mins} min`;
+  };
+
   // Populate initialData if provided
   useEffect(() => {
     if (initialData) {
@@ -772,11 +796,12 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
                           <Upload className="h-4 w-4" />
                         </div>
                         <div>
-                          <h3 className="text-xs font-black uppercase tracking-widest text-slate-900 dark:text-white">
-                            Auto-Preenchimento via Wilcom (.EMB / .DST)
+                          <h3 className="text-xs font-black uppercase tracking-widest text-slate-900 dark:text-white flex items-center gap-2">
+                            <span>ADICIONAR O ARQUIVO MATRIZ</span>
+                            <span className="text-[10px] bg-purple-500/20 text-purple-400 px-2 py-0.5 rounded-full font-mono normal-case">.EMB / .DST</span>
                           </h3>
                           <p className="text-[11px] text-slate-500 dark:text-zinc-400 mt-0.5">
-                            {lastParsedFile ? `Matriz activa: ${lastParsedFile}` : 'Arraste ou clique para subir seu arquivo de bordado'}
+                            {lastParsedFile ? `Matriz ativa: ${lastParsedFile}` : 'Carregue o arquivo da matriz (.EMB / .DST) para preencher automaticamente os pontos, cores, dimensões e tempo estimado de máquina.'}
                           </p>
                         </div>
                       </div>
@@ -905,7 +930,7 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
 
                   {/* Technical Values / Quick Entry Fields */}
                   {entryMode === 'budget' ? (
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                       <div>
                         <label className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400 mb-1.5 block">
                           Quantidade Pontos
@@ -950,6 +975,19 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
                           style={quantity ? { borderColor: `${settings.primaryColor}30` } : undefined}
                           placeholder="Ex: 50"
                         />
+                      </div>
+
+                      {/* ⏱️ Tempo Estimado de Máquina */}
+                      <div>
+                        <label className="text-[10px] font-black uppercase tracking-wider text-amber-500 dark:text-amber-400 mb-1.5 block flex items-center gap-1">
+                          <Clock className="h-3.5 w-3.5" /> Tempo Estimado Máquina
+                        </label>
+                        <div className="w-full bg-amber-500/10 border border-amber-500/30 rounded-2xl px-4 py-2 text-xs font-black text-amber-600 dark:text-amber-300 flex items-center justify-between">
+                          <span>{estimatedMinutesPerPiece > 0 ? `${formatTimeLabel(estimatedMinutesPerPiece)} / pc` : '0 min'}</span>
+                          <span className="text-[10px] font-bold bg-amber-500/20 px-2 py-0.5 rounded-full text-amber-400">
+                            {formatTimeLabel(totalEstimatedMinutes)} total
+                          </span>
+                        </div>
                       </div>
                     </div>
                   ) : (
@@ -1240,6 +1278,17 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
                       </span>
                     </div>
                   ))}
+                  {/* Linha de Tempo Estimado de Máquina */}
+                  {estimatedMinutesPerPiece > 0 && (
+                    <div className="flex justify-between items-center text-amber-500 font-bold pt-1 border-t border-slate-200/60 dark:border-white/5">
+                      <span className="flex items-center gap-1">
+                        <Clock className="h-3.5 w-3.5" /> Tempo Estimado de Máquina:
+                      </span>
+                      <span className="font-black text-amber-500 dark:text-amber-300">
+                        {formatTimeLabel(totalEstimatedMinutes)}
+                      </span>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -1264,6 +1313,16 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
                       {quantity ? `${quantity} peça(s)` : '0 peças'}
                     </span>
                   </div>
+                  {estimatedMinutesPerPiece > 0 && (
+                    <div className="flex justify-between items-center text-amber-500 font-bold pt-1 border-t border-slate-200/60 dark:border-white/5">
+                      <span className="flex items-center gap-1">
+                        <Clock className="h-3.5 w-3.5" /> Tempo Estimado Produção:
+                      </span>
+                      <span className="font-black text-amber-500 dark:text-amber-300">
+                        {formatTimeLabel(totalEstimatedMinutes)}
+                      </span>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

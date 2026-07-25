@@ -63,8 +63,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Detecta se a URL contém tokens de retorno do OAuth (Google)
     const hasAuthParams = 
       window.location.hash.includes('access_token=') || 
-      window.location.search.includes('code=') ||
-      window.location.search.includes('error=');
+      window.location.search.includes('code=');
+
+    const hasAuthError = window.location.search.includes('error=');
+    if (hasAuthError) {
+      const params = new URLSearchParams(window.location.search);
+      const errDesc = params.get('error_description') || params.get('error') || 'Erro ao autenticar com Google';
+      toast.error('Erro na autenticação: ' + decodeURIComponent(errDesc));
+      setLoading(false);
+    }
 
     // Listener para mudanças de estado de autenticação
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
@@ -88,7 +95,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setUser(session.user);
         await fetchProfile(session.user.id, session.user);
         setLoading(false);
-      } else if (!hasAuthParams) {
+      } else if (!hasAuthParams && !hasAuthError) {
         // Apenas encerra o carregamento se NÃO for um retorno de OAuth processando na URL
         setLoading(false);
       }
