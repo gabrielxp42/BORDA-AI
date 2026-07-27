@@ -653,9 +653,9 @@ export const NetflixProfileModal: React.FC = () => {
               </div>
             </div>
 
-            {/* Botões de Ação */}
-            <div className="flex items-center justify-between pt-4 border-t border-white/10 gap-3">
-              {editingProfileId && (
+            {/* Botões de Ação Responsivos */}
+            <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between pt-4 border-t border-white/10 gap-2.5 w-full">
+              {editingProfileId ? (
                 <button
                   type="button"
                   onClick={async () => {
@@ -664,24 +664,24 @@ export const NetflixProfileModal: React.FC = () => {
                       setModalStep('select');
                     }
                   }}
-                  className="px-4 py-3 rounded-2xl bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500/20 text-xs font-bold flex items-center gap-2 transition-all"
+                  className="w-full sm:w-auto px-4 py-3 rounded-2xl bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500/20 text-xs font-bold flex items-center justify-center gap-2 transition-all active:scale-95"
                 >
                   <Trash2 className="h-4 w-4" /> Excluir Perfil
                 </button>
-              )}
+              ) : <div />}
 
-              <div className="flex items-center gap-3 ml-auto">
+              <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center gap-2.5 w-full sm:w-auto">
                 <button
                   type="button"
                   onClick={() => setModalStep('select')}
-                  className="px-5 py-3 rounded-2xl bg-white/5 hover:bg-white/10 text-zinc-400 text-xs font-bold transition-all"
+                  className="w-full sm:w-auto px-5 py-3 rounded-2xl bg-white/5 hover:bg-white/10 text-zinc-400 text-xs font-bold transition-all text-center"
                 >
                   Cancelar
                 </button>
                 <button
                   type="button"
                   onClick={handleSaveProfileForm}
-                  className="px-8 py-3 rounded-2xl text-white font-black text-xs uppercase tracking-wider flex items-center gap-2 hover:brightness-110 transition-all shadow-xl"
+                  className="w-full sm:w-auto px-6 sm:px-8 py-3.5 rounded-2xl text-white font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 hover:brightness-110 active:scale-95 transition-all shadow-xl"
                   style={{ backgroundColor: pc }}
                 >
                   <Save className="h-4 w-4" /> Salvar Perfil

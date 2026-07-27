@@ -423,19 +423,19 @@ export const ProfilePermissionsManager: React.FC = () => {
               </div>
             </div>
 
-            {/* Modal Footer Actions */}
-            <div className="flex items-center justify-end gap-3 pt-4 border-t border-white/10">
+            {/* Modal Footer Actions Responsivos */}
+            <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2.5 pt-4 border-t border-white/10 w-full">
               <button
                 type="button"
                 onClick={() => setIsEditorOpen(false)}
-                className="px-5 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-zinc-400 text-xs font-bold transition-all"
+                className="w-full sm:w-auto px-5 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-zinc-400 text-xs font-bold transition-all text-center"
               >
                 Cancelar
               </button>
               <button
                 type="button"
                 onClick={handleSave}
-                className="px-8 py-2.5 rounded-xl text-white font-bold text-xs uppercase tracking-wider flex items-center gap-2 hover:brightness-110 transition-all shadow-lg cursor-pointer"
+                className="w-full sm:w-auto px-6 sm:px-8 py-3.5 rounded-xl text-white font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 hover:brightness-110 active:scale-95 transition-all shadow-lg cursor-pointer"
                 style={{ backgroundColor: pc }}
               >
                 <Save className="h-4 w-4" /> Salvar Permissões
