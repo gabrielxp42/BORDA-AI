@@ -367,72 +367,104 @@ export const NetflixProfileModal: React.FC = () => {
           </div>
         )}
 
-        {/* ─── PASSO 2: Entrada do PIN ─── */}
+        {/* ─── PASSO 2: Entrada do PIN (Réplica iOS Passcode Liquid Glass 26.0) ─── */}
         {modalStep === 'pin_input' && (
-          <div className="w-full max-w-sm backdrop-blur-xl bg-zinc-900/90 p-6 rounded-3xl border border-white/15 shadow-2xl space-y-5 animate-in zoom-in-95 duration-200">
-            <form onSubmit={e => { e.preventDefault(); submitPin(pin); }} className="space-y-5">
-              <div className="space-y-2 text-center">
+          <div className="w-full max-w-md backdrop-blur-2xl bg-zinc-950/85 p-6 sm:p-8 rounded-[36px] border border-white/15 shadow-[0_0_80px_rgba(0,0,0,0.8)] space-y-6 animate-in zoom-in-95 duration-200 text-center select-none">
+            <form onSubmit={e => { e.preventDefault(); submitPin(pin); }} className="space-y-6">
+              
+              {/* Header com ícone de cadeado flutuante */}
+              <div className="space-y-3">
                 <div
-                  className="h-12 w-12 rounded-2xl border flex items-center justify-center mx-auto shadow-lg"
-                  style={{ backgroundColor: `${pc}20`, borderColor: `${pc}40`, color: pc }}
+                  className="h-14 w-14 rounded-full border border-white/20 flex items-center justify-center mx-auto shadow-2xl backdrop-blur-xl transition-all duration-300 hover:scale-105"
+                  style={{ backgroundColor: `${pc}25`, borderColor: `${pc}50`, color: pc, boxShadow: `0 0 25px ${pc}40` }}
                 >
-                  <KeyRound className="h-6 w-6" />
+                  <KeyRound className="h-7 w-7" />
                 </div>
-                <h3 className="text-base font-black text-white">
-                  {targetProfileId === 'chefe' && !hasPinSet ? 'Criar Senha de 4 Dígitos' : 'Senha do Perfil'}
-                </h3>
-                <div className="flex items-center justify-center gap-3 pt-1">
+
+                <div className="space-y-1">
+                  <h3 className="text-xl sm:text-2xl font-black text-white tracking-tight">
+                    {targetProfileId === 'chefe' && !hasPinSet ? 'Criar Senha de 4 Dígitos' : 'Código de Acesso'}
+                  </h3>
+                  <p className="text-xs text-zinc-400 font-medium">
+                    {targetProfileId === 'chefe' && !hasPinSet ? 'Digite um código numérico de 4 dígitos' : 'Digite a senha do perfil para continuar'}
+                  </p>
+                </div>
+
+                {/* 🔴 4 Círculos Indicadores Estilo iOS Passcode */}
+                <div className="flex items-center justify-center gap-4 py-3">
                   {[0, 1, 2, 3].map(idx => {
                     const isFilled = pin.length > idx;
                     return (
                       <div
                         key={idx}
-                        className={`h-11 w-11 rounded-2xl border flex items-center justify-center text-lg font-black transition-all ${
+                        className={`h-4 w-4 sm:h-5 sm:w-5 rounded-full transition-all duration-200 border-2 ${
                           error
-                            ? 'bg-rose-500/20 border-rose-500 text-rose-400 animate-shake'
+                            ? 'bg-rose-500 border-rose-400 scale-125 shadow-[0_0_15px_rgba(244,63,94,0.8)] animate-shake'
                             : isFilled
-                            ? 'scale-105 border-transparent text-white'
-                            : 'bg-white/5 border-white/15 text-transparent'
+                            ? 'bg-white border-white scale-110 shadow-[0_0_15px_rgba(255,255,255,0.9)]'
+                            : 'bg-transparent border-white/30'
                         }`}
-                        style={isFilled && !error ? { backgroundColor: pc, boxShadow: `0 0 15px ${pc}60` } : undefined}
-                      >
-                        {isFilled ? '•' : ''}
-                      </div>
+                        style={isFilled && !error ? { backgroundColor: pc, borderColor: pc, boxShadow: `0 0 18px ${pc}` } : undefined}
+                      />
                     );
                   })}
                 </div>
-                {error && <p className="text-rose-400 text-xs font-bold pt-1">PIN incorreto. Tente novamente.</p>}
-                <p className="hidden md:block text-[11px] text-zinc-400 font-medium pt-1">
-                  ⌨️ Digite no teclado do computador
-                </p>
+
+                {error && (
+                  <p className="text-rose-400 text-xs font-bold animate-in fade-in">
+                    Código incorreto. Tente novamente.
+                  </p>
+                )}
               </div>
 
-              {/* Mobile keypad */}
-              <div className="grid md:hidden grid-cols-3 gap-2.5 max-w-[240px] mx-auto">
-                {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map(num => (
+              {/* 🔢 Teclado Numérico iOS Passcode (Liquid Glass 3x4) */}
+              <div className="grid grid-cols-3 gap-3.5 sm:gap-5 max-w-[280px] sm:max-w-[320px] mx-auto py-1">
+                {[
+                  { num: '1', sub: '' },
+                  { num: '2', sub: 'A B C' },
+                  { num: '3', sub: 'D E F' },
+                  { num: '4', sub: 'G H I' },
+                  { num: '5', sub: 'J K L' },
+                  { num: '6', sub: 'M N O' },
+                  { num: '7', sub: 'P Q R S' },
+                  { num: '8', sub: 'T U V' },
+                  { num: '9', sub: 'W X Y Z' },
+                ].map(item => (
                   <button
-                    key={num}
+                    key={item.num}
                     type="button"
                     onClick={() => {
                       if (pin.length < 4) {
-                        const next = pin + num;
+                        const next = pin + item.num;
                         setPin(next);
                         setError(false);
                         if (next.length === 4) submitPin(next);
                       }
                     }}
-                    className="h-13 w-13 rounded-full bg-white/10 active:bg-white/30 border border-white/15 flex items-center justify-center text-white text-lg font-bold mx-auto"
+                    className="w-16 h-16 sm:w-20 sm:h-20 rounded-full border border-white/15 bg-white/10 hover:bg-white/20 active:bg-white/35 active:scale-90 transition-all duration-150 backdrop-blur-2xl flex flex-col items-center justify-center shadow-lg cursor-pointer mx-auto aspect-square select-none group"
                   >
-                    {num}
+                    <span className="text-2xl sm:text-3xl font-light text-white leading-none group-active:scale-95 transition-transform">
+                      {item.num}
+                    </span>
+                    {item.sub && (
+                      <span className="text-[8px] sm:text-[9px] font-bold text-white/50 tracking-[0.15em] leading-none mt-1 group-hover:text-white/80">
+                        {item.sub}
+                      </span>
+                    )}
                   </button>
                 ))}
+
+                {/* Botão Limpar */}
                 <button
                   type="button"
                   onClick={() => { setPin(''); setError(false); }}
-                  className="h-13 w-13 rounded-full bg-white/5 flex items-center justify-center text-zinc-400 mx-auto"
+                  className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-white/5 hover:bg-white/15 active:bg-white/25 border border-white/10 backdrop-blur-2xl flex items-center justify-center text-zinc-400 hover:text-white active:scale-90 transition-all duration-150 shadow-md cursor-pointer mx-auto aspect-square select-none"
+                  title="Limpar"
                 >
-                  <RotateCcw className="h-4 w-4" />
+                  <RotateCcw className="h-5 w-5" />
                 </button>
+
+                {/* Número 0 */}
                 <button
                   type="button"
                   onClick={() => {
@@ -443,26 +475,36 @@ export const NetflixProfileModal: React.FC = () => {
                       if (next.length === 4) submitPin(next);
                     }
                   }}
-                  className="h-13 w-13 rounded-full bg-white/10 flex items-center justify-center text-white text-lg font-bold mx-auto"
+                  className="w-16 h-16 sm:w-20 sm:h-20 rounded-full border border-white/15 bg-white/10 hover:bg-white/20 active:bg-white/35 active:scale-90 transition-all duration-150 backdrop-blur-2xl flex flex-col items-center justify-center shadow-lg cursor-pointer mx-auto aspect-square select-none group"
                 >
-                  0
+                  <span className="text-2xl sm:text-3xl font-light text-white leading-none group-active:scale-95 transition-transform">
+                    0
+                  </span>
                 </button>
+
+                {/* Botão Apagar / Backspace */}
                 <button
                   type="button"
                   onClick={() => { setPin(p => p.slice(0, -1)); setError(false); }}
-                  className="h-13 w-13 rounded-full bg-white/5 flex items-center justify-center text-zinc-400 mx-auto"
+                  className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-white/5 hover:bg-white/15 active:bg-white/25 border border-white/10 backdrop-blur-2xl flex items-center justify-center text-zinc-400 hover:text-white active:scale-90 transition-all duration-150 shadow-md cursor-pointer mx-auto aspect-square select-none"
+                  title="Apagar"
                 >
-                  <Delete className="h-4 w-4" />
+                  <Delete className="h-5 w-5" />
                 </button>
               </div>
 
-              <button
-                type="button"
-                onClick={() => setModalStep('select')}
-                className="w-full py-1.5 text-xs text-zinc-400 hover:text-white transition-colors"
-              >
-                Voltar à seleção de perfis
-              </button>
+              <div className="pt-2 flex flex-col items-center gap-2">
+                <p className="text-[11px] text-zinc-500 font-medium flex items-center gap-1.5">
+                  ⌨️ Teclado físico também suportado
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setModalStep('select')}
+                  className="text-xs text-zinc-400 hover:text-white font-semibold transition-colors py-1 px-3 rounded-lg hover:bg-white/5"
+                >
+                  Voltar à seleção de perfis
+                </button>
+              </div>
             </form>
           </div>
         )}
