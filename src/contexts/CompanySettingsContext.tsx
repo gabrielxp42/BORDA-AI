@@ -2,6 +2,15 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { supabase } from '../integrations/supabase/client';
 import { useAuth } from './AuthContext';
 
+export interface TeamMember {
+  id: string;
+  name: string;
+  phone: string;
+  role: string;
+  pin?: string;
+  receiveAlerts: boolean;
+}
+
 interface CompanySettings {
   systemName: string;
   systemSubtitle: string;
@@ -17,6 +26,7 @@ interface CompanySettings {
   fiscalEnvironment?: 'homologacao' | 'producao';
   machineSpeedSpm?: number;
   colorChangeTimeSec?: number;
+  teamMembers?: TeamMember[];
 }
 
 interface CompanySettingsContextType {
@@ -39,7 +49,11 @@ const defaultSettings: CompanySettings = {
   fiscalApiToken: '',
   fiscalEnvironment: 'homologacao',
   machineSpeedSpm: 800,
-  colorChangeTimeSec: 30
+  colorChangeTimeSec: 30,
+  teamMembers: [
+    { id: '1', name: 'Gabriel (Gerente)', phone: '5519999999999', role: 'Gerente de Produção', receiveAlerts: true },
+    { id: '2', name: 'Carlos Bordador', phone: '5519988888888', role: 'Operador Máquina 1', receiveAlerts: true }
+  ]
 };
 
 const CompanySettingsContext = createContext<CompanySettingsContextType | undefined>(undefined);
@@ -63,6 +77,12 @@ export const CompanySettingsProvider: React.FC<{ children: React.ReactNode }> = 
     const cachedFiscalEnv = localStorage.getItem('cached_fiscal_env') as 'homologacao' | 'producao' | null;
     const cachedMachineSpeed = localStorage.getItem('cached_machine_speed_spm');
     const cachedColorTime = localStorage.getItem('cached_color_change_sec');
+    const cachedTeam = localStorage.getItem('cached_team_members');
+
+    let parsedTeam: TeamMember[] = defaultSettings.teamMembers || [];
+    if (cachedTeam) {
+      try { parsedTeam = JSON.parse(cachedTeam); } catch (e) {}
+    }
 
     const effectiveColor = cachedColor || defaultSettings.primaryColor;
     document.documentElement.style.setProperty('--brand-primary', effectiveColor);
@@ -82,6 +102,7 @@ export const CompanySettingsProvider: React.FC<{ children: React.ReactNode }> = 
       fiscalEnvironment: cachedFiscalEnv || 'homologacao',
       machineSpeedSpm: cachedMachineSpeed ? Number(cachedMachineSpeed) : 800,
       colorChangeTimeSec: cachedColorTime ? Number(cachedColorTime) : 30,
+      teamMembers: parsedTeam
     };
   });
 
@@ -103,6 +124,9 @@ export const CompanySettingsProvider: React.FC<{ children: React.ReactNode }> = 
     if (newSettings.colorChangeTimeSec !== undefined) localStorage.setItem('cached_color_change_sec', String(newSettings.colorChangeTimeSec));
     if (newSettings.logoUrl) {
       localStorage.setItem('cached_logo_url', newSettings.logoUrl);
+    }
+    if (newSettings.teamMembers) {
+      localStorage.setItem('cached_team_members', JSON.stringify(newSettings.teamMembers));
     }
   };
 

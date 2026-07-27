@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useCompanySettings } from '../contexts/CompanySettingsContext';
+import { useCompanySettings, TeamMember } from '../contexts/CompanySettingsContext';
 import { useProfile } from '../contexts/ProfileContext';
 import { 
   Palette, 
@@ -19,7 +19,11 @@ import {
   ShieldCheck,
   Sparkles,
   Gauge,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Users,
+  Plus,
+  Trash2,
+  Smartphone
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -52,7 +56,37 @@ export const PerfilConfig: React.FC = () => {
   const [colorChangeTimeSec, setColorChangeTimeSec] = useState<number>(settings.colorChangeTimeSec !== undefined ? settings.colorChangeTimeSec : 30);
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(settings.logoUrl);
+
+  // Gestão de Equipe & Operadores
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>(settings.teamMembers || []);
+  const [newMemberName, setNewMemberName] = useState('');
+  const [newMemberPhone, setNewMemberPhone] = useState('');
+  const [newMemberRole, setNewMemberRole] = useState('Bordador Máquina 1');
+
   const [isSaving, setIsSaving] = useState(false);
+
+  const handleAddMember = () => {
+    if (!newMemberName.trim() || !newMemberPhone.trim()) {
+      toast.error('Informe o nome e o WhatsApp do operador.');
+      return;
+    }
+    const member: TeamMember = {
+      id: String(Date.now()),
+      name: newMemberName.trim(),
+      phone: newMemberPhone.trim(),
+      role: newMemberRole,
+      receiveAlerts: true
+    };
+    setTeamMembers([...teamMembers, member]);
+    setNewMemberName('');
+    setNewMemberPhone('');
+    toast.success(`Operador ${member.name} adicionado à equipe!`);
+  };
+
+  const handleRemoveMember = (id: string) => {
+    setTeamMembers(teamMembers.filter(m => m.id !== id));
+    toast.success('Operador removido.');
+  };
 
   // Preview ao vivo da cor
   React.useEffect(() => {
@@ -91,7 +125,8 @@ export const PerfilConfig: React.FC = () => {
         fiscalApiToken,
         fiscalEnvironment,
         machineSpeedSpm,
-        colorChangeTimeSec
+        colorChangeTimeSec,
+        teamMembers
       },
       logoFile || undefined
     );
@@ -636,6 +671,149 @@ export const PerfilConfig: React.FC = () => {
               </button>
             )}
           </div>
+        </div>
+
+        {/* 👥 SEÇÃO 8: EQUIPE & OPERADORES */}
+        <div className="bg-white dark:bg-zinc-900/70 border border-slate-200 dark:border-white/10 rounded-3xl p-6 md:p-8 shadow-xl backdrop-blur-xl space-y-6">
+          <div className="flex items-center justify-between border-b border-slate-200 dark:border-white/10 pb-4">
+            <div className="flex items-center gap-3">
+              <div className="h-11 w-11 rounded-2xl bg-teal-500/10 border border-teal-500/30 flex items-center justify-center text-teal-400">
+                <Users className="h-6 w-6" />
+              </div>
+              <div>
+                <h2 className="text-lg font-black text-slate-900 dark:text-white">
+                  Equipe & Operadores
+                </h2>
+                <p className="text-xs text-slate-500 dark:text-zinc-400">
+                  Cadastre os operadores da oficina para receber alertas via WhatsApp
+                </p>
+              </div>
+            </div>
+            <span className="hidden sm:inline-flex px-3 py-1 rounded-full bg-teal-500/10 border border-teal-500/30 text-teal-400 text-[10px] font-bold uppercase tracking-widest">
+              Equipe
+            </span>
+          </div>
+
+          {/* Add member form */}
+          <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
+            <div className="sm:col-span-4 space-y-1">
+              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Nome</label>
+              <input
+                type="text"
+                value={newMemberName}
+                onChange={e => setNewMemberName(e.target.value)}
+                placeholder="Ex: Carlos"
+                className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-black/40 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-zinc-500 text-sm focus:ring-2 outline-none transition-all"
+                style={{ focusRingColor: primaryColor } as any}
+              />
+            </div>
+            <div className="sm:col-span-3 space-y-1">
+              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1">
+                <Smartphone className="h-3 w-3" /> WhatsApp
+              </label>
+              <input
+                type="tel"
+                value={newMemberPhone}
+                onChange={e => setNewMemberPhone(e.target.value)}
+                placeholder="(19) 99999-9999"
+                className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-black/40 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-zinc-500 text-sm focus:ring-2 outline-none transition-all"
+              />
+            </div>
+            <div className="sm:col-span-3 space-y-1">
+              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Função</label>
+              <select
+                value={newMemberRole}
+                onChange={e => setNewMemberRole(e.target.value)}
+                className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-black/40 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:ring-2 outline-none transition-all appearance-none cursor-pointer"
+              >
+                <option value="Bordador Máquina 1">Bordador Máquina 1</option>
+                <option value="Bordador Máquina 2">Bordador Máquina 2</option>
+                <option value="Bordador Máquina 3">Bordador Máquina 3</option>
+                <option value="Auxiliar de Produção">Auxiliar de Produção</option>
+                <option value="Gerente">Gerente</option>
+                <option value="Acabamento">Acabamento</option>
+              </select>
+            </div>
+            <div className="sm:col-span-2">
+              <button
+                type="button"
+                onClick={handleAddMember}
+                className="w-full px-4 py-3 rounded-xl text-white text-sm font-bold flex items-center justify-center gap-2 hover:brightness-110 active:scale-95 transition-all"
+                style={{ backgroundColor: primaryColor }}
+              >
+                <Plus className="h-4 w-4" />
+                Adicionar
+              </button>
+            </div>
+          </div>
+
+          {/* Team members list */}
+          {teamMembers.length === 0 ? (
+            <div className="text-center py-8">
+              <Users className="h-10 w-10 mx-auto mb-3 text-zinc-600" />
+              <p className="text-slate-500 dark:text-zinc-500 text-sm">Nenhum membro cadastrado</p>
+              <p className="text-slate-400 dark:text-zinc-600 text-xs mt-1">Adicione operadores para receber alertas da GABI via WhatsApp</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {teamMembers.map(member => (
+                <div
+                  key={member.id}
+                  className="flex items-center gap-3 p-4 rounded-2xl bg-slate-50 dark:bg-black/30 border border-slate-200 dark:border-white/5 hover:border-slate-300 dark:hover:border-white/10 transition-all group"
+                >
+                  {/* Avatar */}
+                  <div
+                    className="h-10 w-10 rounded-xl flex items-center justify-center text-white font-bold text-sm flex-shrink-0"
+                    style={{ backgroundColor: `${primaryColor}cc` }}
+                  >
+                    {member.name.charAt(0).toUpperCase()}
+                  </div>
+
+                  {/* Info */}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold text-slate-900 dark:text-white truncate">{member.name}</p>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <Smartphone className="h-3 w-3 text-green-500" />
+                      <span className="text-xs text-slate-500 dark:text-zinc-400">{member.phone}</span>
+                    </div>
+                  </div>
+
+                  {/* Role badge */}
+                  <span className="hidden sm:inline-flex px-2.5 py-1 rounded-lg bg-teal-500/10 border border-teal-500/20 text-teal-600 dark:text-teal-400 text-[10px] font-bold whitespace-nowrap">
+                    {member.role}
+                  </span>
+
+                  {/* Alerts toggle */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTeamMembers(prev => prev.map(m =>
+                        m.id === member.id ? { ...m, receiveAlerts: !m.receiveAlerts } : m
+                      ));
+                    }}
+                    className={`px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-all ${
+                      member.receiveAlerts
+                        ? 'bg-green-500/10 border border-green-500/30 text-green-500'
+                        : 'bg-zinc-500/10 border border-zinc-500/20 text-zinc-500'
+                    }`}
+                    title={member.receiveAlerts ? 'Recebendo alertas' : 'Alertas desativados'}
+                  >
+                    {member.receiveAlerts ? '🔔 ON' : '🔕 OFF'}
+                  </button>
+
+                  {/* Remove button */}
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveMember(member.id)}
+                    className="p-2 rounded-lg text-slate-400 dark:text-zinc-600 hover:text-red-500 hover:bg-red-500/10 transition-all opacity-0 group-hover:opacity-100"
+                    title="Remover membro"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Action Footer Flutuante / Fixo para Salvar */}

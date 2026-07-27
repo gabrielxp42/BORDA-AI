@@ -12,6 +12,7 @@ import { CreateOrderModal } from '@/components/orders/CreateOrderModal';
 import { CreateClientModal } from '@/components/clients/CreateClientModal';
 import { OrderDetailsModal } from '@/components/orders/OrderDetailsModal';
 import { toast } from 'sonner';
+import { GabiHeroWidget } from '@/components/gabi/GabiHeroWidget';
 
 interface RecentOrder {
   id: string;
@@ -201,6 +202,9 @@ export const Dashboard: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* 🤖 GABI AI Hero Widget */}
+      <GabiHeroWidget />
 
       {/* KPIs operacionais */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

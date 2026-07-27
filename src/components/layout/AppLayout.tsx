@@ -25,6 +25,7 @@ import { CreateOrderModal } from '../orders/CreateOrderModal';
 import { ProfileSwitcher } from './ProfileSwitcher';
 import { MobileBottomNav } from './MobileBottomNav';
 import { PWAManager } from '../pwa/PWAManager';
+import { GlobalNotificationCenter } from '../notifications/GlobalNotificationCenter';
 
 interface NavItem {
   label: string;
@@ -77,6 +78,7 @@ export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children })
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
+  const [isNotifOpen, setIsNotifOpen] = useState(false);
   const [isDark, setIsDark] = useState<boolean>(() => {
     return localStorage.getItem('borda-theme') !== 'light';
   });
@@ -279,7 +281,11 @@ export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children })
               {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </button>
 
-            <button className={`p-2.5 rounded-2xl border ${isDark ? 'bg-white/5 border-white/10 text-zinc-400 hover:text-white' : 'bg-slate-200/60 border-slate-300 text-slate-600 hover:text-slate-900'} relative`}>
+            <button
+              onClick={() => setIsNotifOpen(true)}
+              className={`p-2.5 rounded-2xl border ${isDark ? 'bg-white/5 border-white/10 text-zinc-400 hover:text-white' : 'bg-slate-200/60 border-slate-300 text-slate-600 hover:text-slate-900'} relative transition-all`}
+              title="Central de Notificações"
+            >
               <Bell className="h-4 w-4" />
               <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full animate-ping" style={{ backgroundColor: settings.primaryColor }} />
             </button>
@@ -312,6 +318,9 @@ export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children })
         isOpen={isOrderModalOpen} 
         onClose={() => setIsOrderModalOpen(false)} 
       />
+
+      {/* Global Notification Center (Bell Drawer) */}
+      <GlobalNotificationCenter isOpen={isNotifOpen} onClose={() => setIsNotifOpen(false)} />
 
       {/* PWA Ecosystem Manager (Auto-Update & Smart Banners) */}
       <PWAManager />
