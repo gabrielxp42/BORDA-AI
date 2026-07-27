@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import {
-  ShieldCheck, Plus, Settings, Trash2, Edit3, Lock, Check,
+  ShieldCheck, Plus, Settings, Trash2, Check,
   Sparkles, Save, X, ToggleLeft, ToggleRight, LayoutDashboard,
   ShoppingBag, Calculator, Layers, Boxes, FileSpreadsheet, Users,
-  Cpu, Shield, KeyRound
+  Cpu, Shield, KeyRound, Crown, Scissors
 } from 'lucide-react';
 import { useProfile, CustomProfile, ProfilePermissions, PRODUCAO_PERMISSIONS } from '@/contexts/ProfileContext';
 import { useCompanySettings } from '@/contexts/CompanySettingsContext';
@@ -44,7 +44,7 @@ const FEATURE_ITEMS: { key: keyof Omit<ProfilePermissions, 'routes'>; label: str
 ];
 
 export const ProfilePermissionsManager: React.FC = () => {
-  const { customProfiles, createProfile, updateProfile, deleteProfile } = useProfile();
+  const { activeProfile, customProfiles, isUnlocked, selectProfile, lockToProducao, openProfileModal, createProfile, updateProfile, deleteProfile } = useProfile();
   const { settings } = useCompanySettings();
   const pc = settings.primaryColor || '#ef4444';
 
@@ -70,7 +70,8 @@ export const ProfilePermissionsManager: React.FC = () => {
     setIsEditorOpen(true);
   };
 
-  const handleOpenEdit = (p: CustomProfile) => {
+  const handleOpenEdit = (p: CustomProfile, e: React.MouseEvent) => {
+    e.stopPropagation();
     setEditingId(p.id);
     setName(p.name);
     setIcon(p.icon);
@@ -115,86 +116,107 @@ export const ProfilePermissionsManager: React.FC = () => {
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between border-b border-slate-200 dark:border-white/10 pb-4 gap-3">
         <div className="flex items-center gap-3">
-          <div className="h-11 w-11 rounded-2xl bg-purple-500/10 border border-purple-500/30 flex items-center justify-center text-purple-400">
+          <div className="h-11 w-11 rounded-2xl bg-violet-500/10 border border-violet-500/30 flex items-center justify-center text-violet-400">
             <ShieldCheck className="h-6 w-6" />
           </div>
           <div>
             <h2 className="text-lg font-black text-slate-900 dark:text-white">
-              Gestão de Perfis & Permissões de Acesso
+              Perfil de Acesso & Permissões (Estilo Netflix)
             </h2>
             <p className="text-xs text-slate-500 dark:text-zinc-400">
-              Crie perfis para seus funcionários e defina exatamente o que cada um pode ver e fazer.
+              Alterne o perfil ativo no dispositivo ou edite as permissões de cada perfil.
             </p>
           </div>
         </div>
 
-        <button
-          type="button"
-          onClick={handleOpenCreate}
-          className="px-4 py-2.5 rounded-xl text-white text-xs font-bold flex items-center gap-2 hover:brightness-110 active:scale-95 transition-all shadow-md cursor-pointer"
-          style={{ backgroundColor: pc }}
-        >
-          <Plus className="h-4 w-4" />
-          Novo Perfil Customizado
-        </button>
+        <div className="flex items-center gap-2">
+          {isUnlocked && (
+            <button
+              type="button"
+              onClick={handleOpenCreate}
+              className="px-3.5 py-2 rounded-xl text-white text-xs font-bold flex items-center gap-1.5 hover:brightness-110 active:scale-95 transition-all shadow-md cursor-pointer"
+              style={{ backgroundColor: pc }}
+            >
+              <Plus className="h-4 w-4" />
+              Criar Perfil
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={openProfileModal}
+            className="px-3.5 py-2 rounded-xl bg-purple-500/10 border border-purple-500/30 text-purple-400 text-xs font-bold hover:bg-purple-500/20 transition-all flex items-center gap-1.5"
+          >
+            <Sparkles className="h-3.5 w-3.5" />
+            Alternar Perfil
+          </button>
+        </div>
       </div>
 
-      {/* Grid de Perfis Existentes */}
+      {/* Grid de Cards de Perfis */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {customProfiles.map(p => {
+          const isActive = activeProfile.id === p.id;
           const isBuiltIn = p.isBuiltIn;
           const hasPin = Boolean(p.pin || p.id === 'chefe');
 
           return (
             <div
               key={p.id}
-              className="p-5 rounded-2xl bg-slate-50 dark:bg-black/40 border border-slate-200 dark:border-white/10 flex flex-col justify-between space-y-4 hover:border-slate-300 dark:hover:border-white/20 transition-all group"
+              className={`p-5 rounded-2xl border transition-all duration-300 flex flex-col justify-between space-y-4 relative ${
+                isActive
+                  ? 'bg-purple-500/10 border-purple-500/40 shadow-lg shadow-purple-500/10'
+                  : 'bg-slate-50 dark:bg-black/40 border-slate-200 dark:border-white/10 hover:border-slate-300 dark:hover:border-white/20'
+              }`}
             >
+              {/* Badge Ativo */}
+              {isActive && (
+                <span
+                  className="absolute top-3 right-3 px-2.5 py-0.5 rounded-full text-white text-[9px] font-black uppercase tracking-wider shadow-sm flex items-center gap-1"
+                  style={{ backgroundColor: p.color }}
+                >
+                  <Check className="h-3 w-3" /> Ativo Agora
+                </span>
+              )}
+
               <div className="space-y-3">
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-3">
-                    <div
-                      className="h-12 w-12 rounded-xl flex items-center justify-center text-2xl shadow-md flex-shrink-0"
-                      style={{ backgroundColor: `${p.color}22`, border: `1px solid ${p.color}44` }}
-                    >
-                      {p.icon}
-                    </div>
-                    <div>
-                      <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
-                        {p.name}
-                        {isBuiltIn && (
-                          <span className="text-[9px] px-2 py-0.5 rounded-full bg-white/10 text-slate-400 font-normal">
-                            Sistema
-                          </span>
-                        )}
-                      </h3>
-                      <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
-                        {p.permissions.canSeeFinancials ? '💰 Acesso Financeiro Total' : '🔒 Modo Restrito (Sem Valores)'}
-                      </p>
-                    </div>
+                <div className="flex items-center gap-3">
+                  <div
+                    className="h-12 w-12 rounded-2xl flex items-center justify-center text-2xl shadow-md flex-shrink-0"
+                    style={{ backgroundColor: `${p.color}22`, border: `1px solid ${p.color}44` }}
+                  >
+                    {p.icon}
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-1">
+                      {p.name}
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
+                      {p.permissions.canSeeFinancials ? '💰 Faturamento Visível' : '🔒 Valores Ocultos'}
+                    </p>
                   </div>
                 </div>
 
-                {/* Status Badges */}
+                {/* Badges de Permissão */}
                 <div className="flex flex-wrap gap-1.5 pt-1">
                   <span
-                    className="px-2.5 py-1 rounded-lg border text-[10px] font-bold"
+                    className="px-2.5 py-0.5 rounded-lg border text-[10px] font-bold"
                     style={{ backgroundColor: `${p.color}15`, borderColor: `${p.color}30`, color: p.color }}
                   >
-                    {hasPin ? '🔒 Requer PIN de Acesso' : '⚡ Acesso Direto'}
+                    {hasPin ? '🔒 Requer PIN' : '⚡ Sem PIN'}
                   </span>
-                  <span className="px-2.5 py-1 rounded-lg bg-slate-200 dark:bg-white/5 text-slate-600 dark:text-zinc-400 text-[10px] font-semibold">
-                    {Object.values(p.permissions.routes).filter(Boolean).length} / 10 Páginas Liberaadas
+                  <span className="px-2.5 py-0.5 rounded-lg bg-slate-200 dark:bg-white/5 text-slate-600 dark:text-zinc-400 text-[10px] font-semibold">
+                    {Object.values(p.permissions.routes).filter(Boolean).length}/10 Páginas Liberaadas
                   </span>
                 </div>
               </div>
 
-              {/* Action Buttons */}
-              <div className="flex items-center justify-between pt-2 border-t border-slate-200 dark:border-white/5 gap-2">
+              {/* Action Buttons no próprio card */}
+              <div className="flex items-center justify-between pt-3 border-t border-slate-200 dark:border-white/5 gap-2">
                 <button
                   type="button"
-                  onClick={() => handleOpenEdit(p)}
-                  className="flex-1 py-2 px-3 rounded-xl bg-slate-200 dark:bg-white/10 hover:bg-slate-300 dark:hover:bg-white/20 text-slate-800 dark:text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-all"
+                  onClick={e => handleOpenEdit(p, e)}
+                  className="flex-1 py-2 px-3 rounded-xl bg-slate-200 dark:bg-white/10 hover:bg-slate-300 dark:hover:bg-white/20 text-slate-800 dark:text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer"
                 >
                   <Settings className="h-3.5 w-3.5 text-purple-400" />
                   Editar Permissões
@@ -204,7 +226,7 @@ export const ProfilePermissionsManager: React.FC = () => {
                   <button
                     type="button"
                     onClick={async () => {
-                      if (window.confirm(`Tem certeza que deseja excluir o perfil "${p.name}"?`)) {
+                      if (window.confirm(`Excluir perfil "${p.name}"?`)) {
                         await deleteProfile(p.id);
                       }
                     }}
@@ -220,7 +242,7 @@ export const ProfilePermissionsManager: React.FC = () => {
         })}
       </div>
 
-      {/* Modal / Editor Inline de Permissões */}
+      {/* Modal Editor de Permissões */}
       {isEditorOpen && (
         <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 overflow-y-auto">
           <div className="w-full max-w-2xl bg-zinc-900 border border-white/15 rounded-3xl p-6 md:p-8 shadow-2xl space-y-6 my-auto text-left">
@@ -232,9 +254,9 @@ export const ProfilePermissionsManager: React.FC = () => {
                 </div>
                 <div>
                   <h3 className="text-lg font-bold text-white">
-                    {editingId ? `Configurar Permissões: ${name}` : 'Criar Perfil de Acesso'}
+                    {editingId ? `Editar Permissões: ${name}` : 'Criar Perfil de Acesso'}
                   </h3>
-                  <p className="text-xs text-zinc-400">Defina o nome, ícone e selecione quais módulos estarão visíveis</p>
+                  <p className="text-xs text-zinc-400">Marque quais telas e funcionalidades este perfil pode acessar</p>
                 </div>
               </div>
               <button
@@ -295,7 +317,7 @@ export const ProfilePermissionsManager: React.FC = () => {
                   <p className="text-sm font-bold text-white flex items-center gap-2">
                     <KeyRound className="h-4 w-4 text-amber-400" /> Exigir PIN de 4 Dígitos para Acessar
                   </p>
-                  <p className="text-xs text-zinc-400 mt-0.5">Ao selecionar este perfil na tela inicial, exigirá senha.</p>
+                  <p className="text-xs text-zinc-400 mt-0.5">Se ativado, exige senha de 4 dígitos na troca de perfil.</p>
                 </div>
                 <button
                   type="button"
@@ -304,7 +326,7 @@ export const ProfilePermissionsManager: React.FC = () => {
                     usePin ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40' : 'bg-white/5 text-zinc-500 border border-white/10'
                   }`}
                 >
-                  {usePin ? '🔒 PIN Ativo' : '⚡ Sem PIN'}
+                  {usePin ? '🔒 Com PIN' : '⚡ Sem PIN'}
                 </button>
               </div>
 

@@ -619,61 +619,6 @@ export const PerfilConfig: React.FC = () => {
           </div>
         </div>
 
-        {/* 👤 DIV / SEÇÃO 6: PERFIL DE ACESSO NO DISPOSITIVO (ESTILO NETFLIX) */}
-        <div className="bg-white dark:bg-zinc-900/70 border border-slate-200 dark:border-white/10 rounded-3xl p-6 md:p-8 shadow-xl backdrop-blur-xl space-y-6">
-          <div className="flex items-center justify-between border-b border-slate-200 dark:border-white/10 pb-4">
-            <div className="flex items-center gap-3">
-              <div className="h-11 w-11 rounded-2xl bg-violet-500/10 border border-violet-500/30 flex items-center justify-center text-violet-400">
-                <ShieldCheck className="h-6 w-6" />
-              </div>
-              <div>
-                <h2 className="text-lg font-black text-slate-900 dark:text-white">
-                  Perfil de Acesso do Operador (Estilo Netflix)
-                </h2>
-                <p className="text-xs text-slate-500 dark:text-zinc-400">
-                  Alterne a visualização entre Modo Chefe (Acesso Total) e Modo Produção (Valores Ocultos).
-                </p>
-              </div>
-            </div>
-            <span className="hidden sm:inline-flex px-3 py-1 rounded-full bg-violet-500/10 border border-violet-500/30 text-violet-400 text-[10px] font-bold uppercase tracking-widest">
-              Permissões
-            </span>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="p-4 rounded-2xl bg-slate-50 dark:bg-black/40 border border-slate-200 dark:border-white/5 space-y-1">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Perfil Operando Neste Aparelho</span>
-              <p className="text-base font-black text-slate-900 dark:text-white capitalize">{role}</p>
-            </div>
-            <div className="p-4 rounded-2xl bg-slate-50 dark:bg-black/40 border border-slate-200 dark:border-white/5 space-y-1">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Modo de Exibição</span>
-              <p className="text-base font-black text-purple-600 dark:text-purple-400">
-                {isUnlocked ? 'Modo Chefe (Faturamento Visível)' : 'Modo Produção (Valores Ocultos)'}
-              </p>
-            </div>
-          </div>
-
-          <div className="pt-2 flex flex-wrap items-center justify-between gap-4">
-            <p className="text-xs text-slate-500 dark:text-zinc-400 max-w-lg">
-              {isUnlocked 
-                ? 'No Modo Chefe você tem acesso completo a relatórios e faturamento. Se o aparelho for usado por funcionários da produção, altere para Produção.' 
-                : 'No Modo Produção os valores financeiros dos pedidos são ocultados para privacidade.'}
-            </p>
-            {isUnlocked && (
-              <button
-                type="button"
-                onClick={() => {
-                  lockToProducao();
-                  toast.success('Perfil alterado para Produção (Valores Ocultos).');
-                }}
-                className="px-4 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400 text-xs font-bold hover:bg-amber-500/20 transition-all flex items-center gap-2"
-              >
-                Alternar para Modo Produção
-              </button>
-            )}
-          </div>
-        </div>
-
         {/* 🛡️ SEÇÃO DE GESTÃO DE PERFIS & PERMISSÕES */}
         <ProfilePermissionsManager />
 
