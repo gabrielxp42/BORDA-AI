@@ -40,7 +40,7 @@ const COLOR_PRESETS = [
 
 export const PerfilConfig: React.FC = () => {
   const { settings, updateSettings } = useCompanySettings();
-  const { role, isUnlocked, lockToProducao } = useProfile();
+  const { role, isUnlocked, lockToProducao, customProfiles } = useProfile();
 
   const [systemName, setSystemName] = useState(settings.systemName);
   const [systemSubtitle, setSystemSubtitle] = useState(settings.systemSubtitle);
@@ -62,7 +62,7 @@ export const PerfilConfig: React.FC = () => {
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>(settings.teamMembers || []);
   const [newMemberName, setNewMemberName] = useState('');
   const [newMemberPhone, setNewMemberPhone] = useState('');
-  const [newMemberRole, setNewMemberRole] = useState('Bordador Máquina 1');
+  const [newMemberRole, setNewMemberRole] = useState(customProfiles[0]?.name || 'Operador');
 
   const [isSaving, setIsSaving] = useState(false);
 
@@ -670,14 +670,13 @@ export const PerfilConfig: React.FC = () => {
               <select
                 value={newMemberRole}
                 onChange={e => setNewMemberRole(e.target.value)}
-                className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-black/40 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:ring-2 outline-none transition-all appearance-none cursor-pointer"
+                className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-black/40 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:ring-2 outline-none transition-all cursor-pointer"
               >
-                <option value="Bordador Máquina 1">Bordador Máquina 1</option>
-                <option value="Bordador Máquina 2">Bordador Máquina 2</option>
-                <option value="Bordador Máquina 3">Bordador Máquina 3</option>
-                <option value="Auxiliar de Produção">Auxiliar de Produção</option>
-                <option value="Gerente">Gerente</option>
-                <option value="Acabamento">Acabamento</option>
+                {customProfiles.map(p => (
+                  <option key={p.id} value={p.name}>
+                    {p.icon} {p.name}
+                  </option>
+                ))}
               </select>
             </div>
             <div className="sm:col-span-2">
@@ -702,62 +701,71 @@ export const PerfilConfig: React.FC = () => {
             </div>
           ) : (
             <div className="space-y-2">
-              {teamMembers.map(member => (
-                <div
-                  key={member.id}
-                  className="flex items-center gap-3 p-4 rounded-2xl bg-slate-50 dark:bg-black/30 border border-slate-200 dark:border-white/5 hover:border-slate-300 dark:hover:border-white/10 transition-all group"
-                >
-                  {/* Avatar */}
+              {teamMembers.map(member => {
+                const matchedProfile = customProfiles.find(p => p.name === member.role);
+                const badgeColor = matchedProfile?.color || primaryColor;
+                const icon = matchedProfile?.icon || '👤';
+
+                return (
                   <div
-                    className="h-10 w-10 rounded-xl flex items-center justify-center text-white font-bold text-sm flex-shrink-0"
-                    style={{ backgroundColor: `${primaryColor}cc` }}
+                    key={member.id}
+                    className="flex items-center gap-3 p-4 rounded-2xl bg-slate-50 dark:bg-black/30 border border-slate-200 dark:border-white/5 hover:border-slate-300 dark:hover:border-white/10 transition-all group"
                   >
-                    {member.name.charAt(0).toUpperCase()}
-                  </div>
-
-                  {/* Info */}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-bold text-slate-900 dark:text-white truncate">{member.name}</p>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      <Smartphone className="h-3 w-3 text-green-500" />
-                      <span className="text-xs text-slate-500 dark:text-zinc-400">{member.phone}</span>
+                    {/* Avatar */}
+                    <div
+                      className="h-10 w-10 rounded-xl flex items-center justify-center text-white font-bold text-base flex-shrink-0 shadow-sm"
+                      style={{ backgroundColor: `${badgeColor}33`, border: `1px solid ${badgeColor}66` }}
+                    >
+                      {icon}
                     </div>
+
+                    {/* Info */}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold text-slate-900 dark:text-white truncate">{member.name}</p>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <Smartphone className="h-3 w-3 text-green-500" />
+                        <span className="text-xs text-slate-500 dark:text-zinc-400">{member.phone}</span>
+                      </div>
+                    </div>
+
+                    {/* Dynamic Role badge */}
+                    <span
+                      className="hidden sm:inline-flex px-3 py-1 rounded-lg border text-[10px] font-bold whitespace-nowrap"
+                      style={{ backgroundColor: `${badgeColor}15`, borderColor: `${badgeColor}35`, color: badgeColor }}
+                    >
+                      {member.role}
+                    </span>
+
+                    {/* Alerts toggle */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTeamMembers(prev => prev.map(m =>
+                          m.id === member.id ? { ...m, receiveAlerts: !m.receiveAlerts } : m
+                        ));
+                      }}
+                      className={`px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-all ${
+                        member.receiveAlerts
+                          ? 'bg-green-500/10 border border-green-500/30 text-green-500'
+                          : 'bg-zinc-500/10 border border-zinc-500/20 text-zinc-500'
+                      }`}
+                      title={member.receiveAlerts ? 'Recebendo alertas' : 'Alertas desativados'}
+                    >
+                      {member.receiveAlerts ? '🔔 ON' : '🔕 OFF'}
+                    </button>
+
+                    {/* Remove button */}
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveMember(member.id)}
+                      className="p-2 rounded-lg text-slate-400 dark:text-zinc-600 hover:text-red-500 hover:bg-red-500/10 transition-all opacity-0 group-hover:opacity-100"
+                      title="Remover membro"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
                   </div>
-
-                  {/* Role badge */}
-                  <span className="hidden sm:inline-flex px-2.5 py-1 rounded-lg bg-teal-500/10 border border-teal-500/20 text-teal-600 dark:text-teal-400 text-[10px] font-bold whitespace-nowrap">
-                    {member.role}
-                  </span>
-
-                  {/* Alerts toggle */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setTeamMembers(prev => prev.map(m =>
-                        m.id === member.id ? { ...m, receiveAlerts: !m.receiveAlerts } : m
-                      ));
-                    }}
-                    className={`px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-all ${
-                      member.receiveAlerts
-                        ? 'bg-green-500/10 border border-green-500/30 text-green-500'
-                        : 'bg-zinc-500/10 border border-zinc-500/20 text-zinc-500'
-                    }`}
-                    title={member.receiveAlerts ? 'Recebendo alertas' : 'Alertas desativados'}
-                  >
-                    {member.receiveAlerts ? '🔔 ON' : '🔕 OFF'}
-                  </button>
-
-                  {/* Remove button */}
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveMember(member.id)}
-                    className="p-2 rounded-lg text-slate-400 dark:text-zinc-600 hover:text-red-500 hover:bg-red-500/10 transition-all opacity-0 group-hover:opacity-100"
-                    title="Remover membro"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
