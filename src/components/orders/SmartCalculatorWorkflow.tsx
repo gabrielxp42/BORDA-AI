@@ -981,20 +981,9 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
                       </div>
 
                       <div>
-                        <div className="flex items-center justify-between mb-1.5">
-                          <label className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400 block">
-                            Número de Cores
-                          </label>
-                          <label className="flex items-center gap-1 cursor-pointer text-[10px] font-bold text-purple-500 dark:text-purple-400 hover:underline">
-                            <input
-                              type="checkbox"
-                              checked={chargeColorAddon}
-                              onChange={e => setChargeColorAddon(e.target.checked)}
-                              className="rounded border-slate-300 dark:border-white/20 text-purple-600 focus:ring-purple-500 h-3.5 w-3.5 cursor-pointer"
-                            />
-                            <span>Cobrar Adicional (+%)</span>
-                          </label>
-                        </div>
+                        <label className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400 mb-1.5 block">
+                          Número de Cores
+                        </label>
                         <input
                           type="number"
                           value={colorCount}
@@ -1003,11 +992,6 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
                           style={colorCount ? { borderColor: `${settings.primaryColor}30` } : undefined}
                           placeholder="Ex: 4"
                         />
-                        {!chargeColorAddon && (
-                          <span className="text-[9px] font-bold text-emerald-500 dark:text-emerald-400 block mt-1">
-                            ✨ Isento: Adicional de cores não será cobrado neste pedido
-                          </span>
-                        )}
                       </div>
 
                       <div>
@@ -1319,14 +1303,33 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
               {/* Dynamic Cost breakdown for Chefe */}
               {isUnlocked && entryMode === 'budget' && (
                 <div className="pt-3 border-t border-slate-200 dark:border-white/5 space-y-2 text-xs">
-                  {calculation.breakdown.map((item, idx) => (
-                    <div key={idx} className="flex justify-between text-slate-600 dark:text-zinc-400">
-                      <span>{item.label}</span>
-                      <span className="font-semibold text-slate-800 dark:text-zinc-200">
-                        {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.amount)}
-                      </span>
-                    </div>
-                  ))}
+                  {calculation.breakdown.map((item, idx) => {
+                    const isColorLine = item.label.includes('Adicional Cores');
+                    return (
+                      <div key={idx} className={`flex justify-between items-center ${isColorLine && !chargeColorAddon ? 'text-emerald-500 dark:text-emerald-400' : 'text-slate-600 dark:text-zinc-400'}`}>
+                        <span className="flex items-center gap-1.5">
+                          {isColorLine && (
+                            <button
+                              type="button"
+                              onClick={() => setChargeColorAddon(!chargeColorAddon)}
+                              className={`relative inline-flex h-4 w-7 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ${
+                                chargeColorAddon ? 'bg-purple-600' : 'bg-zinc-600'
+                              }`}
+                              title={chargeColorAddon ? 'Clique para isentar adicional de cores' : 'Clique para cobrar adicional de cores'}
+                            >
+                              <span className={`pointer-events-none inline-block h-3 w-3 transform rounded-full bg-white shadow transition duration-200 ${
+                                chargeColorAddon ? 'translate-x-3' : 'translate-x-0'
+                              }`} />
+                            </button>
+                          )}
+                          {isColorLine && !chargeColorAddon ? `Cores (${colorCount || 1}) — Isento` : item.label}
+                        </span>
+                        <span className={`font-semibold ${isColorLine && !chargeColorAddon ? 'line-through opacity-50' : 'text-slate-800 dark:text-zinc-200'}`}>
+                          {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.amount)}
+                        </span>
+                      </div>
+                    );
+                  })}
                   {/* Linha de Tempo Estimado de Máquina */}
                   {estimatedMinutesPerPiece > 0 && (
                     <div className="flex justify-between items-center text-amber-500 font-bold pt-1 border-t border-slate-200/60 dark:border-white/5">
