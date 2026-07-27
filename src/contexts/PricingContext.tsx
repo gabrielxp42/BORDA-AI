@@ -29,19 +29,23 @@ interface PricingContextType {
 
 const PricingContext = createContext<PricingContextType | undefined>(undefined);
 
+const LOCAL_STORAGE_RULES_KEY = 'borda_pricing_rules';
+
 export const PricingProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user } = useAuth();
-  const [rules, setRules] = useState<PricingRule[]>([]);
+  const [rules, setRules] = useState<PricingRule[]>(() => {
+    try {
+      const stored = localStorage.getItem(LOCAL_STORAGE_RULES_KEY);
+      if (stored) {
+        return JSON.parse(stored);
+      }
+    } catch { /* fallback */ }
+    return DEFAULT_PRICING_RULES.map((r, i) => ({ ...r, id: String(i + 1), created_at: '' }));
+  });
   const [loading, setLoading] = useState<boolean>(true);
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
 
   const fetchRules = async () => {
-    if (!user) {
-      setRules([]);
-      setLoading(false);
-      return;
-    }
-
     setLoading(true);
     try {
       const { data, error } = await supabase
@@ -49,12 +53,11 @@ export const PricingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         .select('*')
         .order('display_order', { ascending: true });
 
-      if (error) throw error;
-
-      if (data && data.length > 0) {
+      if (!error && data && data.length > 0) {
         setRules(data as PricingRule[]);
-      } else {
-        // Se o usuário não possui regras cadastradas, insere as regras padrão
+        localStorage.setItem(LOCAL_STORAGE_RULES_KEY, JSON.stringify(data));
+      } else if (user?.id) {
+        // Se o usuário não possui regras cadastradas no DB, insere as padrão
         const rulesToInsert = DEFAULT_PRICING_RULES.map(r => ({
           ...r,
           user_id: user.id
@@ -65,14 +68,13 @@ export const PricingProvider: React.FC<{ children: React.ReactNode }> = ({ child
           .insert(rulesToInsert)
           .select();
 
-        if (insertError) {
-          console.error("Erro ao clonar regras padrão:", insertError);
-        } else if (inserted) {
+        if (!insertError && inserted) {
           setRules(inserted as PricingRule[]);
+          localStorage.setItem(LOCAL_STORAGE_RULES_KEY, JSON.stringify(inserted));
         }
       }
     } catch (err) {
-      console.error("Erro ao carregar regras de precificação:", err);
+      console.warn("Erro ao carregar regras do Supabase, utilizando localStorage:", err);
     } finally {
       setLoading(false);
     }
@@ -83,24 +85,26 @@ export const PricingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }, [user]);
 
   const updateRule = async (id: string, updates: Partial<PricingRule>): Promise<boolean> => {
+    const updated = rules.map(r => r.id === id ? { ...r, ...updates } : r);
+    setRules(updated);
     try {
-      const { error } = await supabase
+      localStorage.setItem(LOCAL_STORAGE_RULES_KEY, JSON.stringify(updated));
+      await supabase
         .from('pricing_rules')
         .update(updates)
         .eq('id', id);
-
-      if (error) throw error;
-
-      setRules(prev => prev.map(r => r.id === id ? { ...r, ...updates } : r));
       return true;
     } catch (err) {
-      console.error("Erro ao atualizar regra:", err);
-      return false;
+      console.warn("Erro ao atualizar regra no Supabase (salvo no localStorage):", err);
+      return true;
     }
   };
 
   const saveAllRules = async (updatedRules: PricingRule[]): Promise<boolean> => {
     try {
+      setRules(updatedRules);
+      localStorage.setItem(LOCAL_STORAGE_RULES_KEY, JSON.stringify(updatedRules));
+
       for (const rule of updatedRules) {
         await supabase
           .from('pricing_rules')
@@ -112,11 +116,10 @@ export const PricingProvider: React.FC<{ children: React.ReactNode }> = ({ child
           })
           .eq('id', rule.id);
       }
-      setRules(updatedRules);
       return true;
     } catch (err) {
-      console.error("Erro ao salvar conjunto de regras:", err);
-      return false;
+      console.warn("Erro ao salvar conjunto de regras no Supabase (salvo no localStorage):", err);
+      return true;
     }
   };
 

@@ -4,6 +4,7 @@ export interface PricingOptions {
   stitchCount: number;
   colorCount: number;
   quantity: number;
+  chargeColorAddon?: boolean;
   isBigHoop?: boolean;
   isReadyPiece?: boolean;
   isFringe?: boolean;
@@ -33,6 +34,7 @@ export function calculateEmbroideryPrice(
     stitchCount,
     colorCount,
     quantity,
+    chargeColorAddon = true,
     isBigHoop = false,
     isReadyPiece = false,
     isFringe = false,
@@ -52,25 +54,30 @@ export function calculateEmbroideryPrice(
 
   let currentSubtotal = baseStitchCost + operationalMarginAmount;
 
-  // 3. Color Addon Bracket
-  let colorAddonPercent = 20; // default 1-6 colors
-  if (colorCount >= 7 && colorCount <= 12) colorAddonPercent = 30;
-  if (colorCount > 12) colorAddonPercent = 40;
+  // 3. Color Addon Bracket (Opcional)
+  let colorAddonPercent = 0;
+  let colorAddonAmount = 0;
 
-  const colorRule = rules.find(
-    (r) =>
-      r.rule_type === 'color_percent' &&
-      r.min_value !== undefined &&
-      r.max_value !== undefined &&
-      colorCount >= r.min_value &&
-      colorCount <= r.max_value
-  );
-  if (colorRule) {
-    colorAddonPercent = Number(colorRule.value);
+  if (chargeColorAddon) {
+    colorAddonPercent = 20; // default 1-6 colors
+    if (colorCount >= 7 && colorCount <= 12) colorAddonPercent = 30;
+    if (colorCount > 12) colorAddonPercent = 40;
+
+    const colorRule = rules.find(
+      (r) =>
+        r.rule_type === 'color_percent' &&
+        r.min_value !== undefined &&
+        r.max_value !== undefined &&
+        colorCount >= r.min_value &&
+        colorCount <= r.max_value
+    );
+    if (colorRule) {
+      colorAddonPercent = Number(colorRule.value);
+    }
+
+    colorAddonAmount = currentSubtotal * (colorAddonPercent / 100);
+    currentSubtotal += colorAddonAmount;
   }
-
-  const colorAddonAmount = currentSubtotal * (colorAddonPercent / 100);
-  currentSubtotal += colorAddonAmount;
 
   // 4. Operational Addons
   let bigHoopAddonAmount = 0;
@@ -116,7 +123,13 @@ export function calculateEmbroideryPrice(
   const breakdown = [
     { label: `Base (${stitchCount.toLocaleString('pt-BR')} pts @ R$ ${baseRatePerThousand.toFixed(2)}/mil)`, amount: baseStitchCost },
     { label: `Margem Operacional (${marginPercent}%)`, amount: operationalMarginAmount, percentage: marginPercent },
-    { label: `Adicional Cores (${colorCount} cores = +${colorAddonPercent}%)`, amount: colorAddonAmount, percentage: colorAddonPercent },
+    { 
+      label: chargeColorAddon 
+        ? `Adicional Cores (${colorCount} cores = +${colorAddonPercent}%)` 
+        : `Adicional Cores (${colorCount} cores = Isento / R$ 0,00)`, 
+      amount: colorAddonAmount, 
+      percentage: colorAddonPercent 
+    },
   ];
 
   if (isBigHoop) breakdown.push({ label: 'Adicional Bastidor Grande (+30%)', amount: bigHoopAddonAmount });

@@ -63,6 +63,7 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
   const [matrixName, setMatrixName] = useState<string>('');
   const [stitchCount, setStitchCount] = useState<number | ''>('');
   const [colorCount, setColorCount] = useState<number | ''>('');
+  const [chargeColorAddon, setChargeColorAddon] = useState<boolean>(true);
   const [quantity, setQuantity] = useState<number | ''>(1);
 
   // WhatsApp Smart Automation Toggles (Chaves WhatsApp ao Salvar)
@@ -108,6 +109,7 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
       stitchCount: Math.max(0, Number(stitchCount) || 0),
       colorCount: Math.max(1, Number(colorCount) || 1),
       quantity: Math.max(1, Number(quantity) || 1),
+      chargeColorAddon,
       isBigHoop,
       isReadyPiece,
       isFringe,
@@ -979,9 +981,20 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
                       </div>
 
                       <div>
-                        <label className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400 mb-1.5 block">
-                          Número de Cores
-                        </label>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <label className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400 block">
+                            Número de Cores
+                          </label>
+                          <label className="flex items-center gap-1 cursor-pointer text-[10px] font-bold text-purple-500 dark:text-purple-400 hover:underline">
+                            <input
+                              type="checkbox"
+                              checked={chargeColorAddon}
+                              onChange={e => setChargeColorAddon(e.target.checked)}
+                              className="rounded border-slate-300 dark:border-white/20 text-purple-600 focus:ring-purple-500 h-3.5 w-3.5 cursor-pointer"
+                            />
+                            <span>Cobrar Adicional (+%)</span>
+                          </label>
+                        </div>
                         <input
                           type="number"
                           value={colorCount}
@@ -990,6 +1003,11 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
                           style={colorCount ? { borderColor: `${settings.primaryColor}30` } : undefined}
                           placeholder="Ex: 4"
                         />
+                        {!chargeColorAddon && (
+                          <span className="text-[9px] font-bold text-emerald-500 dark:text-emerald-400 block mt-1">
+                            ✨ Isento: Adicional de cores não será cobrado neste pedido
+                          </span>
+                        )}
                       </div>
 
                       <div>

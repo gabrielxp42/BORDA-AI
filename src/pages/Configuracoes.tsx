@@ -1,33 +1,36 @@
-import React, { useState } from 'react';
-import { Settings, Save, CheckCircle2, Sliders, MessageSquare, Server } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Settings, Save, CheckCircle2, Sliders, MessageSquare, RefreshCw } from 'lucide-react';
 import { PricingRule } from '@/types/borda';
+import { usePricing } from '@/contexts/PricingContext';
 import { WhatsAppConnectionCard } from '@/components/whatsapp/WhatsAppConnectionCard';
-import { EvolutionServerConfigCard } from '@/components/whatsapp/EvolutionServerConfigCard';
-
-const initialRules: PricingRule[] = [
-  { id: '1', name: 'Base Milheiro de Pontos', rule_type: 'thousand_stitches', value: 0.65, is_active: true, display_order: 1, created_at: '' },
-  { id: '2', name: 'Margem Operacional Padrao (%)', rule_type: 'percent_addon', value: 20, is_active: true, display_order: 2, created_at: '' },
-  { id: '3', name: 'Adicional 1 a 6 Cores (%)', rule_type: 'color_percent', min_value: 1, max_value: 6, value: 20, is_active: true, display_order: 3, created_at: '' },
-  { id: '4', name: 'Adicional 7 a 12 Cores (%)', rule_type: 'color_percent', min_value: 7, max_value: 12, value: 30, is_active: true, display_order: 4, created_at: '' },
-  { id: '5', name: 'Adicional Acima de 12 Cores (%)', rule_type: 'color_percent', min_value: 13, max_value: 999, value: 40, is_active: true, display_order: 5, created_at: '' },
-  { id: '6', name: 'Adicional Bastidor Grande (%)', rule_type: 'percent_addon', value: 30, is_active: true, display_order: 6, created_at: '' },
-  { id: '7', name: 'Adicional Peça Pronta (%)', rule_type: 'percent_addon', value: 50, is_active: true, display_order: 7, created_at: '' },
-  { id: '8', name: 'Adicional Laser (R$/peça)', rule_type: 'fixed_addon', value: 0.5, is_active: true, display_order: 8, created_at: '' },
-  { id: '9', name: 'Adicional Prensa (R$/peça)', rule_type: 'fixed_addon', value: 0.5, is_active: true, display_order: 9, created_at: '' },
-];
+import { toast } from 'sonner';
 
 export const Configuracoes: React.FC = () => {
+  const { rules: globalRules, saveAllRules } = usePricing();
   const [activeTab, setActiveTab] = useState<'pricing' | 'whatsapp'>('pricing');
-  const [rules, setRules] = useState<PricingRule[]>(initialRules);
+  const [localRules, setLocalRules] = useState<PricingRule[]>([]);
+  const [isSaving, setIsSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
+  useEffect(() => {
+    if (globalRules && globalRules.length > 0) {
+      setLocalRules(JSON.parse(JSON.stringify(globalRules)));
+    }
+  }, [globalRules]);
+
   const handleRuleValueChange = (id: string, val: number) => {
-    setRules(rules.map((r) => (r.id === id ? { ...r, value: val } : r)));
+    setLocalRules(prev => prev.map((r) => (r.id === id ? { ...r, value: val } : r)));
   };
 
-  const handleSaveRules = () => {
-    setSaved(true);
-    setTimeout(() => setSaved(false), 3000);
+  const handleSaveRules = async () => {
+    setIsSaving(true);
+    const ok = await saveAllRules(localRules);
+    setIsSaving(false);
+    if (ok) {
+      setSaved(true);
+      toast.success("Tabela de Preços e Regras salvas com sucesso!");
+      setTimeout(() => setSaved(false), 3000);
+    }
   };
 
   return (
@@ -78,22 +81,25 @@ export const Configuracoes: React.FC = () => {
             </h3>
 
             <button
+              type="button"
               onClick={handleSaveRules}
-              className="inline-flex items-center justify-center gap-2 px-5 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-bold text-xs shadow-lg shadow-purple-500/25 hover:brightness-110 transition-all cursor-pointer"
+              disabled={isSaving}
+              className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-bold text-xs shadow-lg shadow-purple-500/25 hover:brightness-110 active:scale-95 transition-all cursor-pointer disabled:opacity-50"
             >
-              <Save className="h-4 w-4" /> Salvar Regras
+              {isSaving ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              {isSaving ? 'Salvando...' : 'Salvar Regras da Tabela'}
             </button>
           </div>
 
           {saved && (
-            <div className="p-4 rounded-2xl bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 text-xs font-bold flex items-center gap-2">
-              <CheckCircle2 className="h-4 w-4" /> Regras salvas no Supabase com sucesso!
+            <div className="p-4 rounded-2xl bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 text-xs font-bold flex items-center gap-2 animate-in zoom-in-95">
+              <CheckCircle2 className="h-4 w-4" /> Regras salvas no Supabase e Sistema com sucesso!
             </div>
           )}
 
           <div className="glass-panel p-6 rounded-3xl border border-white/10 space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {rules.map((r) => (
+              {localRules.map((r) => (
                 <div key={r.id} className="glass-card p-4 rounded-2xl space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-white">{r.name}</span>
