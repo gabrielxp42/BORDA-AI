@@ -26,7 +26,7 @@ import {
   Smartphone
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { ProfilePermissionsManager } from '@/components/profile/ProfilePermissionsManager';
+
 
 const COLOR_PRESETS = [
   { name: 'Roxo Imperial', value: '#9333ea' },
@@ -618,9 +618,6 @@ export const PerfilConfig: React.FC = () => {
             </div>
           </div>
         </div>
-
-        {/* 🛡️ SEÇÃO DE GESTÃO DE PERFIS & PERMISSÕES */}
-        <ProfilePermissionsManager />
 
         {/* 👥 SEÇÃO 8: EQUIPE & OPERADORES */}
         <div className="bg-white dark:bg-zinc-900/70 border border-slate-200 dark:border-white/10 rounded-3xl p-6 md:p-8 shadow-xl backdrop-blur-xl space-y-6">

@@ -1,5 +1,4 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { supabase } from '../integrations/supabase/client';
 import { toast } from 'sonner';
 
 export type UserRole = string;
@@ -146,53 +145,26 @@ export const ProfileProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const [isProfileModalOpen, setIsProfileModalOpen] = useState<boolean>(false);
 
-  // Carrega perfis do Supabase na inicialização
+  // Perfis customizados são gerenciados via localStorage
+  // (Supabase company_settings não possui coluna custom_profiles)
   useEffect(() => {
-    const loadSupabaseProfiles = async () => {
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        const targetId = user?.id || '246afa29-5a6b-4671-ade1-eb7d19ab3a9d';
-        
-        const { data } = await supabase
-          .from('company_settings')
-          .select('team_members')
-          .eq('id', targetId)
-          .maybeSingle();
-
-        if (data && (data as any).custom_profiles) {
-          const remoteProfiles: CustomProfile[] = (data as any).custom_profiles;
-          if (Array.isArray(remoteProfiles) && remoteProfiles.length > 0) {
-            setCustomProfiles(remoteProfiles);
-            localStorage.setItem(LOCAL_STORAGE_PROFILES_KEY, JSON.stringify(remoteProfiles));
-          }
-        }
-      } catch (e) {
-        console.warn('[ProfileContext] Não foi possível buscar perfis remotos:', e);
+    // Garante que os perfis built-in sempre existam no array
+    setCustomProfiles(prev => {
+      const hasChefe = prev.some(p => p.id === 'chefe');
+      const hasProducao = prev.some(p => p.id === 'producao');
+      if (!hasChefe || !hasProducao) {
+        const merged = [...DEFAULT_PROFILES, ...prev.filter(p => p.id !== 'chefe' && p.id !== 'producao')];
+        localStorage.setItem(LOCAL_STORAGE_PROFILES_KEY, JSON.stringify(merged));
+        return merged;
       }
-    };
-
-    loadSupabaseProfiles();
+      return prev;
+    });
   }, []);
 
-  // Salva perfis no Supabase + localStorage
-  const saveProfiles = useCallback(async (profiles: CustomProfile[]) => {
+  // Salva perfis no localStorage (company_settings no Supabase não possui coluna custom_profiles)
+  const saveProfiles = useCallback((profiles: CustomProfile[]) => {
     setCustomProfiles(profiles);
     localStorage.setItem(LOCAL_STORAGE_PROFILES_KEY, JSON.stringify(profiles));
-
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      const targetId = user?.id || '246afa29-5a6b-4671-ade1-eb7d19ab3a9d';
-
-      await supabase
-        .from('company_settings')
-        .update({
-          // Grava como campo JSON se suportado
-          custom_profiles: profiles as any
-        } as any)
-        .eq('id', targetId);
-    } catch (e) {
-      console.warn('[ProfileContext] Falha ao sincronizar perfis com Supabase:', e);
-    }
   }, []);
 
   // Encontra perfil ativo

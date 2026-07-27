@@ -274,14 +274,15 @@ export const NetflixProfileModal: React.FC = () => {
                       </span>
                     )}
 
-                    {/* Engrenagem de editar (apenas para o Chefe quando logado) */}
-                    {isUnlocked && !p.isBuiltIn && (
+                    {/* Engrenagem / Lápis de editar permissões no próprio card (visível no Modo Chefe) */}
+                    {isUnlocked && (
                       <button
+                        type="button"
                         onClick={e => handleOpenEditPermissions(p, e)}
-                        className="absolute top-3 left-3 p-2 rounded-xl bg-white/10 hover:bg-white/20 text-zinc-400 hover:text-white transition-all"
-                        title="Editar Permissões"
+                        className="absolute top-3 left-3 p-2 rounded-xl bg-white/10 hover:bg-white/20 text-zinc-300 hover:text-white transition-all shadow-md z-10"
+                        title="Editar Permissões deste Perfil"
                       >
-                        <Settings className="h-4 w-4" />
+                        <Settings className="h-4 w-4 text-purple-300" />
                       </button>
                     )}
 
@@ -316,7 +317,7 @@ export const NetflixProfileModal: React.FC = () => {
                     </div>
 
                     {/* Footer Badge */}
-                    <div className="pt-1">
+                    <div className="pt-1 flex items-center gap-1.5">
                       <span
                         className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl border text-[10px] font-bold"
                         style={{ backgroundColor: `${p.color}15`, borderColor: `${p.color}35`, color: p.color }}
@@ -328,42 +329,25 @@ export const NetflixProfileModal: React.FC = () => {
                 );
               })}
 
-              {/* Card Criar Novo Perfil (Visível quando Chefe) -> Vai para a página /perfil */}
+              {/* Card Criar Novo Perfil (Visível no Modo Chefe) */}
               {isUnlocked && (
                 <div
                   onClick={() => {
-                    closeProfileModal();
-                    navigate('/perfil');
+                    resetForm();
+                    setModalStep('create_profile');
                   }}
-                  className="group p-6 rounded-3xl border border-dashed border-white/20 bg-white/[0.02] hover:bg-white/[0.06] hover:border-purple-500/50 transition-all duration-300 cursor-pointer flex flex-col items-center justify-center text-center space-y-3 min-h-[220px]"
+                  className="group p-6 rounded-3xl border border-dashed border-white/20 bg-white/[0.02] hover:bg-purple-500/10 hover:border-purple-500/50 transition-all duration-300 cursor-pointer flex flex-col items-center justify-center text-center space-y-3 min-h-[220px]"
                 >
-                  <div className="h-14 w-14 rounded-2xl bg-purple-500/10 border border-purple-500/30 flex items-center justify-center text-purple-400 group-hover:scale-110 transition-transform">
+                  <div className="h-14 w-14 rounded-2xl bg-purple-500/10 border border-purple-500/30 flex items-center justify-center text-purple-400 group-hover:scale-110 transition-transform shadow-lg">
                     <Plus className="h-7 w-7" />
                   </div>
                   <div>
-                    <h3 className="text-base font-bold text-white">Gerenciar / Criar Perfis</h3>
-                    <p className="text-xs text-zinc-500 mt-1">Abra as Configurações de Perfil para editar permissões</p>
+                    <h3 className="text-base font-bold text-white">Criar Novo Perfil</h3>
+                    <p className="text-xs text-zinc-400 mt-1">Adicione uma nova função com permissões personalizadas</p>
                   </div>
                 </div>
               )}
             </div>
-
-            {/* Direct config shortcut */}
-            {isUnlocked && (
-              <div className="flex justify-center pt-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    closeProfileModal();
-                    navigate('/perfil');
-                  }}
-                  className="py-2.5 px-6 rounded-2xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs flex items-center gap-2 transition-all shadow-lg active:scale-95 border border-white/10"
-                >
-                  <Settings className="h-4 w-4 text-purple-400" />
-                  <span>⚙️ Abrir Configurações da Empresa, Perfis & Permissões</span>
-                </button>
-              </div>
-            )}
           </div>
         )}
 

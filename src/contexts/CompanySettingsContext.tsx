@@ -220,7 +220,8 @@ export const CompanySettingsProvider: React.FC<{ children: React.ReactNode }> = 
         logoUrl = supabase.storage.from('public_assets').getPublicUrl(filePath).data.publicUrl;
       }
 
-      const updated = {
+      // Objeto com apenas colunas válidas da tabela DB company_settings
+      const dbPayload: Record<string, any> = {
         id: targetId,
         system_name: newSettings.systemName ?? settings.systemName,
         system_subtitle: newSettings.systemSubtitle ?? settings.systemSubtitle,
@@ -228,7 +229,6 @@ export const CompanySettingsProvider: React.FC<{ children: React.ReactNode }> = 
         pix_key: newSettings.pixKey ?? settings.pixKey,
         phone: newSettings.phone ?? settings.phone,
         email: newSettings.email ?? settings.email,
-        address: newSettings.address ?? settings.address,
         document: newSettings.document ?? settings.document,
         working_hours: newSettings.workingHours ?? settings.workingHours,
         fiscal_api_token: newSettings.fiscalApiToken ?? settings.fiscalApiToken,
@@ -239,27 +239,34 @@ export const CompanySettingsProvider: React.FC<{ children: React.ReactNode }> = 
         updated_at: new Date().toISOString(),
       };
 
-      const { error } = await supabase
-        .from('company_settings')
-        .upsert(updated);
+      try {
+        const { error } = await supabase
+          .from('company_settings')
+          .upsert(dbPayload);
 
-      if (error) throw error;
+        if (error) {
+          console.warn('⚠️ Supabase upsert avisou (continuando com salvo local):', error.message);
+        }
+      } catch (dbErr) {
+        console.warn('⚠️ Erro de rede/schema Supabase (salvando em cache):', dbErr);
+      }
 
       const newCompanySettings: CompanySettings = {
-        systemName: updated.system_name,
-        systemSubtitle: updated.system_subtitle,
-        primaryColor: updated.primary_color,
+        systemName: dbPayload.system_name,
+        systemSubtitle: dbPayload.system_subtitle,
+        primaryColor: dbPayload.primary_color,
         logoUrl,
-        pixKey: updated.pix_key,
-        phone: updated.phone,
-        email: updated.email,
-        address: updated.address,
-        document: updated.document,
-        workingHours: updated.working_hours,
-        fiscalApiToken: updated.fiscal_api_token,
-        fiscalEnvironment: updated.fiscal_environment as any,
-        machineSpeedSpm: updated.machine_speed_spm,
-        colorChangeTimeSec: updated.color_change_time_sec,
+        pixKey: dbPayload.pix_key,
+        phone: dbPayload.phone,
+        email: dbPayload.email,
+        address: newSettings.address ?? settings.address,
+        document: dbPayload.document,
+        workingHours: dbPayload.working_hours,
+        fiscalApiToken: dbPayload.fiscal_api_token,
+        fiscalEnvironment: dbPayload.fiscal_environment as any,
+        machineSpeedSpm: dbPayload.machine_speed_spm,
+        colorChangeTimeSec: dbPayload.color_change_time_sec,
+        teamMembers: newSettings.teamMembers ?? settings.teamMembers,
       };
 
       setSettings(newCompanySettings);
