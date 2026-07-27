@@ -1,5 +1,10 @@
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { 
+  humanizeMessageText, 
+  waitAntiBanJitterDelay, 
+  calculateHumanTypingDelay 
+} from './whatsappAntiBan';
 
 export interface WhatsAppSendOptions {
   phone: string;
@@ -295,6 +300,11 @@ function extractEvolutionError(data: any): string | null {
 export async function sendEvolutionText(phone: string, message: string): Promise<any> {
   const cleanPhone = formatWhatsAppNumber(phone);
 
+  // 🛡️ BLINDAGEM ANTI-BANIMENTO (Simulação Humana & Anti-Hash)
+  const safeMessage = humanizeMessageText(message);
+  const typingDelayMs = calculateHumanTypingDelay(safeMessage);
+  await waitAntiBanJitterDelay(safeMessage.length);
+
   let userInstanceId: string | undefined = undefined;
   try {
     const { data: { user } } = await supabase.auth.getUser();
@@ -314,11 +324,11 @@ export async function sendEvolutionText(phone: string, message: string): Promise
 
   const targetInstance = userInstanceId || 'borda_gabriel_0431';
 
-  // 1. Tenta envio REST direto se houver credenciais salvas no perfil
+  // 1. Tenta envio REST direto com parâmetro de presença "composing" (digitando...)
   const creds = await getEvolutionCredentials();
   if (creds && creds.apiUrl && creds.apiKey) {
     const inst = creds.instanceId || targetInstance;
-    console.log(`📲 [WhatsApp REST Direto] Enviando para ${cleanPhone} via instância [${inst}]...`);
+    console.log(`📲 [WhatsApp REST Direto Anti-Ban] Enviando para ${cleanPhone} via [${inst}] (Digitação: ${typingDelayMs}ms)...`);
     try {
       const resp = await fetch(`${creds.apiUrl}/message/sendText/${inst}`, {
         method: 'POST',
@@ -328,7 +338,12 @@ export async function sendEvolutionText(phone: string, message: string): Promise
         },
         body: JSON.stringify({
           number: cleanPhone,
-          text: message
+          text: safeMessage,
+          delay: typingDelayMs,
+          options: {
+            delay: typingDelayMs,
+            presence: 'composing'
+          }
         })
       });
 
@@ -343,15 +358,19 @@ export async function sendEvolutionText(phone: string, message: string): Promise
     }
   }
 
-  // 2. Fallback via Edge Function whatsapp-proxy
-  console.log(`[WhatsApp Proxy] Enviando para ${cleanPhone} (Instância: ${targetInstance}):`, message);
+  // 2. Fallback via Edge Function whatsapp-proxy com presença
+  console.log(`[WhatsApp Proxy Anti-Ban] Enviando para ${cleanPhone} (Instância: ${targetInstance}, Digitação: ${typingDelayMs}ms):`, safeMessage);
 
   const { data, error } = await supabase.functions.invoke('whatsapp-proxy', {
     body: { 
       action: 'send-text', 
       phone: cleanPhone, 
-      message: message,
-      instanceId: targetInstance
+      message: safeMessage,
+      instanceId: targetInstance,
+      options: {
+        delay: typingDelayMs,
+        presence: 'composing'
+      }
     }
   });
 
