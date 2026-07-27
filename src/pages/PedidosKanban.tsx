@@ -133,11 +133,16 @@ export const PedidosKanban: React.FC<PedidosKanbanProps> = ({
       clientName: order.client?.name || 'Cliente',
       clientPhone: order.client?.phone,
       clientCompany: order.client?.company_name,
-      paymentStatus: order.payment_status || 'pending',
+      paymentStatus: (order.payment_status as 'pending' | 'half_paid' | 'paid') || 'pending',
       paymentMethod: order.payment_method,
       totalAmount: order.total_amount || 0,
       notes: order.notes,
-      items: order.items || [],
+      items: (order.items || []).map(it => ({
+        description: it.description,
+        quantity: it.quantity,
+        unitPrice: it.unit_price || 0,
+        totalPrice: it.total_price || 0
+      })),
       companyName: settings.systemName
     });
   };

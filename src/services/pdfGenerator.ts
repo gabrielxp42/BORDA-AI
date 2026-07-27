@@ -35,7 +35,7 @@ export const printOrderReceipt = (order: OrderPDFData) => {
 
   const brandColor = order.companyColor || '#9333ea';
   const companyName = order.companyName || 'GUAÇU BORDADOS';
-  const companySubtitle = order.companySubtitle || 'INDUSTRIAL EMBROIDERIES ERP';
+  const companySubtitle = order.companySubtitle || 'GESTÃO INTELIGENTE DE BORDADOS';
   const orderCode = order.orderNumber ? `#${order.orderNumber}` : `#${order.id.slice(0, 6)}`;
 
   // Formatação do Status de Pagamento

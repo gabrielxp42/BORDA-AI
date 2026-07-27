@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { 
   User, Calendar, CheckCircle2, AlertCircle, HandCoins, DollarSign, Package, 
   Printer, Eye, Edit3, Trash2, FileText, Share2, Copy, 
-  Send, Sparkles, QrCode, Maximize2, Layers, Palette, Clock, Check, Image as ImageIcon
+  Send, Sparkles, QrCode, Maximize2, Layers, Palette, Clock, Check, Image as ImageIcon, RefreshCw
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';

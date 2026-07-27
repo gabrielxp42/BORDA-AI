@@ -461,7 +461,7 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
             if (clientData?.phone && clientData.phone.trim()) {
               const clientName = clientData.name || 'Cliente';
               const orderCode = order?.id ? `#${order.id.slice(0, 4)}` : '';
-              const itemDesc = matrixName || notes || 'Peças para bordado';
+              const itemDesc = matrixName || observations || 'Peças para bordado';
 
               const msgLines: string[] = [
                 `*Entrada de Pedido - ${settings.systemName}* 🧵✨\n`,

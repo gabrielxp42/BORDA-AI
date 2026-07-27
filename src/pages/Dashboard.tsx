@@ -71,7 +71,7 @@ export const Dashboard: React.FC = () => {
         doneOrders: doneRes.count || 0,
       });
 
-      setRecentOrders((recentOrdersRes.data as RecentOrder[]) || []);
+      setRecentOrders((recentOrdersRes.data as unknown as RecentOrder[]) || []);
     } catch (err) {
       console.error('Erro ao carregar dados do Dashboard:', err);
     } finally {

@@ -427,7 +427,7 @@ export const Pedidos: React.FC = () => {
 
                             {hasAttachments && (
                               <span className="px-2 py-0.5 rounded-md text-[9px] font-bold bg-violet-500/10 text-violet-600 dark:text-violet-400 border border-violet-500/20 flex items-center gap-1">
-                                <Paperclip className="h-3 w-3" /> Anexo ({metadata.attachmentUrls.length})
+                                <Paperclip className="h-3 w-3" /> Anexo ({(metadata?.attachmentUrls?.length || 0)})
                               </span>
                             )}
 
@@ -556,7 +556,7 @@ export const Pedidos: React.FC = () => {
                               📎 Imagens / Anexos do Cliente:
                             </p>
                             <div className="flex flex-wrap items-center gap-2">
-                              {metadata.attachmentUrls.map((url: string, i: number) => (
+                              {(metadata?.attachmentUrls || []).map((url: string, i: number) => (
                                 <a
                                   key={i}
                                   href={url}

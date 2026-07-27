@@ -27,9 +27,9 @@ interface CompanySettingsContextType {
 
 const defaultSettings: CompanySettings = {
   systemName: 'GUAÇU BORDADOS',
-  systemSubtitle: 'INDUSTRIAL EMBROIDERIES ERP',
-  primaryColor: '#9333ea',
-  logoUrl: null,
+  systemSubtitle: 'GESTÃO INTELIGENTE DE BORDADOS',
+  primaryColor: '#ef4444',
+  logoUrl: 'https://lyjxrfkslzrmtlefswag.supabase.co/storage/v1/object/public/public_assets/246afa29-5a6b-4671-ade1-eb7d19ab3a9d/logo-1784750362264.png',
   pixKey: '',
   phone: '',
   email: '',
@@ -64,15 +64,14 @@ export const CompanySettingsProvider: React.FC<{ children: React.ReactNode }> = 
     const cachedMachineSpeed = localStorage.getItem('cached_machine_speed_spm');
     const cachedColorTime = localStorage.getItem('cached_color_change_sec');
 
-    if (cachedColor) {
-      document.documentElement.style.setProperty('--brand-primary', cachedColor);
-    }
+    const effectiveColor = cachedColor || defaultSettings.primaryColor;
+    document.documentElement.style.setProperty('--brand-primary', effectiveColor);
 
     return {
       systemName: cachedName || defaultSettings.systemName,
       systemSubtitle: cachedSubtitle || defaultSettings.systemSubtitle,
-      primaryColor: cachedColor || defaultSettings.primaryColor,
-      logoUrl: cachedLogo || null,
+      primaryColor: effectiveColor,
+      logoUrl: cachedLogo !== null && cachedLogo !== undefined ? cachedLogo : defaultSettings.logoUrl,
       pixKey: cachedPix || '',
       phone: cachedPhone || '',
       email: cachedEmail || '',
@@ -104,8 +103,6 @@ export const CompanySettingsProvider: React.FC<{ children: React.ReactNode }> = 
     if (newSettings.colorChangeTimeSec !== undefined) localStorage.setItem('cached_color_change_sec', String(newSettings.colorChangeTimeSec));
     if (newSettings.logoUrl) {
       localStorage.setItem('cached_logo_url', newSettings.logoUrl);
-    } else {
-      localStorage.removeItem('cached_logo_url');
     }
   };
 
@@ -122,11 +119,8 @@ export const CompanySettingsProvider: React.FC<{ children: React.ReactNode }> = 
     if (user?.id) {
       fetchUserSettings(user.id);
     } else {
-      // Usuário anônimo / Não logado: Limpa cache e restaura padrão neutro
-      clearCache();
-      setSettings(defaultSettings);
-      document.documentElement.style.setProperty('--brand-primary', defaultSettings.primaryColor);
-      setIsLoading(false);
+      // Usuário anônimo / Primeiro acesso: Carrega configurações padrão globais
+      fetchUserSettings('246afa29-5a6b-4671-ade1-eb7d19ab3a9d');
     }
   }, [user?.id]);
 
@@ -138,18 +132,28 @@ export const CompanySettingsProvider: React.FC<{ children: React.ReactNode }> = 
 
   const fetchUserSettings = async (userId: string) => {
     try {
-      const { data, error } = await supabase
+      let { data } = await supabase
         .from('company_settings')
         .select('*')
         .eq('id', userId)
         .maybeSingle();
+
+      // Fallback para a conta mestre se a conta atual não tiver registro próprio ainda
+      if (!data && userId !== '246afa29-5a6b-4671-ade1-eb7d19ab3a9d') {
+        const fallbackRes = await supabase
+          .from('company_settings')
+          .select('*')
+          .eq('id', '246afa29-5a6b-4671-ade1-eb7d19ab3a9d')
+          .maybeSingle();
+        data = fallbackRes.data;
+      }
 
       if (data) {
         const loaded: CompanySettings = {
           systemName: data.system_name || defaultSettings.systemName,
           systemSubtitle: data.system_subtitle || defaultSettings.systemSubtitle,
           primaryColor: data.primary_color || defaultSettings.primaryColor,
-          logoUrl: data.logo_url || null,
+          logoUrl: data.logo_url || defaultSettings.logoUrl,
           pixKey: data.pix_key || localStorage.getItem('cached_pix_key') || '',
           phone: data.phone || localStorage.getItem('cached_company_phone') || '',
           email: data.email || localStorage.getItem('cached_company_email') || '',
@@ -158,12 +162,18 @@ export const CompanySettingsProvider: React.FC<{ children: React.ReactNode }> = 
           workingHours: data.working_hours || localStorage.getItem('cached_company_hours') || defaultSettings.workingHours,
           fiscalApiToken: data.fiscal_api_token || localStorage.getItem('cached_fiscal_token') || '',
           fiscalEnvironment: data.fiscal_environment || (localStorage.getItem('cached_fiscal_env') as any) || 'homologacao',
+          machineSpeedSpm: data.machine_speed_spm || 800,
+          colorChangeTimeSec: data.color_change_time_sec !== undefined ? data.color_change_time_sec : 30
         };
         setSettings(loaded);
         saveToCache(loaded);
+      } else {
+        setSettings(defaultSettings);
+        saveToCache(defaultSettings);
       }
     } catch (err) {
       console.error('Erro ao buscar configurações da conta:', err);
+      setSettings(defaultSettings);
     } finally {
       setIsLoading(false);
     }

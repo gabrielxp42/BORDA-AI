@@ -231,7 +231,7 @@ export const PerfilConfig: React.FC = () => {
                 value={systemSubtitle}
                 onChange={(e) => setSystemSubtitle(e.target.value)}
                 className="w-full bg-slate-50 dark:bg-black/50 border border-slate-300 dark:border-white/10 rounded-2xl px-4 py-3 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-purple-500 transition-colors"
-                placeholder="Ex: INDUSTRIAL EMBROIDERIES ERP"
+                placeholder="Ex: GESTÃO INTELIGENTE DE BORDADOS"
               />
             </div>
 
