@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 
 export interface WhatsAppSendOptions {
   phone: string;
@@ -417,5 +418,45 @@ export async function sendEvolutionMedia(options: WhatsAppSendOptions): Promise<
   });
 
   return await resp.json();
+}
+
+/**
+ * Trata falhas no disparo do WhatsApp exibindo alertas visuais claros com botão para parear QR Code na Central GABI ou abrir Web WhatsApp manualmente.
+ */
+export function handleWhatsAppDispatchError(
+  err: any,
+  phone: string,
+  message: string,
+  toastId?: string | number,
+  options?: { autoOpenWeb?: boolean }
+) {
+  const errMsg = err?.message || String(err);
+  const isDisconnected = /desconectado|disconnected|qr|offline|close|400|401/i.test(errMsg);
+  const webLink = getWhatsAppWebLink(phone, message);
+
+  if (isDisconnected) {
+    toast.error('⚠️ WhatsApp (GABI) Desconectado!', {
+      id: toastId,
+      duration: 10000,
+      description: 'Seu WhatsApp não está pareado via QR Code na Evolution API. Clique abaixo para parear e ativar disparos diretos sem abrir abas.',
+      action: {
+        label: '⚡ Parear WhatsApp Agora',
+        onClick: () => { window.location.href = '/gabi'; }
+      }
+    });
+
+    if (options?.autoOpenWeb) {
+      window.open(webLink, '_blank');
+    }
+  } else {
+    toast.error(`Falha no envio via WhatsApp: ${errMsg}`, {
+      id: toastId,
+      duration: 8000,
+      action: {
+        label: 'Abrir Web WhatsApp',
+        onClick: () => { window.open(webLink, '_blank'); }
+      }
+    });
+  }
 }
 

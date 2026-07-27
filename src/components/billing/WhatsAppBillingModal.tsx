@@ -3,7 +3,7 @@ import { X, Send, MessageCircle, ExternalLink, CheckCircle2, AlertCircle } from 
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
-import { sendEvolutionText, getWhatsAppWebLink } from '@/services/whatsappService';
+import { sendEvolutionText, getWhatsAppWebLink, handleWhatsAppDispatchError } from '@/services/whatsappService';
 import { getStoredTemplates, formatEmbroideryTemplate } from '@/services/whatsappTemplatesService';
 import { useCompanySettings } from '@/contexts/CompanySettingsContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -72,7 +72,7 @@ export const WhatsAppBillingModal: React.FC<WhatsAppBillingModalProps> = ({ isOp
       }, 2000);
     } catch (err: any) {
       setIsSending(false);
-      toast.error("Erro ao enviar pelo WhatsApp: " + (err.message || "Tente pelo botão Web WhatsApp"));
+      handleWhatsAppDispatchError(err, phoneNumber, message);
     }
   };
 

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import ReactDOM from 'react-dom';
 import { X, FileText, Printer, Send, Trash2, Calendar, User, Package, DollarSign, Layers, CheckCircle2, AlertCircle, Download } from 'lucide-react';
 import { printOrderReceipt } from '@/services/pdfGenerator';
-import { sendEvolutionText, getWhatsAppWebLink } from '@/services/whatsappService';
+import { sendEvolutionText, getWhatsAppWebLink, handleWhatsAppDispatchError } from '@/services/whatsappService';
 import { useBackgroundTasks } from '@/hooks/useBackgroundTasks';
 import { supabase } from '@/integrations/supabase/client';
 import { useCompanySettings } from '@/contexts/CompanySettingsContext';
@@ -182,16 +182,14 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
 
       toast.success(`⚡ Ficha enviada com sucesso no WhatsApp de ${clientName}!`, { id: toastId });
     } catch (evoErr: any) {
-      console.warn('Falha no envio direto via Evolution API, abrindo WhatsApp Web:', evoErr);
+      console.warn('Falha no envio direto via Evolution API:', evoErr);
       updateTask(taskId, {
         status: 'error',
         progress: 100,
         error: evoErr.message || 'Falha no envio direto'
       });
 
-      const webLink = getWhatsAppWebLink(phone, text);
-      window.open(webLink, '_blank');
-      toast.info(`Evolution API indisponível. Abrindo WhatsApp Web para ${clientName}...`, { id: toastId });
+      handleWhatsAppDispatchError(evoErr, phone, text, toastId);
     }
   };
 

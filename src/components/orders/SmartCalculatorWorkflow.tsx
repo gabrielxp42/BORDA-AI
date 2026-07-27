@@ -19,7 +19,7 @@ import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { serializePaymentMetadata, updatePaymentMetadata } from '@/utils/paymentHelper';
-import { sendEvolutionText, getWhatsAppWebLink, formatWhatsAppNumber } from '@/services/whatsappService';
+import { sendEvolutionText, getWhatsAppWebLink, formatWhatsAppNumber, handleWhatsAppDispatchError } from '@/services/whatsappService';
 import { getStoredTemplates, formatEmbroideryTemplate } from '@/services/whatsappTemplatesService';
 import { useBackgroundTasks } from '@/hooks/useBackgroundTasks';
 
@@ -560,9 +560,7 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
                   error: err.message || 'Falha no envio direto'
                 });
 
-                const webLink = getWhatsAppWebLink(clientData.phone, autoMsg);
-                window.open(webLink, '_blank');
-                toast.info(`Evolution API indisponível. Abrindo WhatsApp Web para ${clientName}...`, { id: toastId });
+                handleWhatsAppDispatchError(err, clientData.phone, autoMsg, toastId);
               }
             }
           } catch (autoErr) {

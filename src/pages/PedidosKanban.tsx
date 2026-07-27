@@ -9,7 +9,7 @@ import { useProfile } from '@/contexts/ProfileContext';
 import { useCompanySettings } from '@/contexts/CompanySettingsContext';
 import { parsePaymentMetadata } from '@/utils/paymentHelper';
 import { printOrderReceipt } from '@/services/pdfGenerator';
-import { sendEvolutionText, getWhatsAppWebLink } from '@/services/whatsappService';
+import { sendEvolutionText, getWhatsAppWebLink, handleWhatsAppDispatchError } from '@/services/whatsappService';
 import { useBackgroundTasks } from '@/hooks/useBackgroundTasks';
 import { toast } from 'sonner';
 
@@ -204,16 +204,14 @@ export const PedidosKanban: React.FC<PedidosKanbanProps> = ({
         }
       });
     } catch (evoErr: any) {
-      console.warn('Falha no envio direto via Evolution API, abrindo WhatsApp Web:', evoErr);
+      console.warn('Falha no envio direto via Evolution API:', evoErr);
       updateTask(taskId, {
         status: 'error',
         progress: 100,
         error: evoErr.message || 'Falha no envio direto'
       });
 
-      const webLink = getWhatsAppWebLink(phone, text);
-      window.open(webLink, '_blank');
-      toast.info(`Evolution API indisponível. Abrindo WhatsApp Web para ${clientName}...`, { id: toastId });
+      handleWhatsAppDispatchError(evoErr, phone, text, toastId);
     }
   };
 

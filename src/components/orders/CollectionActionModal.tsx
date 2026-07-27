@@ -5,7 +5,7 @@ import {
   ShieldAlert, Copy, ExternalLink, QrCode, CheckCircle2, FileText, Package
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { sendEvolutionText, getWhatsAppWebLink } from '@/services/whatsappService';
+import { sendEvolutionText, getWhatsAppWebLink, handleWhatsAppDispatchError } from '@/services/whatsappService';
 import { useBackgroundTasks } from '@/hooks/useBackgroundTasks';
 import { useCompanySettings } from '@/contexts/CompanySettingsContext';
 
@@ -220,9 +220,7 @@ export const CollectionActionModal: React.FC<CollectionActionModalProps> = ({
           error: err.message || 'Falha no envio direto'
         });
 
-        const webLink = getWhatsAppWebLink(editablePhone, messageDraft);
-        window.open(webLink, '_blank');
-        toast.info(`Evolution API indisponível. Abrindo WhatsApp Web para ${clientName}...`, { id: toastId });
+        handleWhatsAppDispatchError(err, editablePhone, messageDraft, toastId);
       }
     })();
   };
