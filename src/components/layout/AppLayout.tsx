@@ -216,7 +216,7 @@ export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children })
         <header className={`h-16 glass-panel border-b ${isDark ? 'border-white/10' : 'border-slate-200'} px-6 flex items-center justify-between z-10`}>
           <div className="flex items-center gap-4">
             {/* Mobile Logo Brand */}
-            <div className="md:hidden flex items-center gap-2">
+            <Link to="/perfil" className="md:hidden flex items-center gap-2 active:scale-95 transition-transform" title="Perfil & Configurações">
               {settings.logoUrl ? (
                 <img 
                   src={settings.logoUrl} 
@@ -240,7 +240,7 @@ export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children })
                   </span>
                 </div>
               )}
-            </div>
+            </Link>
             <div className="relative hidden sm:block w-72">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
               <input

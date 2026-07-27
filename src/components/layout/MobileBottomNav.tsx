@@ -266,27 +266,54 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
                     <p className="text-[10px] text-slate-500 dark:text-zinc-400">Bordadeiras</p>
                   </div>
                 </button>
+
+                {isUnlocked && (
+                  <button
+                    onClick={() => handleNavigate('/perfil')}
+                    className="p-3 rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 flex items-center gap-2.5 text-left hover:bg-slate-100 dark:hover:bg-white/10 transition-colors"
+                  >
+                    <div className="p-2 rounded-xl bg-rose-500/10 text-rose-400 shrink-0">
+                      <Settings className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-black text-slate-900 dark:text-white">Perfil & Ajustes</p>
+                      <p className="text-[10px] text-slate-500 dark:text-zinc-400">Logo, cores e SPM</p>
+                    </div>
+                  </button>
+                )}
               </div>
             </div>
 
             {/* Perfil & Preferências */}
-            <div className="pt-2 border-t border-slate-200 dark:border-white/10 flex items-center justify-between gap-3">
+            <div className="pt-2 border-t border-slate-200 dark:border-white/10 flex items-center justify-between gap-2">
               <button
                 type="button"
                 onClick={() => {
                   setIsSheetOpen(false);
                   openProfileModal();
                 }}
-                className="flex-1 py-3 px-4 rounded-2xl bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 flex items-center justify-center gap-2 text-xs font-bold text-slate-800 dark:text-white"
+                className="flex-1 py-3 px-3 rounded-2xl bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 flex items-center justify-center gap-2 text-xs font-bold text-slate-800 dark:text-white truncate"
               >
-                {isUnlocked ? <Crown className="h-4 w-4 text-purple-400" /> : <Scissors className="h-4 w-4 text-cyan-400" />}
-                <span>{isUnlocked ? '👑 Perfil Chefe' : '🧵 Perfil Operador'}</span>
+                {isUnlocked ? <Crown className="h-4 w-4 text-purple-400 shrink-0" /> : <Scissors className="h-4 w-4 text-cyan-400 shrink-0" />}
+                <span className="truncate">{isUnlocked ? '👑 Chefe' : '🧵 Operador'}</span>
               </button>
+
+              {isUnlocked && (
+                <button
+                  type="button"
+                  onClick={() => handleNavigate('/perfil')}
+                  className="py-3 px-3.5 rounded-2xl bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-xs font-bold text-slate-800 dark:text-white flex items-center gap-1.5 shrink-0"
+                  title="Configurações da Empresa"
+                >
+                  <Settings className="h-4 w-4 text-rose-400" />
+                  <span>Ajustes</span>
+                </button>
+              )}
 
               <button
                 type="button"
                 onClick={onToggleTheme}
-                className="p-3 rounded-2xl bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-zinc-300"
+                className="p-3 rounded-2xl bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-zinc-300 shrink-0"
                 title="Alternar Tema"
               >
                 {isDark ? <Sun className="h-5 w-5 text-amber-300" /> : <Moon className="h-5 w-5" style={{ color: pc }} />}

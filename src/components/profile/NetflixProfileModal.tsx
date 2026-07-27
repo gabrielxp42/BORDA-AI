@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import ReactDOM from 'react-dom';
-import { Crown, Scissors, KeyRound, Lock, Unlock, X, Check, ShieldCheck, Sparkles, Delete, RotateCcw } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Crown, Scissors, KeyRound, Lock, Unlock, X, Check, ShieldCheck, Sparkles, Delete, RotateCcw, Settings } from 'lucide-react';
 import { useProfile } from '@/contexts/ProfileContext';
 import { useCompanySettings } from '@/contexts/CompanySettingsContext';
 import { toast } from 'sonner';
 
 export const NetflixProfileModal: React.FC = () => {
+  const navigate = useNavigate();
   const {
     role,
     isUnlocked,
@@ -276,6 +278,19 @@ export const NetflixProfileModal: React.FC = () => {
               </div>
             </div>
 
+            {isUnlocked && (
+              <button
+                type="button"
+                onClick={() => {
+                  closeProfileModal();
+                  navigate('/perfil');
+                }}
+                className="py-2.5 px-5 rounded-2xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-lg active:scale-95"
+              >
+                <Settings className="h-4 w-4 text-purple-400" />
+                <span>⚙️ Abrir Configurações da Empresa & Logo</span>
+              </button>
+            )}
           </div>
         )}
 
