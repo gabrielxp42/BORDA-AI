@@ -4,6 +4,8 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
 import { sendEvolutionText, getWhatsAppWebLink } from '@/services/whatsappService';
+import { getStoredTemplates, formatEmbroideryTemplate } from '@/services/whatsappTemplatesService';
+import { useCompanySettings } from '@/contexts/CompanySettingsContext';
 import { useAuth } from '@/contexts/AuthContext';
 
 interface WhatsAppBillingModalProps {
@@ -21,6 +23,7 @@ interface WhatsAppBillingModalProps {
 
 export const WhatsAppBillingModal: React.FC<WhatsAppBillingModalProps> = ({ isOpen, onClose, clientData }) => {
   const { profile } = useAuth();
+  const { settings } = useCompanySettings();
   const [phoneNumber, setPhoneNumber] = useState(clientData?.phone || '');
   const [isSending, setIsSending] = useState(false);
   const [sendSuccess, setSendSuccess] = useState(false);
@@ -30,8 +33,22 @@ export const WhatsAppBillingModal: React.FC<WhatsAppBillingModalProps> = ({ isOp
   const currentMonth = format(new Date(), 'MMMM', { locale: ptBR });
   const formattedTotal = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(clientData.totalAmount);
 
-  // Mensagem padrão formatada para cobrança
-  const defaultMessage = `Olá ${clientData.name}!\n\nAqui é da *Bordados Elite*.\nSegue o seu fechamento referente aos pedidos de *${currentMonth}*:\n\n👕 Total de Pedidos: ${clientData.orderCount}\n💰 *Valor Total: ${formattedTotal}*\n\nVocê pode realizar o pagamento via PIX (Chave: CNPJ XX.XXX.XXX/0001-XX).\n\nQualquer dúvida, estamos à disposição!`;
+  // Tenta carregar template de cobrança personalizado da Central GABI (/gabi)
+  const gabiTemplates = getStoredTemplates();
+  const billingTpl = gabiTemplates.find(t => t.id === 'tpl_cobranca_pix');
+  const gabiContext = {
+    nome_cliente: clientData.name,
+    numero_pedido: `${clientData.orderCount} pedido(s)`,
+    nome_matriz: `Fechamento ${currentMonth}`,
+    valor_total: formattedTotal,
+    valor_entrada: formattedTotal,
+    chave_pix: settings.pixKey || 'Consulte a chave na oficina',
+    nome_oficina: settings.systemName,
+  };
+
+  const defaultMessage = billingTpl
+    ? formatEmbroideryTemplate(billingTpl.templateText, gabiContext)
+    : `Olá ${clientData.name}!\n\nAqui é da *${settings.systemName}*.\nSegue o seu fechamento de bordados referente a *${currentMonth}*:\n\n👕 Total de Pedidos: ${clientData.orderCount}\n💰 *Valor Total: ${formattedTotal}*\n\n🔑 PIX: *${settings.pixKey || 'Consulte a chave na oficina'}*\n\nQualquer dúvida, estamos à disposição!`;
 
   const [message, setMessage] = useState(defaultMessage);
 

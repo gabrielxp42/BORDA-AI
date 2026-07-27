@@ -18,6 +18,7 @@ import { Configuracoes } from '@/pages/Configuracoes';
 import { Faturamento } from '@/pages/Faturamento';
 import { Estoque } from '@/pages/Estoque';
 import { PerfilConfig } from '@/pages/PerfilConfig';
+import { GabiAutomations } from '@/pages/GabiAutomations';
 import { Admin } from '@/pages/Admin';
 import { Login } from '@/pages/Login';
 
@@ -46,6 +47,7 @@ export const App: React.FC = () => {
                         <TaskDock />
                         <Routes>
                           <Route path="/" element={<Dashboard />} />
+                          <Route path="/gabi" element={<GabiAutomations />} />
                           <Route path="/matrizes" element={<Matrizes />} />
                           <Route path="/calculadora" element={<Calculadora />} />
                           <Route path="/clientes" element={<Clientes />} />

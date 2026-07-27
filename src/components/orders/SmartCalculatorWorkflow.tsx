@@ -20,6 +20,7 @@ import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { serializePaymentMetadata, updatePaymentMetadata } from '@/utils/paymentHelper';
 import { sendEvolutionText, getWhatsAppWebLink, formatWhatsAppNumber } from '@/services/whatsappService';
+import { getStoredTemplates, formatEmbroideryTemplate } from '@/services/whatsappTemplatesService';
 import { useBackgroundTasks } from '@/hooks/useBackgroundTasks';
 
 interface InitialOrderData {
@@ -463,28 +464,54 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
               const orderCode = order?.id ? `#${order.id.slice(0, 4)}` : '';
               const itemDesc = matrixName || observations || 'Peças para bordado';
 
+              // Contexto para interpolação de tags dinâmicas da GABI Automações
+              const tp = calculation?.totalPrice || 0;
+              const gabiContext = {
+                nome_cliente: clientName,
+                empresa_cliente: clientName,
+                numero_pedido: orderCode,
+                nome_matriz: itemDesc,
+                quantidade_pecas: `${quantity || 1} peça(s)`,
+                nome_oficina: settings.systemName,
+                endereco_oficina: settings.address || '',
+                chave_pix: settings.pixKey || 'Consulte a chave no ateliê',
+                valor_entrada: tp ? `R$ ${(tp * 0.5).toFixed(2).replace('.', ',')}` : '',
+                valor_total: tp ? `R$ ${tp.toFixed(2).replace('.', ',')}` : '',
+              };
+
+              // Carrega templates customizados salvos na Central GABI (/gabi)
+              const gabiTemplates = getStoredTemplates();
+              const findTemplate = (id: string) => gabiTemplates.find(t => t.id === id);
+
               const msgLines: string[] = [
                 `*Entrada de Pedido - ${settings.systemName}* 🧵✨\n`,
-                `Olá, *${clientName}*!`
               ];
 
               if (whatsappNotifyReceipt) {
-                msgLines.push(`📦 *Confirmação de Recebimento:* Suas peças (*${itemDesc}*, ${quantity || 1}x) foram recebidas com sucesso em nossa oficina e deram entrada no sistema.`);
+                const tpl = findTemplate('tpl_confirmar_recebimento');
+                msgLines.push(tpl ? formatEmbroideryTemplate(tpl.templateText, gabiContext)
+                  : `📦 *Confirmação de Recebimento:* Suas peças (*${itemDesc}*, ${quantity || 1}x) foram recebidas com sucesso em nossa oficina e deram entrada no sistema.`);
               }
 
               if (whatsappRequestRef) {
-                msgLines.push(`🖼️ *Solicitação de Imagem/Arte:* Por favor, nos envie aqui no WhatsApp a imagem/referência do seu bordado em alta resolução para a programação da matriz.`);
+                const tpl = findTemplate('tpl_solicitar_imagem');
+                msgLines.push(tpl ? formatEmbroideryTemplate(tpl.templateText, gabiContext)
+                  : `🖼️ *Solicitação de Imagem/Arte:* Por favor, nos envie aqui no WhatsApp a imagem/referência do seu bordado em alta resolução para a programação da matriz.`);
               }
 
               if (whatsappSendSummary) {
-                msgLines.push(`📋 *Ficha de Registro:* Entrada ${orderCode} registrada no sistema da oficina.`);
+                const tpl = findTemplate('tpl_orcamento_aprovacao');
+                msgLines.push(tpl ? formatEmbroideryTemplate(tpl.templateText, gabiContext)
+                  : `📋 *Ficha de Registro:* Entrada ${orderCode} registrada no sistema da oficina.`);
               }
 
               if (whatsappSendPix) {
-                msgLines.push(`💳 *Dados para Pagamento via PIX:*\nChave PIX: *${settings.pixKey || 'Consulte a chave no ateliê'}*`);
+                const tpl = findTemplate('tpl_cobranca_pix');
+                msgLines.push(tpl ? formatEmbroideryTemplate(tpl.templateText, gabiContext)
+                  : `💳 *Dados para Pagamento via PIX:*\nChave PIX: *${settings.pixKey || 'Consulte a chave no ateliê'}*`);
               }
 
-              msgLines.push(`\nQualquer dúvida estamos à disposição!`);
+              msgLines.push(`\nQualquer dúvida estamos à disposição! — ${settings.systemName}`);
               const autoMsg = msgLines.join('\n\n');
 
               // Adiciona a tarefa ao painel flutuante de TAREFAS EM SEGUNDO PLANO (TaskDock)

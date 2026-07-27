@@ -53,6 +53,7 @@ const SewingMachineIcon: React.FC<{ className?: string }> = ({ className = "h-3 
 
 const navItems: NavItem[] = [
   { label: 'Painel Geral', path: '/', icon: LayoutDashboard },
+  { label: 'GABI Automações', path: '/gabi', icon: Sparkles, badge: <Zap className="h-3 w-3 fill-current text-amber-400" /> },
   { label: 'Pedidos & Produção', path: '/pedidos', icon: ShoppingBag },
   { label: 'Fazer Orçamento', path: '/calculadora', icon: Calculator, badge: <Zap className="h-3 w-3 fill-current" /> },
   { label: 'Biblioteca de Matrizes', path: '/matrizes', icon: Layers, badge: <SewingMachineIcon className="h-3 w-3" /> },
@@ -95,6 +96,7 @@ export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children })
   // Mapeamento de rotas para a chave de permissão
   const pathToKey: Record<string, keyof typeof permissions.routes> = useMemo(() => ({
     '/': 'dashboard',
+    '/gabi': 'dashboard', // GABI acessível para quem tem acesso ao painel
     '/pedidos': 'pedidos',
     '/calculadora': 'calculadora',
     '/matrizes': 'matrizes',
