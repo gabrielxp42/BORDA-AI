@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <linearGradient id="borda-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ef4444" />
+      <stop offset="50%" stop-color="#dc2626" />
+      <stop offset="100%" stop-color="#9333ea" />
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="16" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+
+  <rect width="512" height="512" rx="128" fill="#09090d" />
+  <rect x="16" y="16" width="480" height="480" rx="112" fill="none" stroke="url(#borda-grad)" stroke-width="12" opacity="0.3" />
+
+  <!-- Glowing Embroidery Needle & Thread G Logo -->
+  <path d="M256 96 C 160 96, 112 160, 112 256 C 112 352, 160 416, 256 416 C 336 416, 384 368, 396 304 L 288 304 L 288 240 L 416 240 L 416 256 C 416 384, 344 448, 256 448 C 144 448, 80 368, 80 256 C 80 144, 144 64, 256 64 C 320 64, 376 96, 408 144 L 352 184 C 332 152, 298 128, 256 128 Z" fill="url(#borda-grad)" filter="url(#glow)" />
+  <circle cx="360" cy="150" r="18" fill="#ef4444" />
+</svg>

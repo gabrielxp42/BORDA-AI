@@ -24,6 +24,7 @@ import {
 import { CreateOrderModal } from '../orders/CreateOrderModal';
 import { ProfileSwitcher } from './ProfileSwitcher';
 import { MobileBottomNav } from './MobileBottomNav';
+import { PWAManager } from '../pwa/PWAManager';
 
 interface NavItem {
   label: string;
@@ -311,6 +312,9 @@ export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children })
         isOpen={isOrderModalOpen} 
         onClose={() => setIsOrderModalOpen(false)} 
       />
+
+      {/* PWA Ecosystem Manager (Auto-Update & Smart Banners) */}
+      <PWAManager />
     </div>
   );
 };

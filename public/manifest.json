@@ -1,0 +1,55 @@
+{
+  "name": "BORDA AI - Sistema Inteligente de Bordados",
+  "short_name": "BORDA AI",
+  "description": "ERP & Orçamentador Inteligente para Oficinas de Bordado Industrial",
+  "start_url": "/",
+  "id": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#09090d",
+  "theme_color": "#ef4444",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Novo Pedido",
+      "short_name": "Novo Pedido",
+      "description": "Criar novo pedido de produção",
+      "url": "/pedidos",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Orçamento",
+      "short_name": "Orçar",
+      "description": "Calculadora por pontos",
+      "url": "/calculadora",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Clientes",
+      "short_name": "Clientes",
+      "description": "Ficha CRM de clientes",
+      "url": "/clientes",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}
