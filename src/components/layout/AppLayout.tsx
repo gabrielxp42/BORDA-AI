@@ -72,7 +72,7 @@ import { useNavigate } from 'react-router-dom';
 // (Dentro do componente AppLayout)
 export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { settings } = useCompanySettings();
-  const { isUnlocked } = useProfile();
+  const { isUnlocked, permissions } = useProfile();
   const { user, profile: authProfile, signOut } = useAuth();
   const navigate = useNavigate();
 
@@ -84,8 +84,6 @@ export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children })
   });
   const location = useLocation();
 
-  const OPERADOR_ALLOWED_PATHS = ['/pedidos', '/matrizes', '/maquinas'];
-
   const isAdmin = useMemo(() => {
     return (
       user?.email?.toLowerCase() === 'gabrielxp45@gmail.com' ||
@@ -94,19 +92,38 @@ export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children })
     );
   }, [user, authProfile]);
 
+  // Mapeamento de rotas para a chave de permissão
+  const pathToKey: Record<string, keyof typeof permissions.routes> = useMemo(() => ({
+    '/': 'dashboard',
+    '/pedidos': 'pedidos',
+    '/calculadora': 'calculadora',
+    '/matrizes': 'matrizes',
+    '/estoque': 'estoque',
+    '/faturamento': 'faturamento',
+    '/clientes': 'clientes',
+    '/maquinas': 'maquinas',
+    '/configuracoes': 'configuracoes',
+    '/perfil': 'perfil',
+  }), []);
+
   // Redireciona Operador se tentar acessar rota restrita
   useEffect(() => {
-    if (!isUnlocked && !OPERADOR_ALLOWED_PATHS.includes(location.pathname)) {
-      navigate('/pedidos', { replace: true });
+    const key = pathToKey[location.pathname];
+    if (key && permissions.routes[key] === false) {
+      // Procura a primeira rota permitida
+      const firstAllowed = Object.entries(permissions.routes).find(([, allowed]) => allowed);
+      const targetPath = firstAllowed ? (firstAllowed[0] === 'dashboard' ? '/' : `/${firstAllowed[0]}`) : '/pedidos';
+      navigate(targetPath, { replace: true });
     }
-  }, [isUnlocked, location.pathname, navigate]);
+  }, [permissions.routes, location.pathname, navigate, pathToKey]);
 
-  // Filtra itens do menu conforme o perfil
+  // Filtra itens do menu conforme o perfil e permissões
   const visibleNavItems = useMemo(() => {
-    let items = navItems;
-    if (!isUnlocked) {
-      items = navItems.filter((item: NavItem) => OPERADOR_ALLOWED_PATHS.includes(item.path));
-    }
+    let items = navItems.filter((item: NavItem) => {
+      const key = pathToKey[item.path];
+      return key ? permissions.routes[key] !== false : true;
+    });
+
     if (isAdmin) {
       items = [
         ...items,
@@ -114,7 +131,7 @@ export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children })
       ];
     }
     return items;
-  }, [isUnlocked, isAdmin]);
+  }, [permissions.routes, isAdmin, pathToKey]);
 
   useEffect(() => {
     const root = document.documentElement;
