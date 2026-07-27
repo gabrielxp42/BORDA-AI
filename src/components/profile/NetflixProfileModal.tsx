@@ -328,21 +328,21 @@ export const NetflixProfileModal: React.FC = () => {
                 );
               })}
 
-              {/* Card Criar Novo Perfil (Visível quando Chefe) */}
+              {/* Card Criar Novo Perfil (Visível quando Chefe) -> Vai para a página /perfil */}
               {isUnlocked && (
                 <div
                   onClick={() => {
-                    resetForm();
-                    setModalStep('create_profile');
+                    closeProfileModal();
+                    navigate('/perfil');
                   }}
-                  className="group p-6 rounded-3xl border border-dashed border-white/20 bg-white/[0.02] hover:bg-white/[0.06] hover:border-white/40 transition-all duration-300 cursor-pointer flex flex-col items-center justify-center text-center space-y-3 min-h-[220px]"
+                  className="group p-6 rounded-3xl border border-dashed border-white/20 bg-white/[0.02] hover:bg-white/[0.06] hover:border-purple-500/50 transition-all duration-300 cursor-pointer flex flex-col items-center justify-center text-center space-y-3 min-h-[220px]"
                 >
-                  <div className="h-14 w-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-purple-400 group-hover:scale-110 transition-transform">
+                  <div className="h-14 w-14 rounded-2xl bg-purple-500/10 border border-purple-500/30 flex items-center justify-center text-purple-400 group-hover:scale-110 transition-transform">
                     <Plus className="h-7 w-7" />
                   </div>
                   <div>
-                    <h3 className="text-base font-bold text-white">Criar Novo Perfil</h3>
-                    <p className="text-xs text-zinc-500 mt-1">Configure um perfil personalizado com permissões de acesso</p>
+                    <h3 className="text-base font-bold text-white">Gerenciar / Criar Perfis</h3>
+                    <p className="text-xs text-zinc-500 mt-1">Abra as Configurações de Perfil para editar permissões</p>
                   </div>
                 </div>
               )}
@@ -360,7 +360,7 @@ export const NetflixProfileModal: React.FC = () => {
                   className="py-2.5 px-6 rounded-2xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs flex items-center gap-2 transition-all shadow-lg active:scale-95 border border-white/10"
                 >
                   <Settings className="h-4 w-4 text-purple-400" />
-                  <span>⚙️ Abrir Configurações da Empresa & Equipe</span>
+                  <span>⚙️ Abrir Configurações da Empresa, Perfis & Permissões</span>
                 </button>
               </div>
             )}
