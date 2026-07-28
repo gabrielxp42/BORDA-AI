@@ -13,97 +13,8 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
 
-// Insumos de exemplo iniciais para uma oficina de bordados se o estoque estiver vazio
-const INITIAL_MOCK_ITEMS: StockItem[] = [
-  {
-    id: '1',
-    name: 'Linha Lumina 2004 Amarelo Ouro (5000m)',
-    category: 'linhas',
-    unit: 'cone',
-    quantity: 8,
-    min_quantity: 3,
-    cost_price: 19.5,
-    color_code: '#2004',
-    location: 'Prateleira A1',
-    notes: 'Linha de poliéster 120D/2 mais usada para bordados de logotipos',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-  {
-    id: '2',
-    name: 'Linha Lumina 2000 Branco Neve (5000m)',
-    category: 'linhas',
-    unit: 'cone',
-    quantity: 14,
-    min_quantity: 5,
-    cost_price: 19.5,
-    color_code: '#2000',
-    location: 'Prateleira A1',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-  {
-    id: '3',
-    name: 'Linha Lumina 2099 Preto Absoluto (5000m)',
-    category: 'linhas',
-    unit: 'cone',
-    quantity: 2,
-    min_quantity: 4,
-    cost_price: 19.5,
-    color_code: '#2099',
-    location: 'Prateleira A1',
-    notes: 'ESTOQUE BAIXO - Reposição urgente necessária',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-  {
-    id: '4',
-    name: 'Entretela Rasga-Fácil 60g (Rolo 100m)',
-    category: 'entretelas',
-    unit: 'rolo',
-    quantity: 3,
-    min_quantity: 2,
-    cost_price: 110.0,
-    location: 'Estante de Rolos B',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-  {
-    id: '5',
-    name: 'Agulha Industrial DBxK5 Cabos Finos N° 75/11',
-    category: 'agulhas',
-    unit: 'caixa',
-    quantity: 5,
-    min_quantity: 2,
-    cost_price: 45.0,
-    notes: 'Caixa com 100 agulhas especificas para tajima/feiya/barudan',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-  {
-    id: '6',
-    name: 'Spray de Cola Temporária 505 (500ml)',
-    category: 'agulhas',
-    unit: 'unidade',
-    quantity: 1,
-    min_quantity: 3,
-    cost_price: 68.0,
-    notes: 'ESTOQUE BAIXO',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-  {
-    id: '7',
-    name: 'Camisetas Polo Algodão Pima - Preta (Tam M)',
-    category: 'pecas',
-    unit: 'unidade',
-    quantity: 25,
-    min_quantity: 10,
-    cost_price: 32.0,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-];
+// Sem insumos de exemplo — cada conta começa com estoque zerado e cadastra os seus próprios
+
 
 export const Estoque: React.FC = () => {
   const { settings } = useCompanySettings();
@@ -111,18 +22,8 @@ export const Estoque: React.FC = () => {
   // Active Tab: 'inventory' | 'history'
   const [activeTab, setActiveTab] = useState<'inventory' | 'history'>('inventory');
 
-  // Items State (carrega do localStorage ou inicia com mock)
-  const [items, setItems] = useState<StockItem[]>(() => {
-    const saved = localStorage.getItem('borda_stock_items');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch {
-        return INITIAL_MOCK_ITEMS;
-      }
-    }
-    return INITIAL_MOCK_ITEMS;
-  });
+  // Items State — começa vazio, dados vêm 100% do Supabase
+  const [items, setItems] = useState<StockItem[]>([]);
 
   // Movements Log State
   const [movements, setMovements] = useState<StockMovement[]>(() => {
@@ -148,59 +49,66 @@ export const Estoque: React.FC = () => {
   const [preselectedItem, setPreselectedItem] = useState<StockItem | null>(null);
   const [isCreateItemModalOpen, setIsCreateItemModalOpen] = useState(false);
 
-  // Persistence & Supabase Cloud Sync
+  // Persistence & Supabase Cloud Sync — só sincroniza itens reais (com IDs no formato stk_...)
   useEffect(() => {
-    localStorage.setItem('borda_stock_items', JSON.stringify(items));
+    // IDs simples numéricos ('1','2',...'7') são os mocks antigos — NÃO sincronizar
+    const realItems = items.filter(i => i.id.startsWith('stk_'));
+    if (realItems.length === 0) return;
 
-    // Salva automaticamente no Supabase em nuvem a cada alteração
-    if (items && items.length > 0) {
-      const syncToCloud = async () => {
-        try {
-          const { data: authData } = await supabase.auth.getUser();
-          const userId = authData?.user?.id || '246afa29-5a6b-4671-ade1-eb7d19ab3a9d';
+    const syncToCloud = async () => {
+      try {
+        const { data: authData } = await supabase.auth.getUser();
+        const userId = authData?.user?.id;
+        if (!userId) return;
 
-          const stockPayload = items.map(item => ({
-            id: item.id,
-            user_id: userId,
-            name: item.name,
-            category: item.category,
-            unit: item.unit,
-            quantity: Number(item.quantity) || 0,
-            min_quantity: Number(item.min_quantity) || 0,
-            cost_price: Number(item.cost_price) || 0,
-            color_code: item.color_code || null,
-            location: item.location || null,
-            notes: item.notes || null,
-            updated_at: new Date().toISOString()
-          }));
+        const stockPayload = realItems.map(item => ({
+          id: item.id,
+          user_id: userId,
+          name: item.name,
+          category: item.category,
+          unit: item.unit,
+          quantity: Number(item.quantity) || 0,
+          min_quantity: Number(item.min_quantity) || 0,
+          cost_price: Number(item.cost_price) || 0,
+          color_code: item.color_code || null,
+          location: item.location || null,
+          notes: item.notes || null,
+          updated_at: new Date().toISOString()
+        }));
 
-          await supabase.from('stock_items').upsert(stockPayload);
-        } catch (e) {
-          console.warn('Erro ao sincronizar estoque em tempo real com Supabase:', e);
-        }
-      };
+        await supabase.from('stock_items').upsert(stockPayload);
+      } catch (e) {
+        console.warn('Erro ao sincronizar estoque em tempo real com Supabase:', e);
+      }
+    };
 
-      // Debounce rápido para evitar requisições excessivas enquanto digita
-      const timer = setTimeout(syncToCloud, 500);
-      return () => clearTimeout(timer);
-    }
+    const timer = setTimeout(syncToCloud, 500);
+    return () => clearTimeout(timer);
   }, [items]);
 
   useEffect(() => {
     localStorage.setItem('borda_stock_movements', JSON.stringify(movements));
   }, [movements]);
 
-  // Carrega insumos do Supabase na inicialização
+  // Carrega insumos do Supabase na inicialização, filtrado pelo usuário logado
   useEffect(() => {
     const fetchCloudStock = async () => {
       try {
+        const { data: authData } = await supabase.auth.getUser();
+        const userId = authData?.user?.id;
+        if (!userId) return; // sem login, estoque fica vazio
+
+        // Limpa localStorage antigo que pode ter dados de mock ou de outros usuários
+        localStorage.removeItem('borda_stock_items');
+
         const { data, error } = await supabase
           .from('stock_items')
           .select('*')
+          .eq('user_id', userId)  // ← ISOLAMENTO: só itens desse usuário
           .order('created_at', { ascending: false });
 
-        if (data && data.length > 0 && !error) {
-          const loaded: StockItem[] = data.map((item: any) => ({
+        if (!error) {
+          const loaded: StockItem[] = (data || []).map((item: any) => ({
             id: item.id,
             name: item.name,
             category: item.category as any,
@@ -214,8 +122,7 @@ export const Estoque: React.FC = () => {
             created_at: item.created_at,
             updated_at: item.updated_at,
           }));
-          setItems(loaded);
-          localStorage.setItem('borda_stock_items', JSON.stringify(loaded));
+          setItems(loaded); // mesmo se vier vazio — estoque começa do zero
         }
       } catch (err) {
         console.warn('Erro ao carregar insumos da nuvem:', err);
