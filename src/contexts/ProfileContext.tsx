@@ -1,5 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { toast } from 'sonner';
+import { supabase } from '../integrations/supabase/client';
+import { useAuth } from './AuthContext';
 
 export type UserRole = string;
 
@@ -124,6 +126,7 @@ const LOCAL_STORAGE_PROFILES_KEY = 'borda_custom_profiles_v1';
 const LOCAL_STORAGE_ACTIVE_ID_KEY = 'borda_active_profile_id_v1';
 
 export const ProfileProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { user } = useAuth();
   const [masterPin, setMasterPinState] = useState<string | null>(() => {
     return localStorage.getItem('borda-master-pin');
   });
@@ -149,14 +152,15 @@ export const ProfileProvider: React.FC<{ children: React.ReactNode }> = ({ child
   useEffect(() => {
     const fetchCloudProfiles = async () => {
       try {
-        const userId = localStorage.getItem('supabase.auth.token') 
-          ? JSON.parse(localStorage.getItem('supabase.auth.token') || '{}')?.currentSession?.user?.id 
-          : '246afa29-5a6b-4671-ade1-eb7d19ab3a9d';
+        const { data: authData } = await supabase.auth.getUser();
+        const userId = authData?.user?.id;
+        
+        if (!userId) return; // Se não tem usuário logado, não busca nada da nuvem
 
         const { data } = await supabase
           .from('company_settings')
           .select('custom_profiles, master_pin')
-          .eq('id', userId || '246afa29-5a6b-4671-ade1-eb7d19ab3a9d')
+          .eq('id', userId)
           .maybeSingle();
 
         if (data) {
@@ -177,11 +181,29 @@ export const ProfileProvider: React.FC<{ children: React.ReactNode }> = ({ child
     fetchCloudProfiles();
   }, []);
 
-  // Salva perfis no localStorage (company_settings no Supabase não possui coluna custom_profiles)
-  const saveProfiles = useCallback((profiles: CustomProfile[]) => {
+  // Salva perfis no localStorage E no Supabase (nuvem)
+  const saveProfiles = useCallback(async (profiles: CustomProfile[]) => {
     setCustomProfiles(profiles);
     localStorage.setItem(LOCAL_STORAGE_PROFILES_KEY, JSON.stringify(profiles));
-  }, []);
+
+    // Sync para Supabase imediatamente
+    try {
+      const { data: authData } = await supabase.auth.getUser();
+      const userId = authData?.user?.id;
+      
+      if (!userId) return; // Não salvar na nuvem se deslogado
+
+      await supabase
+        .from('company_settings')
+        .upsert({
+          id: userId,
+          custom_profiles: profiles,
+          updated_at: new Date().toISOString()
+        });
+    } catch (err) {
+      console.warn('Erro ao salvar perfis na nuvem:', err);
+    }
+  }, [user?.id]);
 
   // Encontra perfil ativo
   const activeProfile = customProfiles.find(p => p.id === activeProfileId) || customProfiles[0] || DEFAULT_PROFILES[0];
@@ -217,19 +239,47 @@ export const ProfileProvider: React.FC<{ children: React.ReactNode }> = ({ child
     selectProfile('producao');
   };
 
-  const setMasterPin = (pin: string) => {
+  const setMasterPin = async (pin: string) => {
     localStorage.setItem('borda-master-pin', pin);
     setMasterPinState(pin);
     setActiveProfileId('chefe');
     localStorage.setItem(LOCAL_STORAGE_ACTIVE_ID_KEY, 'chefe');
     localStorage.setItem('borda-role', 'chefe');
     setIsProfileModalOpen(false);
+
+    // Sync PIN para Supabase
+    try {
+      const { data: authData } = await supabase.auth.getUser();
+      const userId = authData?.user?.id;
+      
+      if (!userId) return;
+
+      await supabase
+        .from('company_settings')
+        .upsert({ id: userId, master_pin: pin, updated_at: new Date().toISOString() });
+    } catch (err) {
+      console.warn('Erro ao salvar PIN na nuvem:', err);
+    }
   };
 
-  const resetMasterPin = () => {
+  const resetMasterPin = async () => {
     localStorage.removeItem('borda-master-pin');
     setMasterPinState(null);
     lockToProducao();
+
+    // Sync para Supabase
+    try {
+      const { data: authData } = await supabase.auth.getUser();
+      const userId = authData?.user?.id;
+      
+      if (!userId) return;
+
+      await supabase
+        .from('company_settings')
+        .upsert({ id: userId, master_pin: null, updated_at: new Date().toISOString() });
+    } catch (err) {
+      console.warn('Erro ao resetar PIN na nuvem:', err);
+    }
   };
 
   const createProfile = async (newProfileData: Omit<CustomProfile, 'id'>): Promise<boolean> => {

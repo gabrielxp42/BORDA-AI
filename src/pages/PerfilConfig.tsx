@@ -143,9 +143,6 @@ export const PerfilConfig: React.FC = () => {
 
   return (
     <div className="max-w-5xl mx-auto space-y-8 pb-16">
-      {/* Banner de Sincronização em Nuvem em 1-Clique */}
-      <CloudSyncMigrationBanner />
-
       {/* Header com Design de Alto Nível */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-purple-900/20 via-zinc-900/60 to-black p-6 rounded-3xl border border-white/10 backdrop-blur-xl shadow-xl">
         <div className="space-y-1">

@@ -9,7 +9,6 @@ import { StockMovementModal } from '@/components/stock/StockMovementModal';
 import { CreateItemModal } from '@/components/stock/CreateItemModal';
 import { useCompanySettings } from '@/contexts/CompanySettingsContext';
 import { supabase } from '@/integrations/supabase/client';
-import { CloudSyncMigrationBanner } from '@/components/ui/CloudSyncMigrationBanner';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
@@ -152,6 +151,39 @@ export const Estoque: React.FC = () => {
   // Persistence & Supabase Cloud Sync
   useEffect(() => {
     localStorage.setItem('borda_stock_items', JSON.stringify(items));
+
+    // Salva automaticamente no Supabase em nuvem a cada alteração
+    if (items && items.length > 0) {
+      const syncToCloud = async () => {
+        try {
+          const { data: authData } = await supabase.auth.getUser();
+          const userId = authData?.user?.id || '246afa29-5a6b-4671-ade1-eb7d19ab3a9d';
+
+          const stockPayload = items.map(item => ({
+            id: item.id,
+            user_id: userId,
+            name: item.name,
+            category: item.category,
+            unit: item.unit,
+            quantity: Number(item.quantity) || 0,
+            min_quantity: Number(item.min_quantity) || 0,
+            cost_price: Number(item.cost_price) || 0,
+            color_code: item.color_code || null,
+            location: item.location || null,
+            notes: item.notes || null,
+            updated_at: new Date().toISOString()
+          }));
+
+          await supabase.from('stock_items').upsert(stockPayload);
+        } catch (e) {
+          console.warn('Erro ao sincronizar estoque em tempo real com Supabase:', e);
+        }
+      };
+
+      // Debounce rápido para evitar requisições excessivas enquanto digita
+      const timer = setTimeout(syncToCloud, 500);
+      return () => clearTimeout(timer);
+    }
   }, [items]);
 
   useEffect(() => {
@@ -201,11 +233,24 @@ export const Estoque: React.FC = () => {
   };
 
   // Submit Movement Handler
-  const handleMovementSubmit = (itemId: string, type: MovementType, qty: number, reason: string) => {
+  const handleMovementSubmit = async (itemId: string, type: MovementType, qty: number, reason: string) => {
+    const targetItem = items.find((i) => i.id === itemId);
+    if (!targetItem) return;
+
+    const newQty = type === 'in' ? targetItem.quantity + qty : Math.max(0, targetItem.quantity - qty);
+
+    try {
+      await supabase.from('stock_items').update({
+        quantity: newQty,
+        updated_at: new Date().toISOString()
+      }).eq('id', itemId);
+    } catch (e) {
+      console.warn('Erro ao atualizar quantidade no Supabase:', e);
+    }
+
     setItems((prevItems) =>
       prevItems.map((item) => {
         if (item.id === itemId) {
-          const newQty = type === 'in' ? item.quantity + qty : Math.max(0, item.quantity - qty);
           return {
             ...item,
             quantity: newQty,
@@ -216,7 +261,6 @@ export const Estoque: React.FC = () => {
       })
     );
 
-    const targetItem = items.find((i) => i.id === itemId);
     const newMovement: StockMovement = {
       id: Date.now().toString(),
       item_id: itemId,
@@ -238,36 +282,72 @@ export const Estoque: React.FC = () => {
   };
 
   // Create Item Handler
-  const handleCreateItem = (newItemData: Omit<StockItem, 'id' | 'created_at' | 'updated_at'>) => {
-    const newItem: StockItem = {
-      ...newItemData,
-      id: Date.now().toString(),
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
-    setItems((prev) => [newItem, ...prev]);
+  const handleCreateItem = async (newItemData: Omit<StockItem, 'id' | 'created_at' | 'updated_at'>) => {
+    try {
+      const { data: authData } = await supabase.auth.getUser();
+      const userId = authData?.user?.id || '246afa29-5a6b-4671-ade1-eb7d19ab3a9d';
+      const newId = `stk_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
 
-    // Lança movimento inicial de entrada se houver quantidade
-    if (newItem.quantity > 0) {
-      const initialMovement: StockMovement = {
-        id: (Date.now() + 1).toString(),
-        item_id: newItem.id,
-        item_name: newItem.name,
-        type: 'in',
-        quantity: newItem.quantity,
-        reason: 'Cadastro inicial de insumo',
-        date: new Date().toISOString(),
+      const newItem: StockItem = {
+        ...newItemData,
+        id: newId,
         created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       };
-      setMovements((prev) => [initialMovement, ...prev]);
+
+      // Inserir direto no Supabase
+      const { error } = await supabase.from('stock_items').insert({
+        id: newItem.id,
+        user_id: userId,
+        name: newItem.name,
+        category: newItem.category,
+        unit: newItem.unit,
+        quantity: Number(newItem.quantity) || 0,
+        min_quantity: Number(newItem.min_quantity) || 0,
+        cost_price: Number(newItem.cost_price) || 0,
+        color_code: newItem.color_code || null,
+        location: newItem.location || null,
+        notes: newItem.notes || null,
+      });
+
+      if (error) throw error;
+
+      setItems((prev) => [newItem, ...prev]);
+
+      // Lança movimento inicial de entrada se houver quantidade
+      if (newItem.quantity > 0) {
+        const initialMovement: StockMovement = {
+          id: (Date.now() + 1).toString(),
+          item_id: newItem.id,
+          item_name: newItem.name,
+          type: 'in',
+          quantity: newItem.quantity,
+          reason: 'Cadastro inicial de insumo',
+          date: new Date().toISOString(),
+          created_at: new Date().toISOString(),
+        };
+        setMovements((prev) => [initialMovement, ...prev]);
+      }
+      toast.success(`Insumo "${newItem.name}" adicionado com sucesso!`);
+    } catch (err: any) {
+      console.error("Erro ao criar insumo no Supabase:", err);
+      toast.error(`Erro ao salvar insumo: ${err.message || 'Falha na rede'}`);
     }
   };
 
-  // Delete Item
-  const handleDeleteItem = (id: string, name: string) => {
+  // Delete Item Handler
+  const handleDeleteItem = async (id: string, name: string) => {
     if (window.confirm(`Tem certeza que deseja remover "${name}" do estoque?`)) {
-      setItems((prev) => prev.filter((i) => i.id !== id));
-      toast.info('Item removido do estoque.');
+      try {
+        const { error } = await supabase.from('stock_items').delete().eq('id', id);
+        if (error) throw error;
+
+        setItems((prev) => prev.filter((i) => i.id !== id));
+        toast.info(`"${name}" removido do estoque.`);
+      } catch (err: any) {
+        console.error("Erro ao deletar insumo no Supabase:", err);
+        toast.error(`Erro ao remover insumo: ${err.message || 'Falha no banco de dados'}`);
+      }
     }
   };
 
@@ -301,10 +381,6 @@ export const Estoque: React.FC = () => {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
-
-      {/* Cloud Sync Migration Banner */}
-      <CloudSyncMigrationBanner />
-      
       {/* Header da Página */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>

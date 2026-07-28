@@ -114,9 +114,9 @@ export const PaymentStatusModal: React.FC<PaymentStatusModalProps> = ({
 
 
   return (
-    <div className="fixed inset-0 z-[999999] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-[999999] flex items-center justify-center p-2 sm:p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200 overflow-y-auto">
       <div 
-        className="relative w-full max-w-md bg-white dark:bg-[#12121a] border border-slate-200 dark:border-white/10 rounded-3xl shadow-2xl overflow-hidden flex flex-col"
+        className="relative w-full max-w-md max-h-[92vh] bg-white dark:bg-[#12121a] border border-slate-200 dark:border-white/10 rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col my-auto"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}

@@ -143,8 +143,9 @@ export const CompanySettingsProvider: React.FC<{ children: React.ReactNode }> = 
     if (user?.id) {
       fetchUserSettings(user.id);
     } else {
-      // Usuário anônimo / Primeiro acesso: Carrega configurações padrão globais
-      fetchUserSettings('246afa29-5a6b-4671-ade1-eb7d19ab3a9d');
+      // Usuário anônimo / Primeiro acesso: Carrega configurações padrão
+      setSettings(defaultSettings);
+      setIsLoading(false);
     }
   }, [user?.id]);
 
@@ -154,23 +155,13 @@ export const CompanySettingsProvider: React.FC<{ children: React.ReactNode }> = 
     }
   }, [settings.primaryColor]);
 
-  const fetchUserSettings = async (userId: string) => {
+    const fetchUserSettings = async (userId: string) => {
     try {
       let { data } = await supabase
         .from('company_settings')
         .select('*')
         .eq('id', userId)
         .maybeSingle();
-
-      // Fallback para a conta mestre se a conta atual não tiver registro próprio ainda
-      if (!data && userId !== '246afa29-5a6b-4671-ade1-eb7d19ab3a9d') {
-        const fallbackRes = await supabase
-          .from('company_settings')
-          .select('*')
-          .eq('id', '246afa29-5a6b-4671-ade1-eb7d19ab3a9d')
-          .maybeSingle();
-        data = fallbackRes.data;
-      }
 
       if (data) {
         const loaded: CompanySettings = {
