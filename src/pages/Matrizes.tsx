@@ -39,9 +39,13 @@ export const Matrizes: React.FC = () => {
   const fetchMatrices = async () => {
     setIsLoading(true);
     try {
+      const { data: authData } = await supabase.auth.getUser();
+      const userId = authData?.user?.id || '246afa29-5a6b-4671-ade1-eb7d19ab3a9d';
+
       const { data: matricesData, error: mError } = await supabase
         .from('matrices')
-        .select('*, client:clients(*)');
+        .select('*, client:clients(*)')
+        .eq('user_id', userId);
 
       if (mError) throw mError;
 

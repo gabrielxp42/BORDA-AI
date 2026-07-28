@@ -314,20 +314,20 @@ export const Estoque: React.FC = () => {
         {/* Botão Gigante 1: REGISTRAR ENTRADA */}
         <button
           onClick={() => openMovementModal('in')}
-          className="group relative overflow-hidden p-6 rounded-3xl border border-emerald-500/40 bg-gradient-to-br from-emerald-950/40 via-emerald-900/20 to-black/60 hover:border-emerald-400 transition-all shadow-xl hover:shadow-emerald-950/50 text-left active:scale-[0.99]"
+          className="group relative overflow-hidden p-6 rounded-3xl border border-emerald-500/40 bg-gradient-to-br from-emerald-50 via-emerald-100/50 to-white/80 dark:from-emerald-950/40 dark:via-emerald-900/20 dark:to-black/60 hover:border-emerald-500 dark:hover:border-emerald-400 transition-all shadow-xl hover:shadow-emerald-500/10 dark:hover:shadow-emerald-950/50 text-left active:scale-[0.99]"
         >
-          <div className="absolute -right-6 -bottom-6 opacity-10 group-hover:opacity-20 transition-opacity">
+          <div className="absolute -right-6 -bottom-6 opacity-5 dark:opacity-10 group-hover:opacity-10 dark:group-hover:opacity-20 transition-opacity">
             <ArrowUpRight className="h-40 w-40 text-emerald-400" />
           </div>
           <div className="relative z-10 flex items-center justify-between">
             <div className="space-y-1">
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-black uppercase tracking-wider">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20 dark:border-emerald-500/30 text-[10px] font-black uppercase tracking-wider">
                 🟢 Reposição / Compra
               </span>
-              <h2 className="text-2xl font-black text-white group-hover:text-emerald-300 transition-colors">
+              <h2 className="text-2xl font-black text-emerald-950 dark:text-white group-hover:text-emerald-700 dark:group-hover:text-emerald-300 transition-colors">
                 + REGISTRAR ENTRADA
               </h2>
-              <p className="text-xs text-zinc-400 max-w-sm">
+              <p className="text-xs text-emerald-800/70 dark:text-zinc-400 max-w-sm">
                 Adicionar mais cones de linha, rolos de entretela ou peças compradas ao saldo.
               </p>
             </div>
@@ -340,20 +340,20 @@ export const Estoque: React.FC = () => {
         {/* Botão Gigante 2: REGISTRAR SAÍDA / BAIXA */}
         <button
           onClick={() => openMovementModal('out')}
-          className="group relative overflow-hidden p-6 rounded-3xl border border-rose-500/40 bg-gradient-to-br from-rose-950/40 via-rose-900/20 to-black/60 hover:border-rose-400 transition-all shadow-xl hover:shadow-rose-950/50 text-left active:scale-[0.99]"
+          className="group relative overflow-hidden p-6 rounded-3xl border border-rose-500/40 bg-gradient-to-br from-rose-50 via-rose-100/50 to-white/80 dark:from-rose-950/40 dark:via-rose-900/20 dark:to-black/60 hover:border-rose-500 dark:hover:border-rose-400 transition-all shadow-xl hover:shadow-rose-500/10 dark:hover:shadow-rose-950/50 text-left active:scale-[0.99]"
         >
-          <div className="absolute -right-6 -bottom-6 opacity-10 group-hover:opacity-20 transition-opacity">
-            <ArrowDownRight className="h-40 w-40 text-rose-400" />
+          <div className="absolute -right-6 -bottom-6 opacity-5 dark:opacity-10 group-hover:opacity-10 dark:group-hover:opacity-20 transition-opacity">
+            <ArrowDownRight className="h-40 w-40 text-rose-500 dark:text-rose-400" />
           </div>
           <div className="relative z-10 flex items-center justify-between">
             <div className="space-y-1">
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-500/20 text-rose-400 border border-rose-500/30 text-[10px] font-black uppercase tracking-wider">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-500/10 dark:bg-rose-500/20 text-rose-700 dark:text-rose-400 border border-rose-500/20 dark:border-rose-500/30 text-[10px] font-black uppercase tracking-wider">
                 🔴 Consumo na Produção / Perda
               </span>
-              <h2 className="text-2xl font-black text-white group-hover:text-rose-300 transition-colors">
+              <h2 className="text-2xl font-black text-rose-950 dark:text-white group-hover:text-rose-700 dark:group-hover:text-rose-300 transition-colors">
                 - REGISTRAR SAÍDA / BAIXA
               </h2>
-              <p className="text-xs text-zinc-400 max-w-sm">
+              <p className="text-xs text-rose-800/70 dark:text-zinc-400 max-w-sm">
                 Dar baixa em materiais utilizados em um pedido, testes ou descartes.
               </p>
             </div>

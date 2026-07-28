@@ -35,9 +35,13 @@ export const Clientes: React.FC = () => {
   const fetchClients = async () => {
     setLoading(true);
     try {
+      const { data: authData } = await supabase.auth.getUser();
+      const userId = authData?.user?.id || '246afa29-5a6b-4671-ade1-eb7d19ab3a9d';
+
       const { data: clientsData, error: clientsError } = await supabase
         .from('clients')
         .select('*')
+        .eq('user_id', userId)
         .order('created_at', { ascending: false });
 
       if (clientsError) throw clientsError;
@@ -45,7 +49,8 @@ export const Clientes: React.FC = () => {
       // Busca ordens para calcular saldo pendente por cliente
       const { data: ordersData } = await supabase
         .from('orders')
-        .select('client_id, total_amount, payment_status');
+        .select('client_id, total_amount, payment_status')
+        .eq('user_id', userId);
 
       const pendingMap: Record<string, number> = {};
       (ordersData || []).forEach((o: any) => {

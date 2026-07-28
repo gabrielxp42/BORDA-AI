@@ -232,15 +232,7 @@ export const PedidosKanban: React.FC<PedidosKanbanProps> = ({
   };
 
   return (
-    <div className="space-y-6 h-full flex flex-col animate-in fade-in duration-300">
-      <div>
-        <h2 className="text-2xl font-black tracking-tight text-white flex items-center gap-3">
-          <ShoppingBag className="h-6 w-6 text-purple-400" /> Pedidos & Produção (Kanban Operacional)
-        </h2>
-        <p className="text-xs text-zinc-400 mt-1">
-          Arraste os cards ou use os atalhos rápidos para mover o pedido, imprimir recibo, enviar WhatsApp ou orçar.
-        </p>
-      </div>
+    <div className="space-y-4 h-full flex flex-col animate-in fade-in duration-300">
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 flex-1 pb-6">
         {columns.map((col) => {
@@ -248,7 +240,7 @@ export const PedidosKanban: React.FC<PedidosKanbanProps> = ({
           return (
             <div 
               key={col.id} 
-              className="glass-panel p-4 rounded-3xl space-y-3 flex flex-col min-h-[520px]"
+              className="glass-panel p-3 md:p-4 rounded-3xl space-y-3 flex flex-col min-h-[200px] md:min-h-[520px]"
               onDragOver={handleDragOver}
               onDrop={(e) => handleDrop(e, col.id)}
             >
