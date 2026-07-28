@@ -168,9 +168,14 @@ export const ProfileProvider: React.FC<{ children: React.ReactNode }> = ({ child
             setCustomProfiles(data.custom_profiles);
             localStorage.setItem(LOCAL_STORAGE_PROFILES_KEY, JSON.stringify(data.custom_profiles));
           }
+          // Se o PIN for retornado do banco (mesmo vazio), sincronizamos o estado
           if (data.master_pin) {
             setMasterPinState(data.master_pin);
             localStorage.setItem('borda-master-pin', data.master_pin);
+          } else {
+            // Se master_pin for null na nuvem, resetamos localmente
+            setMasterPinState(null);
+            localStorage.removeItem('borda-master-pin');
           }
         }
       } catch (err) {
