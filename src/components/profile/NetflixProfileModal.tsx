@@ -207,14 +207,14 @@ export const NetflixProfileModal: React.FC = () => {
   };
 
   const modalContent = (
-    <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/95 backdrop-blur-2xl p-4 overflow-y-auto">
+    <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-zinc-100/95 dark:bg-black/95 backdrop-blur-2xl p-4 overflow-y-auto">
       {/* Botão Fechar */}
       <button
         onClick={() => {
           setModalStep('select');
           closeProfileModal();
         }}
-        className="absolute top-6 right-6 p-3 rounded-full bg-white/10 hover:bg-white/20 text-zinc-300 hover:text-white transition-all shadow-lg z-10"
+        className="absolute top-6 right-6 p-3 rounded-full bg-zinc-200/50 dark:bg-white/10 hover:bg-zinc-300/50 dark:hover:bg-white/20 text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white transition-all shadow-lg z-10"
       >
         <X className="h-6 w-6" />
       </button>
@@ -228,13 +228,13 @@ export const NetflixProfileModal: React.FC = () => {
           >
             <Sparkles className="h-3.5 w-3.5" /> Seletor de Perfil & Permissões
           </div>
-          <h1 className="text-3xl sm:text-5xl font-black text-white tracking-tight">
+          <h1 className="text-3xl sm:text-5xl font-black text-zinc-900 dark:text-white tracking-tight">
             {modalStep === 'select' && 'Quem está usando?'}
             {modalStep === 'pin_input' && 'Digite o PIN de Segurança'}
             {modalStep === 'create_profile' && 'Criar Novo Perfil'}
             {modalStep === 'edit_permissions' && `Permissões de ${profileName}`}
           </h1>
-          <p className="text-sm text-zinc-400 max-w-md mx-auto">
+          <p className="text-sm text-zinc-500 dark:text-zinc-400 max-w-md mx-auto">
             {modalStep === 'select' && 'Selecione o perfil para carregar a interface e permissões correspondentes'}
             {modalStep === 'pin_input' && 'Insira a senha de 4 dígitos para autorizar este perfil'}
             {modalStep === 'create_profile' && 'Configure o nome, ícone e o controle de acesso para este perfil'}
@@ -256,8 +256,8 @@ export const NetflixProfileModal: React.FC = () => {
                     onClick={() => handleCardClick(p)}
                     className={`group relative overflow-hidden p-6 rounded-3xl border transition-all duration-300 cursor-pointer flex flex-col items-center text-center space-y-3 ${
                       isActive
-                        ? 'bg-black/60 shadow-2xl ring-2'
-                        : 'bg-white/5 border-white/10 hover:bg-white/10 hover:scale-105 shadow-xl'
+                        ? 'bg-white dark:bg-black/60 shadow-2xl ring-2'
+                        : 'bg-zinc-50 dark:bg-white/5 border-zinc-200 dark:border-white/10 hover:bg-zinc-100 dark:hover:bg-white/10 hover:scale-105 shadow-xl'
                     }`}
                     style={{
                       borderColor: isActive ? p.color : undefined,
@@ -279,7 +279,7 @@ export const NetflixProfileModal: React.FC = () => {
                       <button
                         type="button"
                         onClick={e => handleOpenEditPermissions(p, e)}
-                        className="absolute top-3 left-3 p-2 rounded-xl bg-white/10 hover:bg-white/20 text-zinc-300 hover:text-white transition-all shadow-md z-10"
+                        className="absolute top-3 left-3 p-2 rounded-xl bg-zinc-100 dark:bg-white/10 hover:bg-zinc-200 dark:hover:bg-white/20 text-zinc-500 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white transition-all shadow-md z-10"
                         title="Editar Permissões deste Perfil"
                       >
                         <Settings className="h-4 w-4 text-purple-300" />
@@ -292,7 +292,7 @@ export const NetflixProfileModal: React.FC = () => {
                         className="h-20 w-20 rounded-2xl p-1 shadow-xl group-hover:scale-110 transition-transform duration-300"
                         style={{ background: `linear-gradient(135deg, ${p.color} 0%, #8b5cf6 100%)` }}
                       >
-                        <div className="h-full w-full rounded-[14px] bg-[#0d0d14] flex items-center justify-center text-3xl">
+                        <div className="h-full w-full rounded-[14px] bg-white dark:bg-[#0d0d14] flex items-center justify-center text-3xl">
                           {p.icon}
                         </div>
                       </div>
@@ -308,10 +308,10 @@ export const NetflixProfileModal: React.FC = () => {
 
                     {/* Textos */}
                     <div className="space-y-0.5">
-                      <h3 className="text-lg font-black text-white group-hover:brightness-125 transition-colors truncate">
+                      <h3 className="text-lg font-black text-zinc-900 dark:text-white group-hover:brightness-125 transition-colors truncate">
                         {p.name}
                       </h3>
-                      <p className="text-[11px] text-zinc-400 leading-snug">
+                      <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-snug">
                         {p.permissions.canSeeFinancials ? '💰 Acesso Financeiro' : '🔒 Restrito (Sem Valores)'}
                       </p>
                     </div>
@@ -336,14 +336,14 @@ export const NetflixProfileModal: React.FC = () => {
                     resetForm();
                     setModalStep('create_profile');
                   }}
-                  className="group p-6 rounded-3xl border border-dashed border-white/20 bg-white/[0.02] hover:bg-purple-500/10 hover:border-purple-500/50 transition-all duration-300 cursor-pointer flex flex-col items-center justify-center text-center space-y-3 min-h-[220px]"
+                  className="group p-6 rounded-3xl border border-dashed border-zinc-300 dark:border-white/20 bg-zinc-50 dark:bg-white/[0.02] hover:bg-purple-50 dark:hover:bg-purple-500/10 hover:border-purple-300 dark:hover:border-purple-500/50 transition-all duration-300 cursor-pointer flex flex-col items-center justify-center text-center space-y-3 min-h-[220px]"
                 >
                   <div className="h-14 w-14 rounded-2xl bg-purple-500/10 border border-purple-500/30 flex items-center justify-center text-purple-400 group-hover:scale-110 transition-transform shadow-lg">
                     <Plus className="h-7 w-7" />
                   </div>
                   <div>
-                    <h3 className="text-base font-bold text-white">Criar Novo Perfil</h3>
-                    <p className="text-xs text-zinc-400 mt-1">Adicione uma nova função com permissões personalizadas</p>
+                    <h3 className="text-base font-bold text-zinc-800 dark:text-white">Criar Novo Perfil</h3>
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">Adicione uma nova função com permissões personalizadas</p>
                   </div>
                 </div>
               )}
@@ -353,7 +353,7 @@ export const NetflixProfileModal: React.FC = () => {
 
         {/* ─── PASSO 2: Entrada do PIN (Réplica iOS Passcode Liquid Glass 26.0) ─── */}
         {modalStep === 'pin_input' && (
-          <div className="w-full max-w-md backdrop-blur-2xl bg-zinc-950/85 p-6 sm:p-8 rounded-[36px] border border-white/15 shadow-[0_0_80px_rgba(0,0,0,0.8)] space-y-6 animate-in zoom-in-95 duration-200 text-center select-none">
+          <div className="w-full max-w-md backdrop-blur-2xl bg-zinc-100/90 dark:bg-zinc-950/85 p-6 sm:p-8 rounded-[36px] border border-zinc-300 dark:border-white/15 shadow-[0_0_80px_rgba(0,0,0,0.1)] dark:shadow-[0_0_80px_rgba(0,0,0,0.8)] space-y-6 animate-in zoom-in-95 duration-200 text-center select-none">
             <form onSubmit={e => { e.preventDefault(); submitPin(pin); }} className="space-y-6">
               
               {/* Header com ícone de cadeado flutuante */}
@@ -366,10 +366,10 @@ export const NetflixProfileModal: React.FC = () => {
                 </div>
 
                 <div className="space-y-1">
-                  <h3 className="text-xl sm:text-2xl font-black text-white tracking-tight">
+                  <h3 className="text-xl sm:text-2xl font-black text-zinc-900 dark:text-white tracking-tight">
                     {targetProfileId === 'chefe' && !hasPinSet ? 'Criar Senha de 4 Dígitos' : 'Código de Acesso'}
                   </h3>
-                  <p className="text-xs text-zinc-400 font-medium">
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400 font-medium">
                     {targetProfileId === 'chefe' && !hasPinSet ? 'Digite um código numérico de 4 dígitos' : 'Digite a senha do perfil para continuar'}
                   </p>
                 </div>
@@ -385,8 +385,8 @@ export const NetflixProfileModal: React.FC = () => {
                           error
                             ? 'bg-rose-500 border-rose-400 scale-125 shadow-[0_0_15px_rgba(244,63,94,0.8)] animate-shake'
                             : isFilled
-                            ? 'bg-white border-white scale-110 shadow-[0_0_15px_rgba(255,255,255,0.9)]'
-                            : 'bg-transparent border-white/30'
+                            ? 'bg-zinc-800 dark:bg-white border-zinc-800 dark:border-white scale-110 shadow-[0_0_15px_rgba(0,0,0,0.2)] dark:shadow-[0_0_15px_rgba(255,255,255,0.9)]'
+                            : 'bg-transparent border-zinc-400 dark:border-white/30'
                         }`}
                         style={isFilled && !error ? { backgroundColor: pc, borderColor: pc, boxShadow: `0 0 18px ${pc}` } : undefined}
                       />
@@ -425,13 +425,13 @@ export const NetflixProfileModal: React.FC = () => {
                         if (next.length === 4) submitPin(next);
                       }
                     }}
-                    className="w-16 h-16 sm:w-20 sm:h-20 rounded-full border border-white/15 bg-white/10 hover:bg-white/20 active:bg-white/35 active:scale-90 transition-all duration-150 backdrop-blur-2xl flex flex-col items-center justify-center shadow-lg cursor-pointer mx-auto aspect-square select-none group"
+                    className="w-16 h-16 sm:w-20 sm:h-20 rounded-full border border-zinc-300 dark:border-white/15 bg-zinc-200/50 dark:bg-white/10 hover:bg-zinc-300/50 dark:hover:bg-white/20 active:bg-zinc-400/50 dark:active:bg-white/35 active:scale-90 transition-all duration-150 backdrop-blur-2xl flex flex-col items-center justify-center shadow-lg cursor-pointer mx-auto aspect-square select-none group"
                   >
-                    <span className="text-2xl sm:text-3xl font-light text-white leading-none group-active:scale-95 transition-transform">
+                    <span className="text-2xl sm:text-3xl font-light text-zinc-800 dark:text-white leading-none group-active:scale-95 transition-transform">
                       {item.num}
                     </span>
                     {item.sub && (
-                      <span className="text-[8px] sm:text-[9px] font-bold text-white/50 tracking-[0.15em] leading-none mt-1 group-hover:text-white/80">
+                      <span className="text-[8px] sm:text-[9px] font-bold text-zinc-500 dark:text-white/50 tracking-[0.15em] leading-none mt-1 group-hover:text-zinc-700 dark:group-hover:text-white/80">
                         {item.sub}
                       </span>
                     )}
@@ -442,7 +442,7 @@ export const NetflixProfileModal: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => { setPin(''); setError(false); }}
-                  className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-white/5 hover:bg-white/15 active:bg-white/25 border border-white/10 backdrop-blur-2xl flex items-center justify-center text-zinc-400 hover:text-white active:scale-90 transition-all duration-150 shadow-md cursor-pointer mx-auto aspect-square select-none"
+                  className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-zinc-200/50 dark:bg-white/5 hover:bg-zinc-300/50 dark:hover:bg-white/15 active:bg-zinc-400/50 dark:active:bg-white/25 border border-zinc-300 dark:border-white/10 backdrop-blur-2xl flex items-center justify-center text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-white active:scale-90 transition-all duration-150 shadow-md cursor-pointer mx-auto aspect-square select-none"
                   title="Limpar"
                 >
                   <RotateCcw className="h-5 w-5" />
@@ -495,11 +495,11 @@ export const NetflixProfileModal: React.FC = () => {
 
         {/* ─── PASSO 3 & 4: Criar / Editar Permissões do Perfil ─── */}
         {(modalStep === 'create_profile' || modalStep === 'edit_permissions') && (
-          <div className="w-full max-w-2xl backdrop-blur-xl bg-zinc-900/90 p-6 md:p-8 rounded-3xl border border-white/15 shadow-2xl space-y-6 animate-in zoom-in-95 duration-200">
+          <div className="w-full max-w-2xl backdrop-blur-xl bg-zinc-100/95 dark:bg-zinc-900/90 p-6 md:p-8 rounded-3xl border border-zinc-300 dark:border-white/15 shadow-2xl space-y-6 animate-in zoom-in-95 duration-200">
             {/* Informações básicas do Perfil */}
             <div className="space-y-4">
-              <h3 className="text-base font-bold text-white flex items-center gap-2 border-b border-white/10 pb-3">
-                <Edit3 className="h-4 w-4 text-purple-400" /> Informações Básicas
+              <h3 className="text-base font-bold text-zinc-900 dark:text-white flex items-center gap-2 border-b border-zinc-200 dark:border-white/10 pb-3">
+                <Edit3 className="h-4 w-4 text-purple-500 dark:text-purple-400" /> Informações Básicas
               </h3>
 
               <div className="grid grid-cols-1 sm:grid-cols-12 gap-4">
@@ -510,7 +510,7 @@ export const NetflixProfileModal: React.FC = () => {
                     value={profileName}
                     onChange={e => setProfileName(e.target.value)}
                     placeholder="Ex: Acabamento & Embalagem"
-                    className="w-full px-4 py-3 rounded-xl bg-black/40 border border-white/10 text-white placeholder-zinc-500 text-sm focus:ring-2 focus:ring-purple-500 outline-none"
+                    className="w-full px-4 py-3 rounded-xl bg-white dark:bg-black/40 border border-zinc-300 dark:border-white/10 text-zinc-900 dark:text-white placeholder-zinc-400 dark:placeholder-zinc-500 text-sm focus:ring-2 focus:ring-purple-500 outline-none"
                   />
                 </div>
 
@@ -519,7 +519,7 @@ export const NetflixProfileModal: React.FC = () => {
                   <select
                     value={profileIcon}
                     onChange={e => setProfileIcon(e.target.value)}
-                    className="w-full px-3 py-3 rounded-xl bg-black/40 border border-white/10 text-white text-sm outline-none appearance-none cursor-pointer"
+                    className="w-full px-3 py-3 rounded-xl bg-white dark:bg-black/40 border border-zinc-300 dark:border-white/10 text-zinc-900 dark:text-white text-sm outline-none appearance-none cursor-pointer"
                   >
                     {EMOJI_OPTIONS.map(emoji => (
                       <option key={emoji} value={emoji}>{emoji} {emoji}</option>
@@ -546,15 +546,15 @@ export const NetflixProfileModal: React.FC = () => {
               {/* Configuração de PIN opcional */}
               <div className="p-4 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-between gap-4">
                 <div>
-                  <p className="text-sm font-bold text-white flex items-center gap-2">
-                    <Lock className="h-4 w-4 text-amber-400" /> Exigir PIN de Acesso
+                  <p className="text-sm font-bold text-zinc-800 dark:text-white flex items-center gap-2">
+                    <Lock className="h-4 w-4 text-amber-500 dark:text-amber-400" /> Exigir PIN de Acesso
                   </p>
-                  <p className="text-xs text-zinc-400 mt-0.5">Se ativado, o operador precisará digitar uma senha de 4 dígitos para entrar neste perfil.</p>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">Se ativado, o operador precisará digitar uma senha de 4 dígitos para entrar neste perfil.</p>
                 </div>
                 <button
                   type="button"
                   onClick={() => setUsePin(!usePin)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${usePin ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40' : 'bg-white/5 text-zinc-500 border border-white/10'}`}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${usePin ? 'bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400 border border-amber-300 dark:border-amber-500/40' : 'bg-zinc-200 dark:bg-white/5 text-zinc-600 dark:text-zinc-500 border border-zinc-300 dark:border-white/10'}`}
                 >
                   {usePin ? '🔒 Com PIN' : '⚡ Sem PIN'}
                 </button>
@@ -569,7 +569,7 @@ export const NetflixProfileModal: React.FC = () => {
                     value={profilePin}
                     onChange={e => setProfilePin(e.target.value.replace(/\D/g, ''))}
                     placeholder="1234"
-                    className="w-32 px-4 py-2.5 rounded-xl bg-black/40 border border-white/10 text-white text-center font-bold tracking-widest text-lg outline-none"
+                    className="w-32 px-4 py-2.5 rounded-xl bg-white dark:bg-black/40 border border-zinc-300 dark:border-white/10 text-zinc-900 dark:text-white text-center font-bold tracking-widest text-lg outline-none"
                   />
                 </div>
               )}
@@ -577,8 +577,8 @@ export const NetflixProfileModal: React.FC = () => {
 
             {/* SEÇÃO 1: Rotas Permitidas */}
             <div className="space-y-3">
-              <h3 className="text-base font-bold text-white flex items-center gap-2 border-b border-white/10 pb-3">
-                <LayoutDashboard className="h-4 w-4 text-cyan-400" /> Páginas & Telas Acessíveis
+              <h3 className="text-base font-bold text-zinc-900 dark:text-white flex items-center gap-2 border-b border-zinc-200 dark:border-white/10 pb-3">
+                <LayoutDashboard className="h-4 w-4 text-cyan-500 dark:text-cyan-400" /> Páginas & Telas Acessíveis
               </h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {ROUTE_LABELS.map(r => {
@@ -595,8 +595,8 @@ export const NetflixProfileModal: React.FC = () => {
                       }}
                       className={`flex items-center justify-between p-3 rounded-2xl border text-left transition-all ${
                         allowed
-                          ? 'bg-cyan-500/10 border-cyan-500/30 text-white'
-                          : 'bg-white/[0.02] border-white/5 text-zinc-500'
+                          ? 'bg-cyan-50 dark:bg-cyan-500/10 border-cyan-300 dark:border-cyan-500/30 text-cyan-900 dark:text-white'
+                          : 'bg-zinc-50 dark:bg-white/[0.02] border-zinc-200 dark:border-white/5 text-zinc-500 dark:text-zinc-500'
                       }`}
                     >
                       <div className="flex items-center gap-2.5">
@@ -616,8 +616,8 @@ export const NetflixProfileModal: React.FC = () => {
 
             {/* SEÇÃO 2: Funcionalidades Granulares */}
             <div className="space-y-3">
-              <h3 className="text-base font-bold text-white flex items-center gap-2 border-b border-white/10 pb-3">
-                <Shield className="h-4 w-4 text-emerald-400" /> Funcionalidades & Ações Permetidas
+              <h3 className="text-base font-bold text-zinc-900 dark:text-white flex items-center gap-2 border-b border-zinc-200 dark:border-white/10 pb-3">
+                <Shield className="h-4 w-4 text-emerald-500 dark:text-emerald-400" /> Funcionalidades & Ações Permetidas
               </h3>
               <div className="space-y-2">
                 {FEATURE_LABELS.map(f => {
@@ -634,12 +634,12 @@ export const NetflixProfileModal: React.FC = () => {
                       }}
                       className={`w-full flex items-center justify-between p-3.5 rounded-2xl border text-left transition-all ${
                         enabled
-                          ? 'bg-emerald-500/10 border-emerald-500/30 text-white'
-                          : 'bg-white/[0.02] border-white/5 text-zinc-500'
+                          ? 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-300 dark:border-emerald-500/30 text-emerald-900 dark:text-white'
+                          : 'bg-zinc-50 dark:bg-white/[0.02] border-zinc-200 dark:border-white/5 text-zinc-500 dark:text-zinc-500'
                       }`}
                     >
                       <div>
-                        <p className={`text-xs font-bold ${enabled ? 'text-white' : 'text-zinc-500'}`}>{f.label}</p>
+                        <p className={`text-xs font-bold ${enabled ? 'text-emerald-900 dark:text-white' : 'text-zinc-500'}`}>{f.label}</p>
                         <p className="text-[11px] text-zinc-400 mt-0.5">{f.description}</p>
                       </div>
                       {enabled ? (
@@ -654,7 +654,7 @@ export const NetflixProfileModal: React.FC = () => {
             </div>
 
             {/* Botões de Ação Responsivos */}
-            <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between pt-4 border-t border-white/10 gap-2.5 w-full">
+            <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between pt-4 border-t border-zinc-200 dark:border-white/10 gap-2.5 w-full">
               {editingProfileId ? (
                 <button
                   type="button"
@@ -664,7 +664,7 @@ export const NetflixProfileModal: React.FC = () => {
                       setModalStep('select');
                     }
                   }}
-                  className="w-full sm:w-auto px-4 py-3 rounded-2xl bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500/20 text-xs font-bold flex items-center justify-center gap-2 transition-all active:scale-95"
+                  className="w-full sm:w-auto px-4 py-3 rounded-2xl bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/30 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-500/20 text-xs font-bold flex items-center justify-center gap-2 transition-all active:scale-95"
                 >
                   <Trash2 className="h-4 w-4" /> Excluir Perfil
                 </button>
@@ -674,7 +674,7 @@ export const NetflixProfileModal: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setModalStep('select')}
-                  className="w-full sm:w-auto px-5 py-3 rounded-2xl bg-white/5 hover:bg-white/10 text-zinc-400 text-xs font-bold transition-all text-center"
+                  className="w-full sm:w-auto px-5 py-3 rounded-2xl bg-zinc-200/50 dark:bg-white/5 hover:bg-zinc-300/50 dark:hover:bg-white/10 text-zinc-600 dark:text-zinc-400 text-xs font-bold transition-all text-center"
                 >
                   Cancelar
                 </button>
