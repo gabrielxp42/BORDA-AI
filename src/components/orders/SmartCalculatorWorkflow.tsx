@@ -477,10 +477,15 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
             .eq('order_id', initialData.orderId);
         }
       } else {
+        const { data: authData } = await supabase.auth.getUser();
+        const userId = authData?.user?.id;
+        if (!userId) throw new Error('Usuário não autenticado. Faça login novamente.');
+
         const { data: insertedOrder, error: iError } = await supabase
           .from('orders')
           .insert({
             client_id: selectedClientId,
+            user_id: userId,
             status: 'pending',
             payment_status: isQuick ? 'pending' : paymentStatus,
             payment_method: isQuick ? 'pix' : paymentMethod,

@@ -74,7 +74,11 @@ export const CreateClientModal: React.FC<CreateClientModalProps> = ({
       let data: any;
       let dbError: any;
 
-      const payload = {
+      const { data: authData } = await supabase.auth.getUser();
+      const userId = authData?.user?.id;
+      if (!userId) throw new Error('Usuário não autenticado.');
+
+      const payload: any = {
         name: name.trim(),
         company_name: companyName.trim() || null,
         document: documentStr.trim() || null,
@@ -95,7 +99,7 @@ export const CreateClientModal: React.FC<CreateClientModalProps> = ({
       } else {
         const res = await supabase
           .from('clients')
-          .insert(payload)
+          .insert({ ...payload, user_id: userId })
           .select()
           .single();
         data = res.data;
