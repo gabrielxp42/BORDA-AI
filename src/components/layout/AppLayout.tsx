@@ -18,7 +18,8 @@ import {
   Plus,
   FileSpreadsheet,
   Zap,
-  Boxes
+  Boxes,
+  UserCircle2
 } from 'lucide-react';
 
 import { CreateOrderModal } from '../orders/CreateOrderModal';
@@ -80,6 +81,7 @@ export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children })
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
   const [isNotifOpen, setIsNotifOpen] = useState(false);
+  const [isMobileProfileOpen, setIsMobileProfileOpen] = useState(false);
   const [isDark, setIsDark] = useState<boolean>(() => {
     return localStorage.getItem('borda-theme') !== 'light';
   });
@@ -309,8 +311,76 @@ export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children })
               <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full animate-ping" style={{ backgroundColor: settings.primaryColor }} />
             </button>
 
-            <div 
-              className="h-8 px-3 rounded-2xl border flex items-center gap-2 text-xs font-bold"
+            {/* Mobile Profile Button + Dropdown */}
+            <div className="relative md:hidden">
+              <button
+                onClick={() => setIsMobileProfileOpen(prev => !prev)}
+                className={`p-2.5 rounded-2xl border transition-all ${
+                  isDark
+                    ? 'bg-white/5 border-white/10 text-zinc-300 hover:bg-white/10 hover:text-white'
+                    : 'bg-slate-200/60 border-slate-300 text-slate-600 hover:text-slate-900'
+                }`}
+                title="Perfil e configurações"
+              >
+                <UserCircle2 className="h-4 w-4" />
+              </button>
+
+              {/* Dropdown Menu */}
+              {isMobileProfileOpen && (
+                <>
+                  {/* Overlay para fechar ao clicar fora */}
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => setIsMobileProfileOpen(false)}
+                  />
+                  <div
+                    className={`absolute right-0 top-12 z-50 w-52 rounded-2xl border shadow-2xl overflow-hidden ${
+                      isDark ? 'bg-zinc-900 border-white/10' : 'bg-white border-slate-200'
+                    }`}
+                  >
+                    {/* User Info */}
+                    <div className={`px-4 py-3 border-b ${ isDark ? 'border-white/10' : 'border-slate-100' }`}>
+                      <div className="flex items-center gap-2.5">
+                        <div className="h-8 w-8 rounded-full flex items-center justify-center text-white text-xs font-black" style={{ backgroundColor: settings.primaryColor }}>
+                          {(user?.email || settings.systemName || 'U')[0].toUpperCase()}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className={`text-xs font-bold truncate ${ isDark ? 'text-white' : 'text-slate-900' }`}>
+                            {settings.systemName || 'Usuário'}
+                          </p>
+                          <p className="text-[10px] text-zinc-400 truncate">{user?.email || ''}</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Menu Items */}
+                    <div className="p-1.5 flex flex-col gap-0.5">
+                      <button
+                        onClick={() => { navigate('/configuracoes'); setIsMobileProfileOpen(false); }}
+                        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-sm font-medium transition-all ${
+                          isDark ? 'text-zinc-300 hover:bg-white/10 hover:text-white' : 'text-slate-700 hover:bg-slate-100'
+                        }`}
+                      >
+                        <Settings className="h-4 w-4" />
+                        Configurações
+                      </button>
+
+                      <button
+                        onClick={async () => { setIsMobileProfileOpen(false); await signOut(); }}
+                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-sm font-medium text-red-500 hover:bg-red-500/10 transition-all"
+                      >
+                        <LogOut className="h-4 w-4" />
+                        Sair da conta
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Status Wilcom Engine — only desktop */}
+            <div
+              className="h-8 px-3 rounded-2xl border hidden md:flex items-center gap-2 text-xs font-bold"
               style={{ backgroundColor: `${settings.primaryColor}15`, borderColor: `${settings.primaryColor}30`, color: settings.primaryColor }}
             >
               <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
