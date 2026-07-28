@@ -145,20 +145,36 @@ export const ProfileProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const [isProfileModalOpen, setIsProfileModalOpen] = useState<boolean>(false);
 
-  // Perfis customizados são gerenciados via localStorage
-  // (Supabase company_settings não possui coluna custom_profiles)
+  // Carrega perfis customizados e PIN mestre do Supabase na inicialização
   useEffect(() => {
-    // Garante que os perfis built-in sempre existam no array
-    setCustomProfiles(prev => {
-      const hasChefe = prev.some(p => p.id === 'chefe');
-      const hasProducao = prev.some(p => p.id === 'producao');
-      if (!hasChefe || !hasProducao) {
-        const merged = [...DEFAULT_PROFILES, ...prev.filter(p => p.id !== 'chefe' && p.id !== 'producao')];
-        localStorage.setItem(LOCAL_STORAGE_PROFILES_KEY, JSON.stringify(merged));
-        return merged;
+    const fetchCloudProfiles = async () => {
+      try {
+        const userId = localStorage.getItem('supabase.auth.token') 
+          ? JSON.parse(localStorage.getItem('supabase.auth.token') || '{}')?.currentSession?.user?.id 
+          : '246afa29-5a6b-4671-ade1-eb7d19ab3a9d';
+
+        const { data } = await supabase
+          .from('company_settings')
+          .select('custom_profiles, master_pin')
+          .eq('id', userId || '246afa29-5a6b-4671-ade1-eb7d19ab3a9d')
+          .maybeSingle();
+
+        if (data) {
+          if (data.custom_profiles && Array.isArray(data.custom_profiles) && data.custom_profiles.length > 0) {
+            setCustomProfiles(data.custom_profiles);
+            localStorage.setItem(LOCAL_STORAGE_PROFILES_KEY, JSON.stringify(data.custom_profiles));
+          }
+          if (data.master_pin) {
+            setMasterPinState(data.master_pin);
+            localStorage.setItem('borda-master-pin', data.master_pin);
+          }
+        }
+      } catch (err) {
+        console.warn('Erro ao carregar perfis da nuvem:', err);
       }
-      return prev;
-    });
+    };
+
+    fetchCloudProfiles();
   }, []);
 
   // Salva perfis no localStorage (company_settings no Supabase não possui coluna custom_profiles)
