@@ -302,18 +302,18 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
           </div>
 
           {/* Body */}
-          <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
+          <div className="flex-1 overflow-y-auto p-3 sm:p-6 space-y-4 sm:space-y-6 custom-scrollbar">
             {/* Informações do Cliente e Prazo */}
-            <div className="flex items-center justify-between p-4 rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10">
-              <div className="flex items-center gap-3">
-                <div className="p-2.5 rounded-xl bg-purple-500/10 text-purple-400">
-                  <User className="h-5 w-5" />
+            <div className="flex items-center justify-between p-3 sm:p-4 rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10">
+              <div className="flex items-center gap-2 sm:gap-3">
+                <div className="p-2 sm:p-2.5 rounded-xl bg-purple-500/10 text-purple-400">
+                  <User className="h-4 w-4 sm:h-5 sm:w-5" />
                 </div>
                 <div>
-                  <p className="text-xs font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400">Cliente</p>
-                  <h4 className="text-sm font-black text-slate-900 dark:text-white">{order.clients?.name || 'Cliente Geral'}</h4>
+                  <p className="text-[10px] sm:text-xs font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400">Cliente</p>
+                  <h4 className="text-xs sm:text-sm font-black text-slate-900 dark:text-white">{order.clients?.name || 'Cliente Geral'}</h4>
                   {order.clients?.phone && (
-                    <p className="text-xs text-slate-500 dark:text-zinc-400">📞 {order.clients.phone}</p>
+                    <p className="text-[10px] sm:text-xs text-slate-500 dark:text-zinc-400">📞 {order.clients.phone}</p>
                   )}
                 </div>
               </div>
@@ -510,12 +510,12 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
 
             {/* Resumo da Ordem de Produção / Resumo Financeiro */}
             <div className="space-y-3">
-              <div className="p-4 rounded-2xl bg-[#111118] border border-white/10 flex items-center justify-between">
+              <div className="p-3 sm:p-4 rounded-2xl bg-[#111118] border border-white/10 flex items-center justify-between">
                 <div>
-                  <span className="text-[10px] font-black uppercase tracking-widest text-purple-400">
+                  <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-purple-400">
                     {isUnlocked ? 'Valor Total do Pedido' : 'Resumo da Ordem de Produção'}
                   </span>
-                  <h3 className="text-2xl font-black text-slate-900 dark:text-white">
+                  <h3 className="text-lg sm:text-2xl font-black text-slate-900 dark:text-white leading-tight">
                     {isUnlocked ? (
                       new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(order.total_amount || 0)
                     ) : (
@@ -631,28 +631,28 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
           </div>
 
           {/* Footer Actions */}
-          <div className="p-4 sm:p-5 border-t border-slate-200 dark:border-white/10 flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between bg-slate-50 dark:bg-white/5 gap-4">
+          <div className="p-3 sm:p-5 border-t border-slate-200 dark:border-white/10 flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between bg-slate-50 dark:bg-white/5 gap-3 sm:gap-4">
             <div>
               {onDelete && (
                 <button
                   type="button"
                   onClick={() => onDelete(order.id)}
-                  className="w-full sm:w-auto px-4 py-3 sm:py-2.5 rounded-xl text-xs font-bold text-red-500 hover:bg-red-500/10 transition-colors flex items-center justify-center sm:justify-start gap-1.5"
+                  className="w-full sm:w-auto px-4 py-2.5 sm:py-3 rounded-xl text-xs font-bold text-red-500 hover:bg-red-500/10 transition-colors flex items-center justify-center sm:justify-start gap-1.5"
                 >
                   <Trash2 className="h-4 w-4" /> Excluir
                 </button>
               )}
             </div>
 
-            <div className="flex flex-1 flex-row items-center justify-end gap-3">
+            <div className="flex flex-1 flex-row items-stretch sm:items-center justify-end gap-2 sm:gap-3 flex-wrap sm:flex-nowrap">
               <button
                 type="button"
                 onClick={handleSendWhatsApp}
-                className="group flex items-center justify-center bg-emerald-600 hover:bg-emerald-500 text-white rounded-full transition-all duration-300 shadow-md h-12 px-3.5 hover:px-5 shrink-0"
+                className="group flex items-center justify-center bg-emerald-600 hover:bg-emerald-500 text-white rounded-full transition-all duration-300 shadow-md h-10 sm:h-12 px-3 sm:px-3.5 hover:px-4 sm:hover:px-5 shrink-0"
                 title="Compartilhar via WhatsApp"
               >
-                <Send className="h-5 w-5 shrink-0" />
-                <span className="max-w-0 overflow-hidden group-hover:max-w-[100px] group-hover:ml-2 text-xs font-bold whitespace-nowrap transition-all duration-300">
+                <Send className="h-4 w-4 sm:h-5 sm:w-5 shrink-0" />
+                <span className="max-w-0 overflow-hidden group-hover:max-w-[100px] group-hover:ml-2 text-[10px] sm:text-xs font-bold whitespace-nowrap transition-all duration-300">
                   WhatsApp
                 </span>
               </button>
@@ -664,20 +664,20 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                     onClose();
                     onPriceOrder(order);
                   }}
-                  className="flex-1 sm:flex-none px-6 py-3 rounded-2xl text-xs font-black uppercase tracking-wider text-white shadow-lg flex items-center justify-center gap-2 transition-all hover:opacity-90 active:scale-95 animate-bounce"
+                  className="flex-1 sm:flex-none px-3 sm:px-6 py-2.5 sm:py-3 rounded-2xl text-[10px] sm:text-xs font-black uppercase tracking-wider text-white shadow-lg flex items-center justify-center gap-1.5 sm:gap-2 transition-all hover:opacity-90 active:scale-95 animate-bounce"
                   style={{ backgroundColor: settings.primaryColor }}
                 >
-                  <DollarSign className="h-4 w-4" /> Precificar Pedido
+                  <DollarSign className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" /> <span className="truncate">Precificar</span>
                 </button>
               )}
 
               <button
                 type="button"
                 onClick={handlePrintPDF}
-                className="flex-1 sm:flex-none sm:px-6 py-3 rounded-2xl text-sm font-black text-white shadow-lg flex items-center justify-center gap-2 transition-all hover:opacity-90 active:scale-95"
+                className="flex-1 sm:flex-none px-3 sm:px-6 py-2.5 sm:py-3 rounded-2xl text-[11px] sm:text-sm font-black text-white shadow-lg flex items-center justify-center gap-1.5 sm:gap-2 transition-all hover:opacity-90 active:scale-95"
                 style={{ backgroundColor: settings.primaryColor }}
               >
-                <FileText className="h-5 w-5" /> Gerar Recibo
+                <FileText className="h-4 w-4 sm:h-5 sm:w-5 shrink-0" /> <span className="truncate">Recibo</span>
               </button>
             </div>
           </div>
