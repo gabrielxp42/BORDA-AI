@@ -103,6 +103,18 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
   const [entryMode, setEntryMode] = useState<'budget' | 'quick'>('quick');
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
 
+  // Multi-Item / Multi-Matriz Lista do Pedido
+  const [orderItemsList, setOrderItemsList] = useState<{
+    id: string;
+    matrixName: string;
+    stitchCount: number;
+    colorCount: number;
+    quantity: number;
+    unitPrice: number;
+    totalPrice: number;
+    matrixId?: string | null;
+  }[]>([]);
+
   // Compute live price
   const calculation = calculateEmbroideryPrice(
     {
@@ -147,6 +159,45 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
       return mins > 0 ? `${hrs}h ${mins}min` : `${hrs}h`;
     }
     return `${mins} min`;
+  };
+
+  // Cálculo total com suporte a múltiplos itens/matrizes no mesmo pedido
+  const totalOrderAmount = useMemo(() => {
+    if (orderItemsList.length > 0) {
+      return orderItemsList.reduce((acc, item) => acc + item.totalPrice, 0);
+    }
+    return calculation.totalPrice;
+  }, [orderItemsList, calculation.totalPrice]);
+
+  const handleAddItemToList = () => {
+    if (!matrixName.trim()) {
+      toast.error('Informe a descrição ou nome da matriz.');
+      return;
+    }
+
+    const newItem = {
+      id: `item_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+      matrixName: matrixName.trim(),
+      stitchCount: Number(stitchCount) || 0,
+      colorCount: Number(colorCount) || 1,
+      quantity: Number(quantity) || 1,
+      unitPrice: calculation.unitPrice,
+      totalPrice: calculation.totalPrice,
+      matrixId: selectedMatrixId
+    };
+
+    setOrderItemsList(prev => [...prev, newItem]);
+    toast.success(`Matriz "${matrixName}" adicionada à lista do pedido!`);
+
+    setMatrixName('');
+    setStitchCount('');
+    setColorCount('');
+    setLastParsedFile(null);
+    setSelectedMatrixId(null);
+  };
+
+  const handleRemoveItemFromList = (id: string) => {
+    setOrderItemsList(prev => prev.filter(i => i.id !== id));
   };
 
   // Populate initialData if provided
@@ -399,7 +450,7 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
             payment_status: isQuick ? 'pending' : paymentStatus,
             payment_method: isQuick ? 'pix' : paymentMethod,
             due_date: dueDate ? format(dueDate, 'yyyy-MM-dd') : null,
-            total_amount: isQuick ? 0 : calculation.totalPrice,
+            total_amount: isQuick ? 0 : totalOrderAmount,
             notes: notesWithMetadata
           })
           .select()
@@ -410,31 +461,49 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
 
       if (orderError) throw orderError;
 
-      // 3. Insert Order Item
+      // 3. Insert Order Items (Suporte a Múltiplas Matrizes em Lote)
       if (order) {
-        const { error: itemError } = await supabase
-          .from('order_items')
-          .insert({
+        if (orderItemsList.length > 0) {
+          const itemsPayload = orderItemsList.map(it => ({
             order_id: order.id,
-            matrix_id: selectedMatrixId || null,
-            description: isQuick 
-              ? `Entrada: ${matrixName}`
-              : `Bordado: ${matrixName} (${stitchCount.toLocaleString()} pts, ${colorCount || 1} cores)`,
-            quantity: Number(quantity) || 1,
-            unit_price: isQuick ? 0 : calculation.unitPrice,
-            total_price: isQuick ? 0 : calculation.totalPrice
-          });
+            matrix_id: it.matrixId || null,
+            description: `Bordado: ${it.matrixName} (${it.stitchCount.toLocaleString()} pts, ${it.colorCount} cores)`,
+            quantity: it.quantity,
+            unit_price: isQuick ? 0 : it.unitPrice,
+            total_price: isQuick ? 0 : it.totalPrice
+          }));
 
-        if (itemError) {
-          console.error('Error inserting order_item. Does matrix_id exist?', itemError);
-          // If it failed because of matrix_id, fallback without it
-          await supabase.from('order_items').insert({
-            order_id: order.id,
-            description: isQuick ? `Entrada: ${matrixName}` : `Bordado: ${matrixName} (${stitchCount.toLocaleString()} pts, ${colorCount || 1} cores)`,
-            quantity: Number(quantity) || 1,
-            unit_price: isQuick ? 0 : calculation.unitPrice,
-            total_price: isQuick ? 0 : calculation.totalPrice
-          });
+          const { error: batchErr } = await supabase
+            .from('order_items')
+            .insert(itemsPayload);
+
+          if (batchErr) {
+            console.error('Erro no insert de múltiplos itens:', batchErr);
+          }
+        } else if (matrixName.trim()) {
+          // Fallback para item único configurado nos inputs
+          const { error: itemError } = await supabase
+            .from('order_items')
+            .insert({
+              order_id: order.id,
+              matrix_id: selectedMatrixId || null,
+              description: isQuick 
+                ? `Entrada: ${matrixName}`
+                : `Bordado: ${matrixName} (${stitchCount.toLocaleString()} pts, ${colorCount || 1} cores)`,
+              quantity: Number(quantity) || 1,
+              unit_price: isQuick ? 0 : calculation.unitPrice,
+              total_price: isQuick ? 0 : calculation.totalPrice
+            });
+
+          if (itemError) {
+            await supabase.from('order_items').insert({
+              order_id: order.id,
+              description: isQuick ? `Entrada: ${matrixName}` : `Bordado: ${matrixName} (${stitchCount.toLocaleString()} pts, ${colorCount || 1} cores)`,
+              quantity: Number(quantity) || 1,
+              unit_price: isQuick ? 0 : calculation.unitPrice,
+              total_price: isQuick ? 0 : calculation.totalPrice
+            });
+          }
         }
       }
 
@@ -963,6 +1032,7 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
 
                   {/* Technical Values / Quick Entry Fields */}
                   {entryMode === 'budget' ? (
+                    <>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                       <div>
                         <label className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400 mb-1.5 block">
@@ -1023,6 +1093,18 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
                         </div>
                       </div>
                     </div>
+
+                    {/* Botão de Adicionar Esta Matriz ao Lote */}
+                    <button
+                      type="button"
+                      onClick={handleAddItemToList}
+                      disabled={!matrixName.trim() || !stitchCount}
+                      className="w-full py-3 px-4 rounded-2xl border border-purple-500/40 bg-purple-500/10 hover:bg-purple-500/20 text-purple-300 font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-md active:scale-95 disabled:opacity-40"
+                    >
+                      <Plus className="h-4 w-4" />
+                      <span>Adicionar Esta Matriz ao Lote do Pedido ({orderItemsList.length} adicionada(s))</span>
+                    </button>
+                    </>
                   ) : (
                     <div className="space-y-4">
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1065,6 +1147,61 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
                       </div>
                       
                       {renderAttachments()}
+                    </div>
+                  )}
+
+                  {/* Lista de Matrizes do Pedido (Múltiplas Matrizes no Mesmo Pedido) */}
+                  {orderItemsList.length > 0 && (
+                    <div className="pt-4 border-t border-slate-200 dark:border-white/10 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-xs font-black uppercase tracking-wider text-purple-400 flex items-center gap-2">
+                          <Layers className="h-4 w-4" /> Matrizes Incluídas neste Pedido ({orderItemsList.length})
+                        </h4>
+                        <span className="text-[11px] font-black text-emerald-400">
+                          Total Lote: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totalOrderAmount)}
+                        </span>
+                      </div>
+
+                      <div className="rounded-2xl border border-slate-200 dark:border-white/10 overflow-hidden bg-slate-50 dark:bg-black/40">
+                        <table className="w-full text-left text-xs">
+                          <thead className="bg-slate-200/50 dark:bg-white/10 text-slate-700 dark:text-zinc-300 font-bold uppercase text-[10px]">
+                            <tr>
+                              <th className="p-3">Matriz / Descrição</th>
+                              <th className="p-3 text-center">Qtd</th>
+                              <th className="p-3 text-right">Valor Unit.</th>
+                              <th className="p-3 text-right">Subtotal</th>
+                              <th className="p-3 text-center">Ação</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-200 dark:divide-white/5 font-medium text-slate-800 dark:text-zinc-200">
+                            {orderItemsList.map((it) => (
+                              <tr key={it.id}>
+                                <td className="p-3 font-bold">
+                                  <span className="block truncate">{it.matrixName}</span>
+                                  <span className="text-[10px] text-zinc-400 font-normal">🪡 {it.stitchCount.toLocaleString()} pts • 🎨 {it.colorCount} cores</span>
+                                </td>
+                                <td className="p-3 text-center font-bold">{it.quantity} un</td>
+                                <td className="p-3 text-right">
+                                  {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(it.unitPrice)}
+                                </td>
+                                <td className="p-3 text-right font-black text-purple-400">
+                                  {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(it.totalPrice)}
+                                </td>
+                                <td className="p-3 text-center">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveItemFromList(it.id)}
+                                    className="p-1.5 bg-red-500/10 text-red-400 rounded-lg hover:bg-red-500/20 transition-colors"
+                                    title="Remover matriz do pedido"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
                   )}
                 </div>

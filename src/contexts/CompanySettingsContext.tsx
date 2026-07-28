@@ -220,7 +220,7 @@ export const CompanySettingsProvider: React.FC<{ children: React.ReactNode }> = 
         logoUrl = supabase.storage.from('public_assets').getPublicUrl(filePath).data.publicUrl;
       }
 
-      // Objeto com apenas colunas válidas da tabela DB company_settings
+      // Objeto com todas as colunas válidas da tabela DB company_settings
       const dbPayload: Record<string, any> = {
         id: targetId,
         system_name: newSettings.systemName ?? settings.systemName,
@@ -229,12 +229,14 @@ export const CompanySettingsProvider: React.FC<{ children: React.ReactNode }> = 
         pix_key: newSettings.pixKey ?? settings.pixKey,
         phone: newSettings.phone ?? settings.phone,
         email: newSettings.email ?? settings.email,
+        address: newSettings.address ?? settings.address,
         document: newSettings.document ?? settings.document,
         working_hours: newSettings.workingHours ?? settings.workingHours,
         fiscal_api_token: newSettings.fiscalApiToken ?? settings.fiscalApiToken,
         fiscal_environment: newSettings.fiscalEnvironment ?? settings.fiscalEnvironment,
         machine_speed_spm: newSettings.machineSpeedSpm ?? settings.machineSpeedSpm,
         color_change_time_sec: newSettings.colorChangeTimeSec ?? settings.colorChangeTimeSec,
+        team_members: newSettings.teamMembers ?? settings.teamMembers,
         logo_url: logoUrl,
         updated_at: new Date().toISOString(),
       };
@@ -245,7 +247,9 @@ export const CompanySettingsProvider: React.FC<{ children: React.ReactNode }> = 
           .upsert(dbPayload);
 
         if (error) {
-          console.warn('⚠️ Supabase upsert avisou (continuando com salvo local):', error.message);
+          console.warn('⚠️ Supabase upsert avisou:', error.message);
+        } else {
+          console.log('✅ Configurações salvas no Supabase com sucesso!');
         }
       } catch (dbErr) {
         console.warn('⚠️ Erro de rede/schema Supabase (salvando em cache):', dbErr);

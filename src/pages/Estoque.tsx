@@ -8,6 +8,8 @@ import { StockItem, StockMovement, StockCategory, MovementType } from '@/types/s
 import { StockMovementModal } from '@/components/stock/StockMovementModal';
 import { CreateItemModal } from '@/components/stock/CreateItemModal';
 import { useCompanySettings } from '@/contexts/CompanySettingsContext';
+import { supabase } from '@/integrations/supabase/client';
+import { CloudSyncMigrationBanner } from '@/components/ui/CloudSyncMigrationBanner';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
@@ -147,7 +149,7 @@ export const Estoque: React.FC = () => {
   const [preselectedItem, setPreselectedItem] = useState<StockItem | null>(null);
   const [isCreateItemModalOpen, setIsCreateItemModalOpen] = useState(false);
 
-  // Persistence
+  // Persistence & Supabase Cloud Sync
   useEffect(() => {
     localStorage.setItem('borda_stock_items', JSON.stringify(items));
   }, [items]);
@@ -155,6 +157,41 @@ export const Estoque: React.FC = () => {
   useEffect(() => {
     localStorage.setItem('borda_stock_movements', JSON.stringify(movements));
   }, [movements]);
+
+  // Carrega insumos do Supabase na inicialização
+  useEffect(() => {
+    const fetchCloudStock = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('stock_items')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        if (data && data.length > 0 && !error) {
+          const loaded: StockItem[] = data.map((item: any) => ({
+            id: item.id,
+            name: item.name,
+            category: item.category as any,
+            unit: item.unit as any,
+            quantity: Number(item.quantity) || 0,
+            min_quantity: Number(item.min_quantity) || 0,
+            cost_price: Number(item.cost_price) || 0,
+            color_code: item.color_code,
+            location: item.location,
+            notes: item.notes,
+            created_at: item.created_at,
+            updated_at: item.updated_at,
+          }));
+          setItems(loaded);
+          localStorage.setItem('borda_stock_items', JSON.stringify(loaded));
+        }
+      } catch (err) {
+        console.warn('Erro ao carregar insumos da nuvem:', err);
+      }
+    };
+
+    fetchCloudStock();
+  }, []);
 
   // Open Movement Modal
   const openMovementModal = (type: MovementType, item?: StockItem) => {
@@ -264,6 +301,9 @@ export const Estoque: React.FC = () => {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
+
+      {/* Cloud Sync Migration Banner */}
+      <CloudSyncMigrationBanner />
       
       {/* Header da Página */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">

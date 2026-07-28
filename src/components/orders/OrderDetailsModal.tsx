@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import ReactDOM from 'react-dom';
-import { X, FileText, Printer, Send, Trash2, Calendar, User, Package, DollarSign, Layers, CheckCircle2, AlertCircle, Download } from 'lucide-react';
+import { X, FileText, Printer, Send, Trash2, Calendar, User, Package, DollarSign, Layers, CheckCircle2, AlertCircle, Download, Plus } from 'lucide-react';
 import { printOrderReceipt } from '@/services/pdfGenerator';
 import { sendEvolutionText, getWhatsAppWebLink, handleWhatsAppDispatchError } from '@/services/whatsappService';
 import { useBackgroundTasks } from '@/hooks/useBackgroundTasks';
@@ -33,6 +33,13 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
   const [matrixUrls, setMatrixUrls] = useState<Record<string, string>>({});
   const [matrixPreviews, setMatrixPreviews] = useState<Record<string, string>>({});
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+
+  // States para adicionar novo bordado ao pedido existente
+  const [showAddItemForm, setShowAddItemForm] = useState(false);
+  const [newItemDesc, setNewItemDesc] = useState('');
+  const [newItemQty, setNewItemQty] = useState<number>(1);
+  const [newItemPrice, setNewItemPrice] = useState<number>(0);
+  const [isAddingItem, setIsAddingItem] = useState(false);
 
   useEffect(() => {
     const fetchMatrixUrls = async () => {
@@ -190,6 +197,61 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
       });
 
       handleWhatsAppDispatchError(evoErr, phone, text, toastId);
+    }
+  };
+
+  const handleAddNewItem = async () => {
+    if (!newItemDesc.trim()) {
+      toast.error('Informe a descrição ou nome da matriz.');
+      return;
+    }
+
+    setIsAddingItem(true);
+    try {
+      const subtotal = (Number(newItemQty) || 1) * (Number(newItemPrice) || 0);
+
+      // 1. Inserir novo item na tabela order_items
+      const { data: insertedItem, error: itemErr } = await supabase
+        .from('order_items')
+        .insert({
+          order_id: order.id,
+          description: newItemDesc.trim(),
+          quantity: Number(newItemQty) || 1,
+          unit_price: Number(newItemPrice) || 0,
+          total_price: subtotal,
+        })
+        .select()
+        .single();
+
+      if (itemErr) throw itemErr;
+
+      // 2. Atualizar o valor total do pedido
+      const currentTotal = Number(order.total_amount) || 0;
+      const newTotal = currentTotal + subtotal;
+
+      await supabase
+        .from('orders')
+        .update({ total_amount: newTotal })
+        .eq('id', order.id);
+
+      // 3. Atualizar o estado local do pedido
+      if (order.order_items) {
+        order.order_items.push(insertedItem);
+      } else {
+        order.order_items = [insertedItem];
+      }
+      order.total_amount = newTotal;
+
+      toast.success(`Matriz "${newItemDesc}" adicionada ao pedido!`);
+      setNewItemDesc('');
+      setNewItemQty(1);
+      setNewItemPrice(0);
+      setShowAddItemForm(false);
+    } catch (err: any) {
+      console.error('Erro ao adicionar bordado ao pedido:', err);
+      toast.error('Erro ao salvar novo bordado: ' + (err.message || 'Falha de conexão'));
+    } finally {
+      setIsAddingItem(false);
     }
   };
 
@@ -362,6 +424,87 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                     )}
                   </tbody>
                 </table>
+              </div>
+
+              {/* Botão para Incluir Mais de 1 Bordado/Matriz no Pedido */}
+              <div className="pt-1">
+                {!showAddItemForm ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowAddItemForm(true)}
+                    className="w-full py-2.5 px-4 rounded-xl border border-dashed border-purple-500/40 bg-purple-500/10 hover:bg-purple-500/20 text-purple-300 text-xs font-bold transition-all flex items-center justify-center gap-2 active:scale-95"
+                  >
+                    <Plus className="h-4 w-4" />
+                    <span>Incluir Mais 1 Bordado / Matriz neste Pedido</span>
+                  </button>
+                ) : (
+                  <div className="p-4 rounded-2xl border border-purple-500/30 bg-purple-950/20 space-y-3 animate-in fade-in duration-200">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-black uppercase tracking-wider text-purple-300 flex items-center gap-1.5">
+                        <Plus className="h-4 w-4 text-purple-400" /> Adicionar Matriz ao Pedido
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setShowAddItemForm(false)}
+                        className="text-xs font-bold text-zinc-400 hover:text-white"
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div className="sm:col-span-2">
+                        <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block mb-1">
+                          Descrição / Nome da Matriz *
+                        </label>
+                        <input
+                          type="text"
+                          value={newItemDesc}
+                          onChange={e => setNewItemDesc(e.target.value)}
+                          placeholder="Ex: Logo Manga Direita (5.000 pts)"
+                          className="w-full bg-black/50 border border-white/10 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-purple-500"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block mb-1">
+                          Qtd Peças *
+                        </label>
+                        <input
+                          type="number"
+                          value={newItemQty}
+                          onChange={e => setNewItemQty(Number(e.target.value) || 1)}
+                          className="w-full bg-black/50 border border-white/10 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-purple-500 font-bold"
+                        />
+                      </div>
+
+                      {isUnlocked && (
+                        <div>
+                          <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block mb-1">
+                            Valor Unitário (R$)
+                          </label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={newItemPrice}
+                            onChange={e => setNewItemPrice(Number(e.target.value) || 0)}
+                            className="w-full bg-black/50 border border-white/10 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-purple-500 font-bold"
+                            placeholder="0.00"
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleAddNewItem}
+                      disabled={isAddingItem || !newItemDesc.trim()}
+                      className="w-full py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs uppercase tracking-wider transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                      {isAddingItem ? 'Adicionando...' : '📥 Confirmar e Adicionar Bordado'}
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
 
