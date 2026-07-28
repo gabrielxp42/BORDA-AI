@@ -104,12 +104,16 @@ export const Pedidos: React.FC = () => {
   const fetchOrders = async (showLoading = true) => {
     if (showLoading) setLoading(true);
     try {
+      const { data: authData } = await supabase.auth.getUser();
+      const userId = authData?.user?.id || '246afa29-5a6b-4671-ade1-eb7d19ab3a9d';
+
       const { data: ordersData, error: ordersError } = await supabase
         .from('orders')
         .select(`
           id, order_number, client_id, status, payment_status, payment_method, total_amount, due_date, notes, created_at,
           clients (name, phone, company_name)
         `)
+        .eq('user_id', userId)
         .order('created_at', { ascending: false });
 
       if (ordersError) throw ordersError;
