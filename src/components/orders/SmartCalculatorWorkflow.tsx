@@ -282,14 +282,49 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
   };
 
   const handleFileParsed = (meta: EmbroideryMetadata, file: File) => {
-    if (meta.name) setMatrixName(meta.name);
-    if (meta.stitches) setStitchCount(meta.stitches);
-    if (meta.colors) setColorCount(meta.colors);
-    setLastParsedFile(meta.name || 'Matriz Importada');
+    const parsedName = meta.name || file.name.replace(/\.[^/.]+$/, "");
+    const parsedStitches = meta.stitches || 0;
+    const parsedColors = meta.colors || 1;
+
+    setMatrixName(parsedName);
+    if (parsedStitches > 0) setStitchCount(parsedStitches);
+    if (parsedColors > 0) setColorCount(parsedColors);
+
+    setLastParsedFile(parsedName);
     setParsedMatrixFile(file);
     setParsedMatrixMeta(meta);
-    setIsDropzoneExpanded(false);
-    toast.success(`Arquivo carregado: ${meta.name || 'Matriz'}`);
+
+    // Auto-adiciona na lista de matrizes do pedido se tiver pontos válidos ou nome
+    if (parsedName) {
+      const calcPrice = calculateEmbroideryPrice(
+        {
+          stitchCount: Math.max(0, parsedStitches),
+          colorCount: Math.max(1, parsedColors),
+          quantity: Math.max(1, Number(quantity) || 1),
+          chargeColorAddon,
+          isBigHoop,
+          isReadyPiece,
+          isFringe,
+          hasLaser,
+          hasPress,
+        },
+        rules
+      );
+
+      const newItem = {
+        id: `item_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+        matrixName: parsedName,
+        stitchCount: parsedStitches,
+        colorCount: parsedColors,
+        quantity: Math.max(1, Number(quantity) || 1),
+        unitPrice: calcPrice.unitPrice,
+        totalPrice: calcPrice.totalPrice,
+        matrixId: null
+      };
+
+      setOrderItemsList(prev => [...prev, newItem]);
+      toast.success(`Matriz "${parsedName}" importada e adicionada ao pedido!`);
+    }
   };
 
   const handleFileAttachment = (e: React.ChangeEvent<HTMLInputElement>) => {

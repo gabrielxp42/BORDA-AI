@@ -22,35 +22,33 @@ export const EmbroideryDropzone: React.FC<EmbroideryDropzoneProps> = ({ onFilePa
     setIsDragging(false);
   }, []);
 
-  const processFile = async (file: File) => {
+  const processFiles = async (files: File[]) => {
     setIsParsing(true);
     setStatus('idle');
     setErrorMsg('');
 
     try {
-      const ext = file.name.toLowerCase().split('.').pop();
-      if (ext !== 'dst' && ext !== 'emb') {
-        throw new Error('Apenas arquivos .DST ou .EMB são suportados.');
+      for (const file of files) {
+        const ext = file.name.toLowerCase().split('.').pop();
+        if (ext !== 'dst' && ext !== 'emb') {
+          continue;
+        }
+
+        const meta = await parseEmbroideryFile(file);
+        
+        if (meta.format === 'emb' && !meta.stitches) {
+          setStatus('partial');
+        } else {
+          setStatus('success');
+        }
+        
+        onFileParsed(meta, file);
       }
 
-      // Adiciona um delay artificial de 1s para o usuário ver que o sistema está trabalhando
-      await new Promise(resolve => setTimeout(resolve, 1000));
-
-      const meta = await parseEmbroideryFile(file);
-      
-      if (meta.format === 'emb' && !meta.stitches) {
-        setStatus('partial'); // Status novo para EMB caso o hack falhe
-      } else {
-        setStatus('success');
-      }
-      
-      onFileParsed(meta, file);
-      
-      // Volta pro idle depois de 5 segundos para o usuário ter tempo de ler
       setTimeout(() => setStatus('idle'), 6000);
     } catch (err: any) {
       setStatus('error');
-      setErrorMsg(err.message || 'Erro ao ler arquivo.');
+      setErrorMsg(err.message || 'Erro ao ler arquivo(s).');
       setTimeout(() => setStatus('idle'), 5000);
     } finally {
       setIsParsing(false);
@@ -62,14 +60,13 @@ export const EmbroideryDropzone: React.FC<EmbroideryDropzoneProps> = ({ onFilePa
     setIsDragging(false);
     
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      processFile(e.dataTransfer.files[0]);
+      processFiles(Array.from(e.dataTransfer.files));
     }
   }, []);
 
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
-      processFile(e.target.files[0]);
-      // Reseta o input para permitir selecionar o mesmo arquivo seguidas vezes
+      processFiles(Array.from(e.target.files));
       e.target.value = '';
     }
   };
@@ -88,6 +85,7 @@ export const EmbroideryDropzone: React.FC<EmbroideryDropzoneProps> = ({ onFilePa
     >
       <input 
         type="file" 
+        multiple
         accept=".dst,.emb"
         onChange={handleFileInput}
         className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
