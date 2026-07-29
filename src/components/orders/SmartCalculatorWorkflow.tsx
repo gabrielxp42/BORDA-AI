@@ -112,6 +112,7 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
     quantity: number;
     unitPrice: number;
     totalPrice: number;
+    manualUnitPrice?: number;
     matrixId?: string | null;
   }[]>([]);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
@@ -181,14 +182,15 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
     if (selectedItemId && entryMode === 'budget') {
       setOrderItemsList(prev => prev.map(item => {
         if (item.id === selectedItemId) {
+          const finalUnitPrice = item.manualUnitPrice !== undefined ? item.manualUnitPrice : calculation.unitPrice;
           return {
             ...item,
             matrixName: matrixName,
             stitchCount: Number(stitchCount) || 0,
             colorCount: Number(colorCount) || 1,
             quantity: Number(quantity) || 1,
-            unitPrice: calculation.unitPrice,
-            totalPrice: calculation.totalPrice,
+            unitPrice: finalUnitPrice,
+            totalPrice: finalUnitPrice * (Number(quantity) || 1),
             matrixId: selectedMatrixId
           };
         }
@@ -196,6 +198,22 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
       }));
     }
   }, [matrixName, stitchCount, colorCount, quantity, calculation.unitPrice, calculation.totalPrice, selectedMatrixId, selectedItemId, entryMode]);
+
+  const handleManualPriceChange = (id: string, value: string) => {
+    const numValue = value === '' ? undefined : Number(value);
+    setOrderItemsList(prev => prev.map(item => {
+      if (item.id === id) {
+        const finalUnitPrice = numValue !== undefined ? numValue : (item.id === selectedItemId ? calculation.unitPrice : item.unitPrice);
+        return {
+          ...item,
+          manualUnitPrice: numValue,
+          unitPrice: finalUnitPrice,
+          totalPrice: finalUnitPrice * item.quantity
+        };
+      }
+      return item;
+    }));
+  };
 
   const handleSelectItem = (item: any) => {
     setSelectedItemId(item.id);
@@ -1230,7 +1248,22 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
                                   </td>
                                   <td className="p-2.5 text-center font-bold">{it.quantity} un</td>
                                   <td className="p-2.5 text-right text-slate-600 dark:text-zinc-400">
-                                    {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(it.unitPrice)}
+                                    <div className="flex items-center justify-end gap-1">
+                                      <span className="text-[10px] text-slate-400">R$</span>
+                                      <input
+                                        type="number"
+                                        step="0.01"
+                                        value={it.manualUnitPrice !== undefined ? it.manualUnitPrice : it.unitPrice}
+                                        onChange={(e) => handleManualPriceChange(it.id, e.target.value)}
+                                        onClick={(e) => e.stopPropagation()}
+                                        className={`w-16 bg-transparent border-b border-dashed text-right focus:outline-none transition-colors ${
+                                          it.manualUnitPrice !== undefined 
+                                            ? 'border-emerald-500 text-emerald-600 dark:text-emerald-400 font-bold' 
+                                            : 'border-slate-300 dark:border-white/20 hover:border-slate-400 dark:hover:border-white/40'
+                                        }`}
+                                        title={it.manualUnitPrice !== undefined ? "Valor editado manualmente" : "Clique para editar o valor"}
+                                      />
+                                    </div>
                                   </td>
                                   <td className="p-2.5 text-right font-black" style={{ color: settings.primaryColor }}>
                                     {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(it.totalPrice)}
