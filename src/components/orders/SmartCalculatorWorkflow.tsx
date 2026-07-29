@@ -830,7 +830,7 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
   );
 
   return (
-    <div className="w-full flex flex-col h-full">
+    <div className="w-full flex flex-col flex-1 min-h-0">
       {/* Workflow Header - Steps */}
       <div className="relative flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 px-4 sm:px-6 py-3.5 sm:py-4 border-b border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 pr-12 sm:pr-6 shrink-0">
         <div className="flex items-center gap-3">
@@ -928,7 +928,62 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
                   </div>
                 )}
 
-                {/* 1. Drag and Drop Parser */}
+                {/* 0. Lista de Matrizes do Pedido (Movida para o topo) */}
+                {orderItemsList.length > 0 && (
+                  <div className="glass-panel p-4 sm:p-5 rounded-3xl border border-purple-500/30 dark:border-purple-500/20 bg-purple-500/5 shadow-sm space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-xs font-black uppercase tracking-wider text-purple-600 dark:text-purple-400 flex items-center gap-2">
+                        <Layers className="h-4 w-4" /> Carrinho do Pedido ({orderItemsList.length} Matrizes)
+                      </h4>
+                      <span className="text-xs font-black text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-3 py-1 rounded-full">
+                        Total: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totalOrderAmount)}
+                      </span>
+                    </div>
+
+                    <div className="rounded-2xl border border-slate-200 dark:border-white/10 overflow-hidden bg-white dark:bg-black/40">
+                      <table className="w-full text-left text-xs">
+                        <thead className="bg-slate-100 dark:bg-white/5 text-slate-700 dark:text-zinc-300 font-bold uppercase text-[9px] tracking-wider">
+                          <tr>
+                            <th className="p-3">Matriz / Descrição</th>
+                            <th className="p-3 text-center">Qtd</th>
+                            <th className="p-3 text-right">Valor Unit.</th>
+                            <th className="p-3 text-right">Subtotal</th>
+                            <th className="p-3 text-center">Ação</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 dark:divide-white/5 font-medium text-slate-800 dark:text-zinc-200">
+                          {orderItemsList.map((it) => (
+                            <tr key={it.id} className="hover:bg-slate-50 dark:hover:bg-white/[0.02] transition-colors">
+                              <td className="p-3 font-bold">
+                                <span className="block truncate max-w-[150px] sm:max-w-[200px]">{it.matrixName}</span>
+                                <span className="text-[10px] text-zinc-500 font-normal">🪡 {it.stitchCount.toLocaleString()} pts • 🎨 {it.colorCount} cores</span>
+                              </td>
+                              <td className="p-3 text-center font-bold">{it.quantity} un</td>
+                              <td className="p-3 text-right text-slate-600 dark:text-zinc-400">
+                                {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(it.unitPrice)}
+                              </td>
+                              <td className="p-3 text-right font-black text-purple-600 dark:text-purple-400">
+                                {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(it.totalPrice)}
+                              </td>
+                              <td className="p-3 text-center">
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveItemFromList(it.id)}
+                                  className="p-1.5 bg-red-500/10 text-red-500 dark:text-red-400 rounded-lg hover:bg-red-500/20 transition-colors"
+                                  title="Remover matriz do pedido"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* 1. Drag and Drop Parser (Leitor Automático) */}
                 {entryMode === 'budget' && (
                   <div className="glass-panel rounded-3xl border border-slate-200 dark:border-white/10 overflow-hidden shadow-sm">
                     <button
@@ -942,18 +997,18 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
                         </div>
                         <div>
                           <h3 className="text-xs font-black uppercase tracking-widest text-slate-900 dark:text-white flex items-center gap-2">
-                            <span>ADICIONAR O ARQUIVO MATRIZ</span>
+                            <span>LEITOR AUTOMÁTICO DE MATRIZ</span>
                             <span className="text-[10px] bg-purple-500/20 text-purple-400 px-2 py-0.5 rounded-full font-mono normal-case">.EMB / .DST</span>
                           </h3>
                           <p className="text-[11px] text-slate-500 dark:text-zinc-400 mt-0.5">
-                            {lastParsedFile ? `Matriz ativa: ${lastParsedFile}` : 'Carregue o arquivo da matriz (.EMB / .DST) para preencher automaticamente os pontos, cores, dimensões e tempo estimado de máquina.'}
+                            {lastParsedFile ? `Carregado: ${lastParsedFile}` : 'Carregue o arquivo para preencher pontos e cores sozinho.'}
                           </p>
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
                         {lastParsedFile && (
                           <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 flex items-center gap-1">
-                            <FileCheck className="h-3.5 w-3.5" /> Processado
+                            <FileCheck className="h-3.5 w-3.5" /> Ok
                           </span>
                         )}
                         <ChevronDown className={`h-4 w-4 text-slate-400 transition-transform ${isDropzoneExpanded ? 'rotate-180' : ''}`} />
@@ -965,7 +1020,7 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
                       </div>
                     )}
 
-                    {/* Save to Library Toggle — aparece depois de um arquivo ser carregado */}
+                    {/* Save to Library Toggle */}
                     {lastParsedFile && (
                       <div className="px-4 py-3 border-t border-slate-200 dark:border-white/10 flex items-center justify-between bg-slate-50/50 dark:bg-white/[0.02]">
                         <div className="flex items-center gap-2.5">
@@ -974,7 +1029,7 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
                           </div>
                           <div>
                             <p className="text-xs font-black text-slate-800 dark:text-white">Salvar na Biblioteca do Cliente</p>
-                            <p className="text-[10px] text-slate-400 dark:text-zinc-500">{saveToLibrary ? 'O arquivo .DST/.EMB será arquivado na Biblioteca' : 'Somente para uso neste pedido'}</p>
+                            <p className="text-[10px] text-slate-400 dark:text-zinc-500">{saveToLibrary ? 'O arquivo será arquivado' : 'Somente para este pedido'}</p>
                           </div>
                         </div>
                         <button
@@ -1142,10 +1197,10 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
                       type="button"
                       onClick={handleAddItemToList}
                       disabled={!matrixName.trim() || !stitchCount}
-                      className="w-full py-3 px-4 rounded-2xl border border-purple-500/40 bg-purple-500/10 hover:bg-purple-500/20 text-purple-300 font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-md active:scale-95 disabled:opacity-40"
+                      className="w-full py-3 px-4 rounded-2xl border border-emerald-500/40 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-md active:scale-95 disabled:opacity-40"
                     >
                       <Plus className="h-4 w-4" />
-                      <span>Adicionar Esta Matriz ao Lote do Pedido ({orderItemsList.length} adicionada(s))</span>
+                      <span>➕ INCLUIR ESTA MATRIZ NO CARRINHO</span>
                     </button>
                     </>
                   ) : (
@@ -1193,61 +1248,7 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
                     </div>
                   )}
 
-                  {/* Lista de Matrizes do Pedido (Múltiplas Matrizes no Mesmo Pedido) */}
-                  {orderItemsList.length > 0 && (
-                    <div className="pt-4 border-t border-slate-200 dark:border-white/10 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <h4 className="text-xs font-black uppercase tracking-wider text-purple-400 flex items-center gap-2">
-                          <Layers className="h-4 w-4" /> Matrizes Incluídas neste Pedido ({orderItemsList.length})
-                        </h4>
-                        <span className="text-[11px] font-black text-emerald-400">
-                          Total Lote: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totalOrderAmount)}
-                        </span>
-                      </div>
-
-                      <div className="rounded-2xl border border-slate-200 dark:border-white/10 overflow-hidden bg-slate-50 dark:bg-black/40">
-                        <table className="w-full text-left text-xs">
-                          <thead className="bg-slate-200/50 dark:bg-white/10 text-slate-700 dark:text-zinc-300 font-bold uppercase text-[10px]">
-                            <tr>
-                              <th className="p-3">Matriz / Descrição</th>
-                              <th className="p-3 text-center">Qtd</th>
-                              <th className="p-3 text-right">Valor Unit.</th>
-                              <th className="p-3 text-right">Subtotal</th>
-                              <th className="p-3 text-center">Ação</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-200 dark:divide-white/5 font-medium text-slate-800 dark:text-zinc-200">
-                            {orderItemsList.map((it) => (
-                              <tr key={it.id}>
-                                <td className="p-3 font-bold">
-                                  <span className="block truncate">{it.matrixName}</span>
-                                  <span className="text-[10px] text-zinc-400 font-normal">🪡 {it.stitchCount.toLocaleString()} pts • 🎨 {it.colorCount} cores</span>
-                                </td>
-                                <td className="p-3 text-center font-bold">{it.quantity} un</td>
-                                <td className="p-3 text-right">
-                                  {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(it.unitPrice)}
-                                </td>
-                                <td className="p-3 text-right font-black text-purple-400">
-                                  {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(it.totalPrice)}
-                                </td>
-                                <td className="p-3 text-center">
-                                  <button
-                                    type="button"
-                                    onClick={() => handleRemoveItemFromList(it.id)}
-                                    className="p-1.5 bg-red-500/10 text-red-400 rounded-lg hover:bg-red-500/20 transition-colors"
-                                    title="Remover matriz do pedido"
-                                  >
-                                    <Trash2 className="h-3.5 w-3.5" />
-                                  </button>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  )}
-                </div>
+                  {/* Observações Removidas Lista Inferior */}
 
                 {/* 3. Tactile Addons */}
                 {entryMode === 'budget' && (
