@@ -114,6 +114,7 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
     totalPrice: number;
     matrixId?: string | null;
   }[]>([]);
+  const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
 
   // Compute live price
   const calculation = calculateEmbroideryPrice(
@@ -163,44 +164,81 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
 
   // Cálculo total com suporte a múltiplos itens/matrizes no mesmo pedido
   const totalOrderAmount = useMemo(() => {
-    if (orderItemsList.length > 0) {
-      const listTotal = orderItemsList.reduce((acc, item) => acc + item.totalPrice, 0);
-      const currentTotal = matrixName.trim() ? calculation.totalPrice : 0;
-      return listTotal + currentTotal;
-    }
-    return calculation.totalPrice;
-  }, [orderItemsList, calculation.totalPrice, matrixName]);
+    return orderItemsList.reduce((acc, item) => acc + item.totalPrice, 0);
+  }, [orderItemsList]);
 
-  const handleAddItemToList = () => {
-    if (!matrixName.trim()) {
-      toast.error('Informe a descrição ou nome da matriz.');
-      return;
+  // Master-Detail Sync Effect (Syncs form inputs to the currently selected item)
+  useEffect(() => {
+    if (selectedItemId && entryMode === 'budget') {
+      setOrderItemsList(prev => prev.map(item => {
+        if (item.id === selectedItemId) {
+          return {
+            ...item,
+            matrixName: matrixName,
+            stitchCount: Number(stitchCount) || 0,
+            colorCount: Number(colorCount) || 1,
+            quantity: Number(quantity) || 1,
+            unitPrice: calculation.unitPrice,
+            totalPrice: calculation.totalPrice,
+            matrixId: selectedMatrixId
+          };
+        }
+        return item;
+      }));
     }
+  }, [matrixName, stitchCount, colorCount, quantity, calculation.unitPrice, calculation.totalPrice, selectedMatrixId, selectedItemId, entryMode]);
 
+  const handleSelectItem = (item: any) => {
+    setSelectedItemId(item.id);
+    setMatrixName(item.matrixName);
+    setStitchCount(item.stitchCount ? item.stitchCount : '');
+    setColorCount(item.colorCount ? item.colorCount : '');
+    setQuantity(item.quantity);
+    setSelectedMatrixId(item.matrixId || null);
+  };
+
+  const handleAddNewItem = () => {
     const newItem = {
       id: `item_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
-      matrixName: matrixName.trim(),
-      stitchCount: Number(stitchCount) || 0,
-      colorCount: Number(colorCount) || 1,
-      quantity: Number(quantity) || 1,
-      unitPrice: calculation.unitPrice,
-      totalPrice: calculation.totalPrice,
-      matrixId: selectedMatrixId
+      matrixName: '',
+      stitchCount: 0,
+      colorCount: 1,
+      quantity: 1,
+      unitPrice: 0,
+      totalPrice: 0,
+      matrixId: null
     };
-
     setOrderItemsList(prev => [...prev, newItem]);
-    toast.success(`Matriz "${matrixName}" adicionada à lista do pedido!`);
-
-    setMatrixName('');
-    setStitchCount('');
-    setColorCount('');
+    handleSelectItem(newItem);
     setLastParsedFile(null);
-    setSelectedMatrixId(null);
   };
 
-  const handleRemoveItemFromList = (id: string) => {
-    setOrderItemsList(prev => prev.filter(i => i.id !== id));
+  const handleRemoveItemFromList = (e: React.MouseEvent, id: string) => {
+    e.stopPropagation(); // Previne selecionar a linha ao clicar em remover
+    setOrderItemsList(prev => {
+      const filtered = prev.filter(i => i.id !== id);
+      // Se removeu o item selecionado, seleciona o próximo disponível ou limpa
+      if (id === selectedItemId) {
+        if (filtered.length > 0) {
+          // Precisamos agendar a seleção do novo item no próximo tick, senão o setState conflita
+          setTimeout(() => handleSelectItem(filtered[0]), 0);
+        } else {
+          setSelectedItemId(null);
+          setMatrixName('');
+          setStitchCount('');
+          setColorCount('');
+        }
+      }
+      return filtered;
+    });
   };
+
+  // Ensure there's always at least one item when starting a budget
+  useEffect(() => {
+    if (entryMode === 'budget' && orderItemsList.length === 0 && !initialData?.orderId) {
+      handleAddNewItem();
+    }
+  }, [entryMode, orderItemsList.length, initialData]);
 
   // Populate initialData if provided
   useEffect(() => {
@@ -273,6 +311,11 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
   };
 
   const handleSelectSavedMatrix = (matrix: any) => {
+    // Se o usuário selecionou uma matriz do histórico, atualizamos o carrinho ou criamos um item se não houver selecionado
+    if (!selectedItemId) {
+      handleAddNewItem(); // Vai preencher no tick seguinte devido ao React, então forçamos a atualização manual abaixo
+    }
+    
     setMatrixName(matrix.name);
     setSelectedMatrixId(matrix.id);
     const ver = matrix.current_version;
@@ -313,8 +356,7 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
         rules
       );
 
-      const newItem = {
-        id: `item_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+      const newItemData = {
         matrixName: parsedName,
         stitchCount: parsedStitches,
         colorCount: parsedColors,
@@ -324,8 +366,25 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
         matrixId: null
       };
 
-      setOrderItemsList(prev => [...prev, newItem]);
-      toast.success(`Matriz "${parsedName}" importada e adicionada ao pedido!`);
+      setOrderItemsList(prev => {
+        // Se o item selecionado atual estiver em branco, vamos sobrescrevê-lo
+        const currentItem = prev.find(i => i.id === selectedItemId);
+        if (currentItem && !currentItem.matrixName && !currentItem.stitchCount) {
+          const updatedItem = { ...currentItem, ...newItemData };
+          setTimeout(() => handleSelectItem(updatedItem), 0);
+          return prev.map(i => i.id === selectedItemId ? updatedItem : i);
+        }
+        
+        // Senão, cria um novo item
+        const newItem = {
+          id: `item_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+          ...newItemData
+        };
+        setTimeout(() => handleSelectItem(newItem), 0);
+        return [...prev, newItem];
+      });
+      
+      toast.success(`Matriz "${parsedName}" importada e pronta para edição!`);
     }
   };
 
@@ -463,7 +522,7 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
             payment_status: paymentStatus,
             payment_method: paymentMethod,
             due_date: dueDate ? format(dueDate, 'yyyy-MM-dd') : null,
-            total_amount: calculation.totalPrice,
+            total_amount: isQuick ? 0 : totalOrderAmount,
             notes: notesWithMetadata
           })
           .eq('id', initialData.orderId)
@@ -506,8 +565,10 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
 
       // 3. Insert Order Items (Suporte a Múltiplas Matrizes em Lote)
       if (order) {
-        if (orderItemsList.length > 0) {
-          const itemsPayload = orderItemsList.map(it => ({
+        const validItems = orderItemsList.filter(it => it.matrixName && it.matrixName.trim() !== '');
+        
+        if (validItems.length > 0) {
+          const itemsPayload = validItems.map(it => ({
             order_id: order.id,
             matrix_id: it.matrixId || null,
             description: `Bordado: ${it.matrixName} (${it.stitchCount.toLocaleString()} pts, ${it.colorCount} cores)`,
@@ -928,16 +989,18 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
                   </div>
                 )}
 
-                {/* 0. Lista de Matrizes do Pedido (Movida para o topo) */}
-                {orderItemsList.length > 0 && (
+                {/* 0. Lista de Matrizes do Pedido (Somente no Orçamento Completo) */}
+                {entryMode === 'budget' && orderItemsList.length > 0 && (
                   <div className="glass-panel p-4 sm:p-5 rounded-3xl border border-purple-500/30 dark:border-purple-500/20 bg-purple-500/5 shadow-sm space-y-3">
                     <div className="flex items-center justify-between">
                       <h4 className="text-xs font-black uppercase tracking-wider text-purple-600 dark:text-purple-400 flex items-center gap-2">
                         <Layers className="h-4 w-4" /> Carrinho do Pedido ({orderItemsList.length} Matrizes)
                       </h4>
-                      <span className="text-xs font-black text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-3 py-1 rounded-full">
-                        Total: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totalOrderAmount)}
-                      </span>
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs font-black text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/20">
+                          Total: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totalOrderAmount)}
+                        </span>
+                      </div>
                     </div>
 
                     <div className="rounded-2xl border border-slate-200 dark:border-white/10 overflow-hidden bg-white dark:bg-black/40">
@@ -953,9 +1016,19 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
                         </thead>
                         <tbody className="divide-y divide-slate-100 dark:divide-white/5 font-medium text-slate-800 dark:text-zinc-200">
                           {orderItemsList.map((it) => (
-                            <tr key={it.id} className="hover:bg-slate-50 dark:hover:bg-white/[0.02] transition-colors">
+                            <tr 
+                              key={it.id} 
+                              onClick={() => handleSelectItem(it)}
+                              className={`cursor-pointer transition-colors ${
+                                selectedItemId === it.id 
+                                  ? 'bg-purple-500/10 dark:bg-purple-500/20 border-l-4 border-purple-500' 
+                                  : 'hover:bg-slate-50 dark:hover:bg-white/[0.02] border-l-4 border-transparent'
+                              }`}
+                            >
                               <td className="p-3 font-bold">
-                                <span className="block truncate max-w-[150px] sm:max-w-[200px]">{it.matrixName}</span>
+                                <span className="block truncate max-w-[150px] sm:max-w-[200px]">
+                                  {it.matrixName || <span className="text-zinc-400 italic font-normal">Nome não informado</span>}
+                                </span>
                                 <span className="text-[10px] text-zinc-500 font-normal">🪡 {it.stitchCount.toLocaleString()} pts • 🎨 {it.colorCount} cores</span>
                               </td>
                               <td className="p-3 text-center font-bold">{it.quantity} un</td>
@@ -968,7 +1041,7 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
                               <td className="p-3 text-center">
                                 <button
                                   type="button"
-                                  onClick={() => handleRemoveItemFromList(it.id)}
+                                  onClick={(e) => handleRemoveItemFromList(e, it.id)}
                                   className="p-1.5 bg-red-500/10 text-red-500 dark:text-red-400 rounded-lg hover:bg-red-500/20 transition-colors"
                                   title="Remover matriz do pedido"
                                 >
@@ -980,12 +1053,22 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
                         </tbody>
                       </table>
                     </div>
+                    
+                    {/* Botão Adicionar Mais Matrizes */}
+                    <button
+                      type="button"
+                      onClick={handleAddNewItem}
+                      className="w-full py-2.5 rounded-xl border border-dashed border-emerald-500/40 bg-emerald-500/5 hover:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-sm"
+                    >
+                      <Plus className="h-4 w-4" />
+                      ADICIONAR NOVA MATRIZ
+                    </button>
                   </div>
                 )}
 
-                {/* 1. Drag and Drop Parser (Leitor Automático) */}
-                {entryMode === 'budget' && (
-                  <div className="glass-panel rounded-3xl border border-slate-200 dark:border-white/10 overflow-hidden shadow-sm">
+                {/* 1. Drag and Drop Parser (Mostra apenas se o carrinho estiver vazio ou no item em branco) */}
+                {entryMode === 'budget' && (!orderItemsList.length || (selectedItemId && !matrixName && !stitchCount)) && (
+                  <div className="glass-panel rounded-3xl border border-slate-200 dark:border-white/10 overflow-hidden shadow-sm animate-in fade-in zoom-in-95 duration-200">
                     <button
                       type="button"
                       onClick={() => setIsDropzoneExpanded(!isDropzoneExpanded)}
@@ -1001,7 +1084,7 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
                             <span className="text-[10px] bg-purple-500/20 text-purple-400 px-2 py-0.5 rounded-full font-mono normal-case">.EMB / .DST</span>
                           </h3>
                           <p className="text-[11px] text-slate-500 dark:text-zinc-400 mt-0.5">
-                            {lastParsedFile ? `Carregado: ${lastParsedFile}` : 'Carregue o arquivo para preencher pontos e cores sozinho.'}
+                            {lastParsedFile ? `Carregado: ${lastParsedFile}` : 'Arraste um arquivo para adicionar ao carrinho.'}
                           </p>
                         </div>
                       </div>
@@ -1019,7 +1102,7 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
                         <EmbroideryDropzone onFileParsed={handleFileParsed} />
                       </div>
                     )}
-
+                    
                     {/* Save to Library Toggle */}
                     {lastParsedFile && (
                       <div className="px-4 py-3 border-t border-slate-200 dark:border-white/10 flex items-center justify-between bg-slate-50/50 dark:bg-white/[0.02]">
@@ -1048,10 +1131,11 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
                 )}
 
                 {/* 2. Client & Technical details */}
-                <div className="glass-panel p-6 rounded-3xl border border-slate-200 dark:border-white/10 space-y-5 relative z-20">
-                  <h3 className="text-xs font-black uppercase tracking-widest flex items-center gap-2" style={{ color: settings.primaryColor }}>
-                    <Layers className="h-4 w-4" /> Configuração do Serviço
-                  </h3>
+                {(!orderItemsList.length || selectedItemId) && (
+                  <div className="glass-panel p-6 rounded-3xl border border-slate-200 dark:border-white/10 space-y-5 relative z-20 animate-in fade-in zoom-in-95 duration-200">
+                    <h3 className="text-xs font-black uppercase tracking-widest flex items-center gap-2" style={{ color: settings.primaryColor }}>
+                      <Layers className="h-4 w-4" /> Configuração do Item Selecionado
+                    </h3>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
@@ -1192,16 +1276,6 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
                       </div>
                     </div>
 
-                    {/* Botão de Adicionar Esta Matriz ao Lote */}
-                    <button
-                      type="button"
-                      onClick={handleAddItemToList}
-                      disabled={!matrixName.trim() || !stitchCount}
-                      className="w-full py-3 px-4 rounded-2xl border border-emerald-500/40 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-md active:scale-95 disabled:opacity-40"
-                    >
-                      <Plus className="h-4 w-4" />
-                      <span>➕ INCLUIR ESTA MATRIZ NO CARRINHO</span>
-                    </button>
                     </>
                   ) : (
                     <div className="space-y-4">
@@ -1249,6 +1323,7 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
                   )}
 
                   {/* Observações Removidas Lista Inferior */}
+                </div>
 
                 {/* 3. Tactile Addons */}
                 {entryMode === 'budget' && (
