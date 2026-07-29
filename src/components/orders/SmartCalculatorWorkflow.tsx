@@ -164,10 +164,12 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
   // Cálculo total com suporte a múltiplos itens/matrizes no mesmo pedido
   const totalOrderAmount = useMemo(() => {
     if (orderItemsList.length > 0) {
-      return orderItemsList.reduce((acc, item) => acc + item.totalPrice, 0);
+      const listTotal = orderItemsList.reduce((acc, item) => acc + item.totalPrice, 0);
+      const currentTotal = matrixName.trim() ? calculation.totalPrice : 0;
+      return listTotal + currentTotal;
     }
     return calculation.totalPrice;
-  }, [orderItemsList, calculation.totalPrice]);
+  }, [orderItemsList, calculation.totalPrice, matrixName]);
 
   const handleAddItemToList = () => {
     if (!matrixName.trim()) {
@@ -396,12 +398,13 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
       // 1.5 Save to library if toggled
       if (!isQuick && saveToLibrary && parsedMatrixFile && selectedClientId) {
         try {
+          const uniqueSuffix = Math.random().toString(36).substring(2, 6).toUpperCase();
           const { data: mxData } = await supabase
             .from('matrices')
             .insert({
               name: matrixName.trim(),
               client_id: selectedClientId,
-              code: `MAT-${Date.now().toString(36).toUpperCase()}`,
+              code: `MAT-${Date.now().toString(36).toUpperCase()}-${uniqueSuffix}`,
               status: 'approved',
               category: 'Geral',
             })

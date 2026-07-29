@@ -28,7 +28,7 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({
   const modalContent = (
     <div className="fixed inset-0 z-[99999] flex items-center justify-center p-2 sm:p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200 overflow-y-auto">
       <div 
-        className="relative w-full max-w-6xl max-h-[92vh] flex flex-col rounded-2xl sm:rounded-[28px] border border-slate-200 dark:border-white/10 bg-white dark:bg-[#0d0d14] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 my-auto"
+        className="relative w-full max-w-6xl max-h-[85vh] flex flex-col rounded-2xl sm:rounded-[28px] border border-slate-200 dark:border-white/10 bg-white dark:bg-[#0d0d14] shadow-2xl overflow-y-auto animate-in zoom-in-95 duration-200 my-auto"
         onClick={e => e.stopPropagation()}
       >
         <SmartCalculatorWorkflow 

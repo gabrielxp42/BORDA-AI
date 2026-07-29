@@ -356,6 +356,16 @@ export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children })
                     {/* Menu Items */}
                     <div className="p-1.5 flex flex-col gap-0.5">
                       <button
+                        onClick={() => { navigate('/gabi'); setIsMobileProfileOpen(false); }}
+                        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-sm font-medium transition-all ${
+                          isDark ? 'text-indigo-300 hover:bg-white/10' : 'text-indigo-600 hover:bg-indigo-50'
+                        }`}
+                      >
+                        <Sparkles className="h-4 w-4" />
+                        GABI Automações
+                      </button>
+
+                      <button
                         onClick={() => { navigate('/configuracoes'); setIsMobileProfileOpen(false); }}
                         className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-sm font-medium transition-all ${
                           isDark ? 'text-zinc-300 hover:bg-white/10 hover:text-white' : 'text-slate-700 hover:bg-slate-100'

@@ -322,12 +322,15 @@ export async function sendEvolutionText(phone: string, message: string): Promise
     console.warn('[WhatsApp] Falha ao obter whatsapp_instance_id do perfil:', e);
   }
 
-  const targetInstance = userInstanceId || 'borda_gabriel_0431';
+  const targetInstance = userInstanceId;
+  if (!targetInstance) {
+    throw new Error('Instância do WhatsApp não encontrada para este usuário. Por favor, conecte seu WhatsApp nas configurações.');
+  }
 
   // 1. Tenta envio REST direto com parâmetro de presença "composing" (digitando...)
   const creds = await getEvolutionCredentials();
   if (creds && creds.apiUrl && creds.apiKey) {
-    const inst = creds.instanceId || targetInstance;
+    const inst = targetInstance;
     console.log(`📲 [WhatsApp REST Direto Anti-Ban] Enviando para ${cleanPhone} via [${inst}] (Digitação: ${typingDelayMs}ms)...`);
     try {
       const resp = await fetch(`${creds.apiUrl}/message/sendText/${inst}`, {
@@ -402,6 +405,28 @@ export async function sendEvolutionText(phone: string, message: string): Promise
 export async function sendEvolutionMedia(options: WhatsAppSendOptions): Promise<any> {
   const formattedPhone = formatWhatsAppNumber(options.phone);
 
+  let userInstanceId: string | undefined = undefined;
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user?.id) {
+      const { data: prof } = await supabase
+        .from('profiles')
+        .select('whatsapp_instance_id')
+        .eq('id', user.id)
+        .maybeSingle();
+      if (prof?.whatsapp_instance_id) {
+        userInstanceId = prof.whatsapp_instance_id;
+      }
+    }
+  } catch (e) {
+    console.warn('[WhatsApp] Falha ao obter whatsapp_instance_id do perfil:', e);
+  }
+
+  const targetInstance = userInstanceId;
+  if (!targetInstance) {
+    throw new Error('Instância do WhatsApp não encontrada. Conecte seu WhatsApp nas configurações.');
+  }
+
   try {
     const { data, error } = await supabase.functions.invoke('whatsapp-proxy', {
       body: {
@@ -410,7 +435,8 @@ export async function sendEvolutionMedia(options: WhatsAppSendOptions): Promise<
         message: options.message,
         mediaUrl: options.mediaUrl,
         mediaType: options.mediaType || 'document',
-        mediaName: options.mediaName || 'Orcamento.pdf'
+        mediaName: options.mediaName || 'Orcamento.pdf',
+        instanceId: targetInstance
       }
     });
 
@@ -422,7 +448,8 @@ export async function sendEvolutionMedia(options: WhatsAppSendOptions): Promise<
     throw new Error('Servidor WhatsApp não configurado.');
   }
 
-  const resp = await fetch(`${creds.apiUrl}/message/sendMedia/${creds.instanceId}`, {
+  const inst = targetInstance;
+  const resp = await fetch(`${creds.apiUrl}/message/sendMedia/${inst}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', apikey: creds.apiKey },
     body: JSON.stringify({

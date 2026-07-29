@@ -281,6 +281,19 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
                     </div>
                   </button>
                 )}
+
+                <button
+                  onClick={() => handleNavigate('/gabi')}
+                  className="p-3 rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 flex items-center gap-2.5 text-left hover:bg-slate-100 dark:hover:bg-white/10 transition-colors"
+                >
+                  <div className="p-2 rounded-xl bg-indigo-500/10 text-indigo-400 shrink-0">
+                    <Sparkles className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-black text-slate-900 dark:text-white">GABI AI</p>
+                    <p className="text-[10px] text-slate-500 dark:text-zinc-400">Automações</p>
+                  </div>
+                </button>
               </div>
             </div>
 

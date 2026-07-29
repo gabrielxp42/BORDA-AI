@@ -147,26 +147,39 @@ export const WhatsAppConnectionCard: React.FC = () => {
 
       const { data: { user } } = await supabase.auth.getUser();
       if (user?.id) {
-        await supabase.from('profiles').update({
+        const qr = typeof res.qrcode === 'string' 
+          ? res.qrcode 
+          : res.qrcode?.base64 || (res as any)?.base64;
+        
+        const isConn = res.connected || res.instance?.state === 'open' || res.status === 'connected';
+        const formattedQr = qr ? (qr.startsWith('data:image') ? qr : `data:image/png;base64,${qr}`) : null;
+
+        await supabase.from('profiles').upsert({
+          id: user.id,
           whatsapp_instance_id: instanceId,
-          whatsapp_status: 'connecting'
-        }).eq('id', user.id);
+          whatsapp_status: isConn ? 'connected' : 'connecting',
+          whatsapp_qr_cache: formattedQr
+        });
       }
 
-      const qr = typeof res.qrcode === 'string' 
-        ? res.qrcode 
-        : res.qrcode?.base64 || (res as any)?.base64;
+      const isConnAfterUpsert = res.connected || res.instance?.state === 'open' || res.status === 'connected';
 
-      if (qr) {
-        const formattedQr = qr.startsWith('data:image') ? qr : `data:image/png;base64,${qr}`;
-        setQrCode(formattedQr);
-        setStatus('connecting');
-      } else if (res.connected || res.instance?.state === 'open' || res.status === 'connected') {
+      if (isConnAfterUpsert) {
         setStatus('connected');
         setQrCode(null);
       } else {
-        setErrorMsg('Não foi possível gerar o QR Code. Tente usar a opção "Recriar Instância".');
-        setStatus('disconnected');
+        const qr = typeof res.qrcode === 'string' 
+          ? res.qrcode 
+          : res.qrcode?.base64 || (res as any)?.base64;
+        const formattedQr = qr ? (qr.startsWith('data:image') ? qr : `data:image/png;base64,${qr}`) : null;
+
+        if (formattedQr) {
+          setQrCode(formattedQr);
+          setStatus('connecting');
+        } else {
+          setErrorMsg('Não foi possível gerar o QR Code. Tente usar a opção "Recriar Instância".');
+          setStatus('disconnected');
+        }
       }
     } catch (err: any) {
       setErrorMsg(err.message || 'Erro ao conectar com a Evolution API');
