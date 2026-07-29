@@ -16,7 +16,8 @@ export const CloudSyncMigrationBanner: React.FC = () => {
     const toastId = toast.loading('Sincronizando todos os insumos, perfis e configurações com a nuvem...');
 
     try {
-      const userId = user?.id || '246afa29-5a6b-4671-ade1-eb7d19ab3a9d';
+      const userId = user?.id;
+      if (!userId) throw new Error("Usuário não autenticado.");
 
       // 1. Sincronizar Insumos de Estoque do Cache Local
       const savedStockRaw = localStorage.getItem('borda_stock_items');

@@ -36,7 +36,12 @@ export const Clientes: React.FC = () => {
     setLoading(true);
     try {
       const { data: authData } = await supabase.auth.getUser();
-      const userId = authData?.user?.id || '246afa29-5a6b-4671-ade1-eb7d19ab3a9d';
+      const userId = authData?.user?.id;
+      
+      if (!userId) {
+        console.warn("Usuário não autenticado.");
+        return;
+      }
 
       const { data: clientsData, error: clientsError } = await supabase
         .from('clients')

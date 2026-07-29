@@ -1324,6 +1324,7 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
 
                   {/* Observações Removidas Lista Inferior */}
                 </div>
+                )}
 
                 {/* 3. Tactile Addons */}
                 {entryMode === 'budget' && (
