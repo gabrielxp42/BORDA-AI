@@ -2,6 +2,7 @@ import React from 'react';
 import { X, Layers, Download, Play, Clock, Hash, Maximize2, Tag, User, CheckCircle2 } from 'lucide-react';
 import { Matrix } from '../../types/borda';
 import { createPortal } from 'react-dom';
+import { useAuth } from '../../contexts/AuthContext';
 import { useCompanySettings } from '../../contexts/CompanySettingsContext';
 
 interface MatrixDetailsModalProps {
@@ -14,6 +15,7 @@ export const MatrixDetailsModal: React.FC<MatrixDetailsModalProps> = ({ isOpen, 
   if (!isOpen || !matrix) return null;
   const v = matrix.current_version;
   const { settings } = useCompanySettings();
+  const { profile } = useAuth();
 
   const modalContent = (
     <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200" onClick={onClose}>
@@ -43,15 +45,17 @@ export const MatrixDetailsModal: React.FC<MatrixDetailsModalProps> = ({ isOpen, 
           </div>
 
           <div className="w-full flex gap-3 mt-6">
-            <button 
-              onClick={() => {
-                if (v?.file_url) window.open(v.file_url, '_blank');
-              }}
-              className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl text-white text-xs font-bold shadow-lg hover:opacity-90 transition-all"
-              style={{ backgroundColor: settings.primaryColor, boxShadow: `0 4px 14px ${settings.primaryColor}40` }}
-            >
-              <Download className="h-4 w-4" /> Baixar
-            </button>
+            {profile?.role === 'admin' && (
+              <button 
+                onClick={() => {
+                  if (v?.file_url) window.open(v.file_url, '_blank');
+                }}
+                className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl text-white text-xs font-bold shadow-lg hover:opacity-90 transition-all"
+                style={{ backgroundColor: settings.primaryColor, boxShadow: `0 4px 14px ${settings.primaryColor}40` }}
+              >
+                <Download className="h-4 w-4" /> Baixar
+              </button>
+            )}
             <button className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-bold hover:bg-emerald-500/30 transition-all">
               <Play className="h-4 w-4" /> Produzir
             </button>
