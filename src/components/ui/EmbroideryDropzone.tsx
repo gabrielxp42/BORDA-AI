@@ -74,13 +74,13 @@ export const EmbroideryDropzone: React.FC<EmbroideryDropzoneProps> = ({ onFilePa
 
   return (
     <div 
-      className={`relative w-full border-2 border-dashed rounded-2xl p-4 transition-all flex flex-col items-center justify-center text-center overflow-hidden
-        ${isDragging ? 'scale-[1.02]' : 'border-white/10 bg-black/40 hover:bg-white/5 hover:border-white/20'}
-        ${status === 'success' ? 'border-emerald-500/50 bg-emerald-500/10' : ''}
+      className={`relative w-full border-2 border-dashed rounded-3xl p-8 min-h-[180px] transition-all duration-300 flex flex-col items-center justify-center text-center overflow-hidden group
+        ${isDragging ? 'scale-[1.02] border-4 bg-white/10' : 'border-white/20 bg-black/40 hover:bg-white/5 hover:border-white/40'}
+        ${status === 'success' ? 'border-emerald-500/50 bg-emerald-500/10 shadow-[0_0_30px_rgba(16,185,129,0.15)]' : ''}
         ${status === 'partial' ? 'border-amber-500/50 bg-amber-500/10' : ''}
         ${status === 'error' ? 'border-red-500/50 bg-red-500/10' : ''}
       `}
-      style={isDragging && status === 'idle' ? { borderColor: primaryColor, backgroundColor: `${primaryColor}1A` } : undefined}
+      style={isDragging && status === 'idle' ? { borderColor: primaryColor, backgroundColor: `${primaryColor}1A`, boxShadow: `0 0 40px ${primaryColor}30` } : undefined}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
@@ -131,17 +131,19 @@ export const EmbroideryDropzone: React.FC<EmbroideryDropzoneProps> = ({ onFilePa
           </>
         ) : (
           <>
-            <div className="flex gap-2 mb-2">
-              <div className="h-10 w-10 rounded-full bg-blue-500/20 flex items-center justify-center border border-blue-500/30">
-                <FileCode className="h-4 w-4 text-blue-400" />
+            <div className={`flex gap-3 mb-4 transition-transform duration-300 ${isDragging ? 'scale-125' : 'group-hover:scale-110'}`}>
+              <div className="h-14 w-14 rounded-full bg-blue-500/20 flex items-center justify-center border border-blue-500/30">
+                <FileCode className="h-6 w-6 text-blue-400" />
               </div>
-              <div className="h-10 w-10 rounded-full flex items-center justify-center border" style={{ backgroundColor: `${primaryColor}33`, borderColor: `${primaryColor}4D` }}>
-                <UploadCloud className="h-4 w-4" style={{ color: primaryColor }} />
+              <div className="h-14 w-14 rounded-full flex items-center justify-center border shadow-lg" style={{ backgroundColor: `${primaryColor}33`, borderColor: `${primaryColor}4D` }}>
+                <UploadCloud className={`h-6 w-6 ${isDragging ? 'animate-bounce' : ''}`} style={{ color: primaryColor }} />
               </div>
             </div>
-            <h3 className="text-sm font-bold text-white mb-1 tracking-wide">Arraste ou Selecione</h3>
-            <p className="text-[10px] text-zinc-400 max-w-xs mx-auto">
-              Formatos suportados: <span className="font-mono text-purple-300">.DST</span> e <span className="font-mono text-blue-300">.EMB</span>
+            <h3 className="text-base font-black text-white mb-1.5 tracking-wide uppercase">
+              {isDragging ? 'Solte o arquivo aqui!' : 'Arraste a Matriz para cá'}
+            </h3>
+            <p className="text-xs text-zinc-400 max-w-sm mx-auto">
+              Formatos suportados: <span className="font-mono text-purple-300 bg-purple-500/10 px-1.5 py-0.5 rounded">.DST</span> e <span className="font-mono text-blue-300 bg-blue-500/10 px-1.5 py-0.5 rounded">.EMB</span>
             </p>
           </>
         )}

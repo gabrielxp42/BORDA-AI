@@ -4,7 +4,7 @@ import {
   X, UserPlus, Calendar, Plus, Trash2, Package, Save, Lock, Layers, Sparkles, 
   CheckCircle2, DollarSign, ChevronDown, Check, Upload, FileCheck, ChevronUp, 
   Sliders, Send, Clock, CreditCard, Landmark, Coins, ArrowRight, ArrowLeft, Camera, Paperclip,
-  MessageSquare, Image, FileText, QrCode
+  MessageSquare, Image, FileText, QrCode, User, CheckCircle, Settings
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { calculateEmbroideryPrice } from '@/services/pricingEngine';
@@ -115,6 +115,15 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
     matrixId?: string | null;
   }[]>([]);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+  const [isAddingNewMatrix, setIsAddingNewMatrix] = useState(false);
+
+  const hasItemsInCart = orderItemsList.length > 1 || (orderItemsList.length === 1 && !!(orderItemsList[0].matrixName || orderItemsList[0].stitchCount > 0));
+
+  useEffect(() => {
+    if (lastParsedFile) {
+      setIsAddingNewMatrix(false);
+    }
+  }, [lastParsedFile]);
 
   // Compute live price
   const calculation = calculateEmbroideryPrice(
@@ -785,6 +794,8 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
       toast.error('Selecione um cliente para enviar a cobrança.');
       return;
     }
+    
+    setIsAddingNewMatrix(false);
 
     try {
       const { data: client, error } = await supabase
@@ -1018,114 +1029,182 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
                   </div>
                 )}
 
-                {/* 0. Carrinho de Matrizes e Leitor Automático (Unificados) */}
+                {/* 1. DADOS DO PEDIDO E CLIENTE */}
                 {entryMode === 'budget' && (
-                  <div 
-                    className="glass-panel rounded-3xl border shadow-sm space-y-0 overflow-hidden relative z-20 animate-in fade-in zoom-in-95 duration-200"
-                    style={{ borderColor: `${settings.primaryColor}40`, backgroundColor: `${settings.primaryColor}0A` }}
-                  >
-                    
-                    {/* Leitor Automático & Adicionar Manual (AGORA NO TOPO) */}
-                    <div className="bg-slate-50/50 dark:bg-white/5">
-                      <button
-                        type="button"
-                        onClick={() => setIsDropzoneExpanded(!isDropzoneExpanded)}
-                        className="w-full p-3 flex items-center justify-between hover:bg-slate-100 dark:hover:bg-white/10 transition-colors text-left"
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="p-2.5 rounded-2xl flex items-center justify-center" style={{ backgroundColor: `${settings.primaryColor}20`, color: settings.primaryColor }}>
-                            <Upload className="h-4 w-4" />
-                          </div>
-                          <div>
-                            <h3 className="text-xs font-black uppercase tracking-widest text-slate-900 dark:text-white flex items-center gap-2">
-                              <span>LEITOR AUTOMÁTICO DE MATRIZ</span>
-                              <span 
-                                className="text-[10px] px-2 py-0.5 rounded-full font-mono normal-case"
-                                style={{ backgroundColor: `${settings.primaryColor}20`, color: settings.primaryColor }}
-                              >.EMB / .DST</span>
-                            </h3>
-                            <p className="text-[11px] text-slate-500 dark:text-zinc-400 mt-0.5">
-                              {lastParsedFile ? `Carregado: ${lastParsedFile}` : 'Arraste um arquivo para adicionar ao carrinho.'}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          {lastParsedFile && (
-                            <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 flex items-center gap-1">
-                              <FileCheck className="h-3.5 w-3.5" /> Ok
-                            </span>
-                          )}
-                          <ChevronDown className={`h-4 w-4 text-slate-400 transition-transform ${isDropzoneExpanded ? 'rotate-180' : ''}`} />
-                        </div>
-                      </button>
+                  <div className="glass-panel p-5 rounded-3xl border shadow-sm space-y-4 relative z-50 animate-in fade-in zoom-in-95 duration-200 mb-4" style={{ borderColor: `${settings.primaryColor}40`, backgroundColor: `${settings.primaryColor}05` }}>
+                    <h3 className="text-xs font-black uppercase tracking-widest flex items-center gap-2" style={{ color: settings.primaryColor }}>
+                      <User className="h-4 w-4" /> 1. Dados do Pedido
+                    </h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400 mb-1.5 block">
+                          Cliente Registrado {!selectedClientId && <span className="text-red-500">*</span>}
+                        </label>
+                        <ClientSelect value={selectedClientId} onChange={setSelectedClientId} error={!selectedClientId} />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400 mb-1.5 block">
+                          Prazo de Entrega Estimado
+                        </label>
+                        <DatePicker value={dueDate} onChange={setDueDate} />
+                      </div>
+                    </div>
+                  </div>
+                )}
 
-                      {isDropzoneExpanded && (
-                        <div className="p-3 border-t border-slate-200 dark:border-white/10">
+                {/* 2. BIBLIOTECA DO CLIENTE */}
+                {entryMode === 'budget' && selectedClientId && (
+                  <div className="glass-panel p-5 rounded-3xl border shadow-sm relative z-40 animate-in fade-in zoom-in-95 duration-200 mb-4" style={{ borderColor: `${settings.primaryColor}20`, backgroundColor: 'rgba(255,255,255,0.02)' }}>
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-xs font-black uppercase tracking-widest flex items-center gap-2" style={{ color: settings.primaryColor }}>
+                        <Layers className="h-4 w-4" /> 2. Matrizes na Biblioteca ({clientMatrices.length})
+                      </h3>
+                    </div>
+                    
+                    {clientMatrices.length > 0 ? (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 max-h-[220px] overflow-y-auto custom-scrollbar pr-2">
+                        {clientMatrices.map(m => {
+                          const ver = m.current_version;
+                          const isSelected = selectedMatrixId === m.id;
+                          return (
+                            <div
+                              key={m.id}
+                              onClick={() => handleSelectSavedMatrix(m)}
+                              className="p-3 rounded-2xl border transition-all cursor-pointer flex items-center justify-between text-slate-800 dark:text-zinc-200"
+                              style={isSelected ? { backgroundColor: `${settings.primaryColor}20`, borderColor: `${settings.primaryColor}50`, color: settings.primaryColor, boxShadow: `0 0 15px ${settings.primaryColor}20` } : { borderColor: 'rgba(255,255,255,0.05)', backgroundColor: 'rgba(255,255,255,0.02)' }}
+                            >
+                              <div className="min-w-0 flex-1">
+                                <p className="text-sm font-black truncate leading-tight mb-1" style={{ color: isSelected ? settings.primaryColor : 'inherit' }}>
+                                  {m.name}
+                                </p>
+                                <div className="flex items-center gap-3 text-[10px] font-bold text-slate-500 dark:text-zinc-400">
+                                  {ver?.stitch_count && <span>🪡 {ver.stitch_count.toLocaleString()} pts</span>}
+                                  {ver?.color_count && <span>🎨 {ver.color_count} cores</span>}
+                                </div>
+                              </div>
+                              {isSelected && <CheckCircle className="h-5 w-5 shrink-0 ml-2" style={{ color: settings.primaryColor }} />}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                       <p className="text-xs text-slate-500 italic">Nenhuma matriz salva para este cliente ainda.</p>
+                    )}
+                  </div>
+                )}
+
+                {/* 3. LEITOR AUTOMÁTICO E CARRINHO */}
+                {entryMode === 'budget' && (
+                  <div className="glass-panel rounded-3xl border shadow-sm space-y-0 overflow-hidden relative z-30 animate-in fade-in zoom-in-95 duration-200 mb-4" style={{ borderColor: `${settings.primaryColor}40` }}>
+                    <div className="bg-slate-50/50 dark:bg-white/5 p-4 sm:p-5 flex flex-col gap-5 border-b border-slate-200 dark:border-white/10">
+                      
+                      <div className="flex items-center gap-3">
+                        <div className="p-2.5 rounded-2xl flex items-center justify-center shrink-0" style={{ backgroundColor: `${settings.primaryColor}20`, color: settings.primaryColor }}>
+                          <Upload className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <h3 className="text-sm font-black uppercase tracking-widest text-slate-900 dark:text-white flex items-center gap-2">
+                            <span>
+                              ARQUIVO MATRIZ <span className="text-[10px] text-slate-500 font-bold">(LEITOR DE MATRIZ AUTOMÁTICO)</span>
+                            </span>
+                            {lastParsedFile && (
+                              <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 flex items-center gap-1">
+                                <FileCheck className="h-3 w-3" /> Lida
+                              </span>
+                            )}
+                          </h3>
+                          <p className="text-xs text-slate-500 dark:text-zinc-400 mt-1">
+                            {lastParsedFile ? `Última matriz: ${lastParsedFile}` : (selectedClientId ? 'Arraste o arquivo aqui se a matriz não estiver na biblioteca.' : 'Selecione o cliente primeiro, ou arraste o arquivo aqui para ler.')}
+                          </p>
+                        </div>
+                      </div>
+
+                      
+                      {(!hasItemsInCart || isAddingNewMatrix) ? (
+                        <>
                           <EmbroideryDropzone onFileParsed={handleFileParsed} primaryColor={settings.primaryColor} />
-                          
-                          {/* Botão Adicionar Manualmente (substitui o antigo) */}
-                          <div className="mt-3 pt-3 border-t border-slate-200 dark:border-white/10">
+                          <div className="pt-3 flex items-center justify-between">
                             <button
                               type="button"
                               onClick={handleAddNewItem}
-                              className="w-full py-2 rounded-xl border border-dashed border-emerald-500/40 bg-emerald-500/5 hover:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-sm"
+                              className="text-[10px] font-bold text-slate-400 hover:text-slate-600 dark:hover:text-white uppercase tracking-wider flex items-center gap-1.5 transition-colors"
                             >
-                              <Plus className="h-4 w-4" />
-                              ADICIONAR MATRIZ MANUALMENTE
+                              <Plus className="h-3.5 w-3.5" />
+                              Preencher Manualmente
                             </button>
+                            {hasItemsInCart && (
+                              <button
+                                type="button"
+                                onClick={() => setIsAddingNewMatrix(false)}
+                                className="text-[10px] font-bold text-red-400 hover:text-red-500 uppercase tracking-wider transition-colors"
+                              >
+                                Cancelar
+                              </button>
+                            )}
                           </div>
-                        </div>
-                      )}
-                      
-                      {/* Save to Library Toggle */}
-                      {lastParsedFile && isDropzoneExpanded && (
-                        <div className="px-4 py-3 border-t border-slate-200 dark:border-white/10 flex items-center justify-between bg-slate-50/50 dark:bg-white/[0.02]">
-                          <div className="flex items-center gap-2.5">
-                            <div className="h-7 w-7 rounded-xl flex items-center justify-center" style={{ backgroundColor: saveToLibrary ? `${settings.primaryColor}20` : 'transparent', border: `1px solid ${saveToLibrary ? settings.primaryColor + '40' : '#ffffff20'}` }}>
-                              <Layers className="h-3.5 w-3.5" style={{ color: saveToLibrary ? settings.primaryColor : '#6b7280' }} />
-                            </div>
-                            <div>
-                              <p className="text-xs font-black text-slate-800 dark:text-white">Salvar na Biblioteca do Cliente</p>
-                              <p className="text-[10px] text-slate-400 dark:text-zinc-500">{saveToLibrary ? 'O arquivo será arquivado' : 'Somente para este pedido'}</p>
-                            </div>
-                          </div>
+                        </>
+                      ) : (
+                        <div className="pt-2 flex justify-center">
                           <button
                             type="button"
-                            onClick={() => setSaveToLibrary(v => !v)}
-                            className={`relative h-6 w-11 rounded-full transition-all duration-300 focus:outline-none shrink-0`}
-                            style={{ backgroundColor: saveToLibrary ? settings.primaryColor : '#374151' }}
+                            onClick={() => setIsAddingNewMatrix(true)}
+                            className="py-2.5 px-6 rounded-full border border-dashed border-emerald-500/40 bg-emerald-500/5 hover:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-sm"
                           >
-                            <span
-                              className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow-md transition-transform duration-300 ${saveToLibrary ? 'translate-x-5' : 'translate-x-0'}`}
-                            />
+                            <Plus className="h-4 w-4" />
+                            ADICIONAR OUTRA MATRIZ
                           </button>
                         </div>
                       )}
                     </div>
-
-                    {/* Tabela do Carrinho (Mostra se houver itens preenchidos) */}
-                    {(orderItemsList.length > 1 || (orderItemsList.length === 1 && (orderItemsList[0].matrixName || orderItemsList[0].stitchCount > 0))) && (
-                      <div className="p-4 sm:p-5 border-t" style={{ borderColor: `${settings.primaryColor}30` }}>
+                    
+                    {/* Save to Library Toggle */}
+                    {lastParsedFile && (
+                      <div className="px-5 py-4 flex items-center justify-between bg-white dark:bg-black/40 border-t border-slate-200 dark:border-white/10">
+                        <div className="flex items-center gap-2.5">
+                          <div className="h-7 w-7 rounded-xl flex items-center justify-center" style={{ backgroundColor: saveToLibrary ? `${settings.primaryColor}20` : 'transparent', border: `1px solid ${saveToLibrary ? settings.primaryColor + '40' : '#ffffff20'}` }}>
+                            <Layers className="h-3.5 w-3.5" style={{ color: saveToLibrary ? settings.primaryColor : '#6b7280' }} />
+                          </div>
+                          <div>
+                            <p className="text-xs font-black text-slate-800 dark:text-white">Salvar na Biblioteca do Cliente</p>
+                            <p className="text-[10px] text-slate-400 dark:text-zinc-500">{saveToLibrary ? 'O arquivo será arquivado' : 'Somente para este pedido'}</p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setSaveToLibrary(v => !v)}
+                          className={`relative h-6 w-11 rounded-full transition-all duration-300 focus:outline-none shrink-0`}
+                          style={{ backgroundColor: saveToLibrary ? settings.primaryColor : '#374151' }}
+                        >
+                          <span
+                            className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow-md transition-transform duration-300 ${saveToLibrary ? 'translate-x-5' : 'translate-x-0'}`}
+                          />
+                        </button>
+                      </div>
+                    )}
+                    
+                    {/* Tabela do Carrinho (Embutida no Bloco 3) */}
+                    {hasItemsInCart && (
+                      <div className="p-4 sm:p-5 border-t bg-slate-50/30 dark:bg-white/[0.01]" style={{ borderColor: `${settings.primaryColor}30` }}>
                         <div className="flex items-center justify-between mb-3">
-                          <h4 className="text-xs font-black uppercase tracking-wider flex items-center gap-2" style={{ color: settings.primaryColor }}>
+                          <h4 className="text-[11px] font-black uppercase tracking-wider flex items-center gap-2" style={{ color: settings.primaryColor }}>
                             <Layers className="h-4 w-4" /> Carrinho do Pedido ({orderItemsList.length} Matrizes)
                           </h4>
                           <div className="flex items-center gap-3">
-                            <span className="text-xs font-black text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/20">
+                            <span className="text-[11px] font-black text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/20">
                               Total: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totalOrderAmount)}
                             </span>
                           </div>
                         </div>
 
-                        <div className="rounded-2xl border border-slate-200 dark:border-white/10 overflow-hidden bg-white dark:bg-black/40">
+                        <div className="rounded-xl border border-slate-200 dark:border-white/10 overflow-hidden bg-white dark:bg-black/40">
                           <table className="w-full text-left text-xs">
                             <thead className="bg-slate-100 dark:bg-white/5 text-slate-700 dark:text-zinc-300 font-bold uppercase text-[9px] tracking-wider">
                               <tr>
-                                <th className="p-3">Matriz / Descrição</th>
-                                <th className="p-3 text-center">Qtd</th>
-                                <th className="p-3 text-right">Valor Unit.</th>
-                                <th className="p-3 text-right">Subtotal</th>
-                                <th className="p-3 text-center">Ação</th>
+                                <th className="p-2.5">Matriz / Descrição</th>
+                                <th className="p-2.5 text-center">Qtd</th>
+                                <th className="p-2.5 text-right">Valor Unit.</th>
+                                <th className="p-2.5 text-right">Subtotal</th>
+                                <th className="p-2.5 text-center">Ação</th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100 dark:divide-white/5 font-medium text-slate-800 dark:text-zinc-200">
@@ -1143,24 +1222,24 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
                                     borderLeftColor: settings.primaryColor 
                                   } : undefined}
                                 >
-                                  <td className="p-3 font-bold">
+                                  <td className="p-2.5 font-bold">
                                     <span className="block truncate max-w-[150px] sm:max-w-[200px]">
                                       {it.matrixName || <span className="text-zinc-400 italic font-normal">Nome não informado</span>}
                                     </span>
-                                    <span className="text-[10px] text-zinc-500 font-normal">🪡 {it.stitchCount.toLocaleString()} pts • 🎨 {it.colorCount} cores</span>
+                                    <span className="text-[9px] text-zinc-500 font-normal">🪡 {it.stitchCount.toLocaleString()} pts • 🎨 {it.colorCount} cores</span>
                                   </td>
-                                  <td className="p-3 text-center font-bold">{it.quantity} un</td>
-                                  <td className="p-3 text-right text-slate-600 dark:text-zinc-400">
+                                  <td className="p-2.5 text-center font-bold">{it.quantity} un</td>
+                                  <td className="p-2.5 text-right text-slate-600 dark:text-zinc-400">
                                     {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(it.unitPrice)}
                                   </td>
-                                  <td className="p-3 text-right font-black" style={{ color: settings.primaryColor }}>
+                                  <td className="p-2.5 text-right font-black" style={{ color: settings.primaryColor }}>
                                     {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(it.totalPrice)}
                                   </td>
-                                  <td className="p-3 text-center">
+                                  <td className="p-2.5 text-center">
                                     <button
                                       type="button"
                                       onClick={(e) => handleRemoveItemFromList(e, it.id)}
-                                      className="p-1.5 bg-red-500/10 text-red-500 dark:text-red-400 rounded-lg hover:bg-red-500/20 transition-colors"
+                                      className="p-1 bg-red-500/10 text-red-500 dark:text-red-400 rounded-md hover:bg-red-500/20 transition-colors"
                                       title="Remover matriz do pedido"
                                     >
                                       <Trash2 className="h-3.5 w-3.5" />
@@ -1173,163 +1252,78 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
                         </div>
                       </div>
                     )}
+
                   </div>
                 )}
 
-                {/* 2. Client & Technical details */}
+                {/* 4. CONFIGURAÇÃO DA MATRIZ (Se houver item sendo editado/adicionado) */}
                 {(!orderItemsList.length || selectedItemId) && (
-                  <div className="glass-panel p-4 rounded-3xl border border-slate-200 dark:border-white/10 space-y-3 relative z-20 animate-in fade-in zoom-in-95 duration-200">
-                    <h3 className="text-xs font-black uppercase tracking-widest flex items-center gap-2" style={{ color: settings.primaryColor }}>
-                      <Layers className="h-4 w-4" /> Configuração do Item Selecionado
-                    </h3>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400 mb-1.5 block">
-                        Cliente Registrado {!selectedClientId && <span className="text-red-500">*</span>}
-                      </label>
-                      <ClientSelect
-                        value={selectedClientId}
-                        onChange={setSelectedClientId}
-                        error={!selectedClientId}
-                      />
+                  <div className="glass-panel p-5 rounded-3xl border border-slate-200 dark:border-white/10 space-y-4 relative z-20 animate-in fade-in zoom-in-95 duration-200 mb-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
+                      <h3 className="text-xs font-black uppercase tracking-widest flex items-center gap-2" style={{ color: settings.primaryColor }}>
+                        <Settings className="h-4 w-4" /> {selectedClientId ? '4. Configuração da Matriz' : '3. Configuração da Matriz'}
+                      </h3>
                     </div>
 
-                    <div>
-                      <label className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400 mb-1.5 block">
-                        {entryMode === 'quick' ? 'Descrição das Peças / Lote' : 'Nome da Logo / Matriz'} {!matrixName.trim() && <span className="text-red-500">*</span>}
-                      </label>
-                      <input
-                        type="text"
-                        value={matrixName}
-                        onChange={e => { setMatrixName(e.target.value); setSelectedMatrixId(null); }}
-                        className={`w-full bg-slate-50 dark:bg-white/5 border rounded-2xl px-4 py-2 text-xs text-slate-900 dark:text-white focus:outline-none transition-all ${
-                          !matrixName.trim() ? 'border-red-500/40 bg-red-500/5' : 'border-slate-300 dark:border-white/10'
-                        }`}
-                        style={matrixName.trim() ? { borderColor: `${settings.primaryColor}30` } : undefined}
-                        placeholder={entryMode === 'quick' ? "Ex: 100 Camisetas Polo pretas" : "Ex: Logo Peito Esquerdo..."}
-                      />
-                    </div>
-                  </div>
+                    {(() => {
+                      const editingItem = orderItemsList.find(it => it.id === selectedItemId);
+                      const isAutoFilled = !!editingItem && (!!editingItem.matrixFile || !!editingItem.matrixId);
+                      const inputBorderClass = isAutoFilled ? 'border-emerald-500/40 bg-emerald-500/5' : 'border-slate-300 dark:border-white/10';
+                      const inputColorStyle = isAutoFilled ? { borderColor: '#10b98180' } : undefined;
 
-                  {/* Saved matrices select list */}
-                  {entryMode === 'budget' && selectedClientId && clientMatrices.length > 0 && (
-                    <div className="p-2.5 rounded-2xl bg-slate-100 dark:bg-black/40 border border-slate-200 dark:border-white/10 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[11px] font-black uppercase tracking-wider text-slate-600 dark:text-zinc-400 flex items-center gap-1.5">
-                          <Layers className="h-3.5 w-3.5" style={{ color: settings.primaryColor }} /> Matrizes Históricas ({clientMatrices.length})
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => setShowMatrixSelector(!showMatrixSelector)}
-                          className="text-[10px] font-bold flex items-center gap-1"
-                          style={{ color: settings.primaryColor }}
-                        >
-                          {showMatrixSelector ? 'Ocultar' : 'Ver Matrizes'}
-                          <ChevronDown className={`h-3 w-3 transition-transform ${showMatrixSelector ? 'rotate-180' : ''}`} />
-                          {showMatrixSelector ? 'Ocultar' : 'Listar'}
-                          <ChevronDown className={`h-2.5 w-2.5 transition-transform ${showMatrixSelector ? 'rotate-180' : ''}`} />
-                        </button>
-                      </div>
+                      return (
+                        <>
+                          <div>
+                            <label className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400 mb-1.5 block">
+                              {entryMode === 'quick' ? 'Descrição das Peças / Lote' : 'Nome da Logo / Matriz'} {!matrixName.trim() && <span className="text-red-500">*</span>}
+                            </label>
+                            <input
+                              type="text"
+                              value={matrixName}
+                              onChange={e => { setMatrixName(e.target.value); setSelectedMatrixId(null); }}
+                              className={`w-full bg-slate-50 dark:bg-white/5 border rounded-2xl px-4 py-2.5 text-xs text-slate-900 dark:text-white focus:outline-none transition-all ${
+                                !matrixName.trim() ? 'border-red-500/40 bg-red-500/5' : inputBorderClass
+                              }`}
+                              style={matrixName.trim() ? (inputColorStyle || { borderColor: `${settings.primaryColor}30` }) : undefined}
+                              placeholder={entryMode === 'quick' ? "Ex: 100 Camisetas Polo pretas" : "Ex: Logo Peito Esquerdo..."}
+                            />
+                          </div>
 
-                      {showMatrixSelector && (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pt-1 max-h-24 overflow-y-auto custom-scrollbar">
-                          {clientMatrices.map(m => {
-                            const ver = m.current_version;
-                            const isSelected = selectedMatrixId === m.id;
-                            return (
-                              <div
-                                key={m.id}
-                                onClick={() => handleSelectSavedMatrix(m)}
-                                className="p-2 rounded-xl border transition-all cursor-pointer flex items-center justify-between text-slate-800 dark:text-zinc-200"
-                                style={isSelected ? { backgroundColor: `${settings.primaryColor}20`, borderColor: `${settings.primaryColor}50`, color: settings.primaryColor } : { borderColor: 'rgba(255,255,255,0.05)' }}
-                              >
-                                <div className="min-w-0 flex-1">
-                                  <div className="flex items-center gap-2 mt-0.5 text-[10px] text-slate-500 dark:text-zinc-400">
-                                    {ver?.stitch_count && <span>🪡 {ver.stitch_count.toLocaleString()} pts</span>}
-                                    {ver?.color_count && <span>🎨 {ver.color_count} cores</span>}
-                                  </div>
-                                </div>
-                                {isSelected && <Check className="h-4 w-4 shrink-0 ml-2" style={{ color: settings.primaryColor }} />}
+                          {entryMode === 'budget' ? (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-2">
+                              <div>
+                                <label className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400 mb-1 block">
+                                  Quantidade Pontos
+                                </label>
+                                <input
+                                  type="number"
+                                  value={stitchCount}
+                                  onChange={e => setStitchCount(e.target.value === '' ? '' : Number(e.target.value))}
+                                  className={`w-full bg-slate-50 dark:bg-white/5 border rounded-2xl px-4 py-2 text-xs font-bold text-slate-900 dark:text-white focus:outline-none transition-all ${
+                                    !stitchCount ? 'border-red-500/40 bg-red-500/5' : inputBorderClass
+                                  }`}
+                                  style={stitchCount ? (inputColorStyle || { borderColor: `${settings.primaryColor}30` }) : undefined}
+                                  placeholder="Ex: 15000"
+                                />
                               </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  )}
 
-                  {/* Technical Values / Quick Entry Fields */}
-                  {entryMode === 'budget' ? (
-                    <>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                      <div>
-                        <label className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400 mb-1 block">
-                          Quantidade Pontos
-                        </label>
-                        <input
-                          type="number"
-                          value={stitchCount}
-                          onChange={e => setStitchCount(e.target.value === '' ? '' : Number(e.target.value))}
-                          className={`w-full bg-slate-50 dark:bg-white/5 border rounded-2xl px-4 py-1.5 text-xs font-bold text-slate-900 dark:text-white focus:outline-none transition-all ${
-                            !stitchCount ? 'border-red-500/40 bg-red-500/5' : 'border-slate-300 dark:border-white/10'
-                          }`}
-                          style={stitchCount ? { borderColor: `${settings.primaryColor}30` } : undefined}
-                          placeholder="Ex: 15000"
-                        />
-                      </div>
+                              <div>
+                                <label className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400 mb-1 block">
+                                  Número de Cores
+                                </label>
+                                <input
+                                  type="number"
+                                  value={colorCount}
+                                  onChange={e => setColorCount(e.target.value === '' ? '' : Number(e.target.value))}
+                                  className={`w-full bg-slate-50 dark:bg-white/5 border rounded-2xl px-4 py-2 text-xs text-slate-900 dark:text-white focus:outline-none transition-all ${inputBorderClass}`}
+                                  style={colorCount ? (inputColorStyle || { borderColor: `${settings.primaryColor}30` }) : undefined}
+                                  placeholder="Ex: 4"
+                                />
+                              </div>
 
-                      <div>
-                        <label className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400 mb-1 block">
-                          Número de Cores
-                        </label>
-                        <input
-                          type="number"
-                          value={colorCount}
-                          onChange={e => setColorCount(e.target.value === '' ? '' : Number(e.target.value))}
-                          className="w-full bg-slate-50 dark:bg-white/5 border border-slate-300 dark:border-white/10 rounded-2xl px-4 py-1.5 text-xs text-slate-900 dark:text-white focus:outline-none"
-                          style={colorCount ? { borderColor: `${settings.primaryColor}30` } : undefined}
-                          placeholder="Ex: 4"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400 mb-1 block">
-                          Qtd Peças
-                        </label>
-                        <input
-                          type="number"
-                          value={quantity}
-                          onChange={e => setQuantity(e.target.value === '' ? '' : Number(e.target.value))}
-                          className={`w-full bg-slate-50 dark:bg-white/5 border rounded-2xl px-4 py-1.5 text-xs font-bold text-slate-900 dark:text-white focus:outline-none transition-all ${
-                            !quantity ? 'border-red-500/40 bg-red-500/5' : 'border-slate-300 dark:border-white/10'
-                          }`}
-                          style={quantity ? { borderColor: `${settings.primaryColor}30` } : undefined}
-                          placeholder="Ex: 50"
-                        />
-                      </div>
-
-                      {/* ⏱️ Tempo Estimado de Máquina */}
-                      <div>
-                        <label className="text-[10px] font-black uppercase tracking-wider text-amber-500 dark:text-amber-400 mb-1 block flex items-center gap-1">
-                          <Clock className="h-3.5 w-3.5" /> Tempo Máquina
-                        </label>
-                        <div className="w-full bg-amber-500/10 border border-amber-500/30 rounded-2xl px-4 py-1.5 text-xs font-black text-amber-600 dark:text-amber-300 flex items-center justify-between">
-                          <span>{estimatedMinutesPerPiece > 0 ? `${formatTimeLabel(estimatedMinutesPerPiece)}/pc` : '0 min'}</span>
-                          <span className="text-[10px] font-bold bg-amber-500/20 px-1.5 py-0.5 rounded-full text-amber-400">
-                            {formatTimeLabel(totalEstimatedMinutes)} total
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    </>
-                  ) : (
-                    <div className="space-y-4">
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
-                          <label className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400 mb-1.5 block">
-                            Quantidade de Peças / Lote {!quantity && <span className="text-red-500">*</span>}
+                          <label className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400 mb-1 block">
+                            Qtd Peças
                           </label>
                           <input
                             type="number"
@@ -1339,39 +1333,65 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
                               !quantity ? 'border-red-500/40 bg-red-500/5' : 'border-slate-300 dark:border-white/10'
                             }`}
                             style={quantity ? { borderColor: `${settings.primaryColor}30` } : undefined}
-                            placeholder="Ex: 100"
+                            placeholder="Ex: 50"
                           />
                         </div>
 
-                        <div>
-                          <label className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400 mb-1.5 block">
-                            Prazo de Entrega Estimado
-                          </label>
-                          <DatePicker value={dueDate} onChange={setDueDate} />
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400 mb-1.5 block">
-                          Observações do Recebimento / Instruções
-                        </label>
-                        <textarea
-                          rows={3}
-                          value={observations}
-                          onChange={e => setObservations(e.target.value)}
-                          placeholder="Ex: Peças deixadas na sacola, cliente solicita bordado no peito esquerdo e manga direita. Sem matriz pronta."
-                          className="w-full bg-slate-50 dark:bg-white/5 border border-slate-300 dark:border-white/10 rounded-2xl px-4 py-2.5 text-xs text-slate-900 dark:text-white outline-none resize-none"
-                          style={observations.trim() ? { borderColor: `${settings.primaryColor}30` } : undefined}
-                        />
-                      </div>
-                      
-                      {renderAttachments()}
-                    </div>
-                  )}
-
-                  {/* Observações Removidas Lista Inferior */}
-                </div>
+                              {/* ⏱️ Tempo Estimado de Máquina */}
+                              <div>
+                                <label className="text-[10px] font-black uppercase tracking-wider text-amber-500 dark:text-amber-400 mb-1 flex items-center gap-1">
+                                  <Clock className="h-3.5 w-3.5" /> Tempo Máquina
+                                </label>
+                                <div className="w-full bg-amber-500/10 border border-amber-500/30 rounded-2xl px-4 py-2 text-xs font-black text-amber-600 dark:text-amber-300 flex items-center justify-between">
+                                  <span>{estimatedMinutesPerPiece > 0 ? `${formatTimeLabel(estimatedMinutesPerPiece)}/pc` : '0 min'}</span>
+                                  <span className="text-[10px] font-bold bg-amber-500/20 px-1.5 py-0.5 rounded-full text-amber-400">
+                                    {formatTimeLabel(totalEstimatedMinutes)} total
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="space-y-4 pt-2">
+                              <div className="grid grid-cols-1 gap-4">
+                                <div>
+                                  <label className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400 mb-1.5 block">
+                                    Quantidade de Peças / Lote {!quantity && <span className="text-red-500">*</span>}
+                                  </label>
+                                  <input
+                                    type="number"
+                                    value={quantity}
+                                    onChange={e => setQuantity(e.target.value === '' ? '' : Number(e.target.value))}
+                                    className={`w-full bg-slate-50 dark:bg-white/5 border rounded-2xl px-4 py-2 text-xs font-bold text-slate-900 dark:text-white focus:outline-none transition-all ${
+                                      !quantity ? 'border-red-500/40 bg-red-500/5' : 'border-slate-300 dark:border-white/10'
+                                    }`}
+                                    style={quantity ? { borderColor: `${settings.primaryColor}30` } : undefined}
+                                    placeholder="Ex: 100"
+                                  />
+                                </div>
+                              </div>
+                              <div>
+                                <label className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400 mb-1.5 block">
+                                  Observações do Recebimento / Instruções
+                                </label>
+                                <textarea
+                                  rows={3}
+                                  value={observations}
+                                  onChange={e => setObservations(e.target.value)}
+                                  placeholder="Ex: Peças deixadas na sacola, cliente solicita bordado no peito esquerdo e manga direita. Sem matriz pronta."
+                                  className="w-full bg-slate-50 dark:bg-white/5 border border-slate-300 dark:border-white/10 rounded-2xl px-4 py-2.5 text-xs text-slate-900 dark:text-white outline-none resize-none"
+                                  style={observations.trim() ? { borderColor: `${settings.primaryColor}30` } : undefined}
+                                />
+                              </div>
+                              {renderAttachments()}
+                            </div>
+                          )}
+                        </>
+                      );
+                    })()}
+                  </div>
                 )}
+
+
 
                 {/* 3. Tactile Addons */}
                 {entryMode === 'budget' && (

@@ -110,6 +110,18 @@ export async function createEvolutionInstance(instanceName: string, force = fals
     });
 
     if (!error && data && !data.error) {
+      const qr = data?.qrcode?.base64 || data?.base64 || data?.code;
+      const formattedQr = qr ? (qr.startsWith('data:image') ? qr : `data:image/png;base64,${qr}`) : null;
+      const isConn = data?.status === 'connected' || data?.instance?.state === 'open' || data?.instance?.status === 'open';
+      
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        await supabase.from('profiles').update({
+          whatsapp_instance_id: instanceName,
+          whatsapp_status: isConn ? 'connected' : 'connecting',
+          whatsapp_qr_cache: formattedQr
+        }).eq('id', user.id);
+      }
       return data;
     }
   } catch (err) {
@@ -481,13 +493,13 @@ export function handleWhatsAppDispatchError(
   const webLink = getWhatsAppWebLink(phone, message);
 
   if (isDisconnected) {
-    toast.error('⚠️ WhatsApp (GABI) Desconectado!', {
+    toast.error('⚠️ Mensagem não enviada! WhatsApp Desconectado.', {
       id: toastId,
       duration: 10000,
-      description: 'Seu WhatsApp não está pareado via QR Code na Evolution API. Clique abaixo para parear e ativar disparos diretos sem abrir abas.',
+      description: 'Não foi possível enviar a mensagem diretamente porque seu WhatsApp não está pareado com o sistema. Para fazer os envios automáticos, você precisa ler o QR Code de conexão.',
       action: {
-        label: '⚡ Parear WhatsApp Agora',
-        onClick: () => { window.location.href = '/gabi'; }
+        label: '⚡ Conectar / Ler QR Code',
+        onClick: () => { window.location.href = '/configuracoes'; }
       }
     });
 
