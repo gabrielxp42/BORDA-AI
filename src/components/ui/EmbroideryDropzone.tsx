@@ -74,7 +74,7 @@ export const EmbroideryDropzone: React.FC<EmbroideryDropzoneProps> = ({ onFilePa
 
   return (
     <div 
-      className={`relative w-full border-2 border-dashed rounded-3xl p-6 transition-all flex flex-col items-center justify-center text-center overflow-hidden
+      className={`relative w-full border-2 border-dashed rounded-2xl p-4 transition-all flex flex-col items-center justify-center text-center overflow-hidden
         ${isDragging ? 'scale-[1.02]' : 'border-white/10 bg-black/40 hover:bg-white/5 hover:border-white/20'}
         ${status === 'success' ? 'border-emerald-500/50 bg-emerald-500/10' : ''}
         ${status === 'partial' ? 'border-amber-500/50 bg-amber-500/10' : ''}
@@ -97,51 +97,51 @@ export const EmbroideryDropzone: React.FC<EmbroideryDropzoneProps> = ({ onFilePa
       <div className="pointer-events-none flex flex-col items-center">
         {isParsing ? (
           <>
-            <div className="h-12 w-12 rounded-full flex items-center justify-center mb-3 animate-pulse" style={{ backgroundColor: `${primaryColor}33` }}>
-              <Loader2 className="h-6 w-6 animate-spin" style={{ color: primaryColor }} />
+            <div className="h-10 w-10 rounded-full flex items-center justify-center mb-2 animate-pulse" style={{ backgroundColor: `${primaryColor}33` }}>
+              <Loader2 className="h-5 w-5 animate-spin" style={{ color: primaryColor }} />
             </div>
-            <h3 className="text-sm font-bold text-white mb-1">Decodificando Arquivo...</h3>
-            <p className="text-xs text-zinc-400">Extraindo dados, pontos e dimensões.</p>
+            <h3 className="text-sm font-bold text-white mb-0.5">Decodificando...</h3>
+            <p className="text-[10px] text-zinc-400">Extraindo dados.</p>
           </>
         ) : status === 'success' ? (
           <>
-            <div className="h-12 w-12 rounded-full bg-emerald-500/20 flex items-center justify-center mb-3">
-              <CheckCircle className="h-6 w-6 text-emerald-400" />
+            <div className="h-10 w-10 rounded-full bg-emerald-500/20 flex items-center justify-center mb-2">
+              <CheckCircle className="h-5 w-5 text-emerald-400" />
             </div>
-            <h3 className="text-sm font-bold text-emerald-400 mb-1">Leitura Concluída!</h3>
-            <p className="text-xs text-emerald-400/70">Todos os campos preenchidos perfeitamente.</p>
+            <h3 className="text-sm font-bold text-emerald-400 mb-0.5">Leitura Concluída!</h3>
+            <p className="text-[10px] text-emerald-400/70">Tudo preenchido.</p>
           </>
         ) : status === 'partial' ? (
           <>
-            <div className="h-12 w-12 rounded-full bg-amber-500/20 flex items-center justify-center mb-3">
-              <AlertCircle className="h-6 w-6 text-amber-400" />
+            <div className="h-10 w-10 rounded-full bg-amber-500/20 flex items-center justify-center mb-2">
+              <AlertCircle className="h-5 w-5 text-amber-400" />
             </div>
-            <h3 className="text-sm font-bold text-amber-400 mb-1">Leitura Parcial (.EMB)</h3>
-            <p className="text-xs text-amber-400/80 max-w-sm">
-              O arquivo EMB bloqueia os pontos e tamanho. Extraímos apenas o nome e formato. Por favor, <strong>digite os pontos manualmente</strong> abaixo ou use um .DST.
+            <h3 className="text-sm font-bold text-amber-400 mb-0.5">Leitura Parcial</h3>
+            <p className="text-[10px] text-amber-400/80 max-w-sm">
+              .EMB lido parcialmente. Digite os pontos ou use um .DST.
             </p>
           </>
         ) : status === 'error' ? (
           <>
-            <div className="h-12 w-12 rounded-full bg-red-500/20 flex items-center justify-center mb-3">
-              <AlertCircle className="h-6 w-6 text-red-400" />
+            <div className="h-10 w-10 rounded-full bg-red-500/20 flex items-center justify-center mb-2">
+              <AlertCircle className="h-5 w-5 text-red-400" />
             </div>
-            <h3 className="text-sm font-bold text-red-400 mb-1">Falha na Leitura</h3>
-            <p className="text-xs text-red-400/70">{errorMsg}</p>
+            <h3 className="text-sm font-bold text-red-400 mb-0.5">Falha</h3>
+            <p className="text-[10px] text-red-400/70">{errorMsg}</p>
           </>
         ) : (
           <>
-            <div className="flex gap-2 mb-3">
-              <div className="h-12 w-12 rounded-full bg-blue-500/20 flex items-center justify-center border border-blue-500/30">
-                <FileCode className="h-5 w-5 text-blue-400" />
+            <div className="flex gap-2 mb-2">
+              <div className="h-10 w-10 rounded-full bg-blue-500/20 flex items-center justify-center border border-blue-500/30">
+                <FileCode className="h-4 w-4 text-blue-400" />
               </div>
-              <div className="h-12 w-12 rounded-full flex items-center justify-center border" style={{ backgroundColor: `${primaryColor}33`, borderColor: `${primaryColor}4D` }}>
-                <UploadCloud className="h-5 w-5" style={{ color: primaryColor }} />
+              <div className="h-10 w-10 rounded-full flex items-center justify-center border" style={{ backgroundColor: `${primaryColor}33`, borderColor: `${primaryColor}4D` }}>
+                <UploadCloud className="h-4 w-4" style={{ color: primaryColor }} />
               </div>
             </div>
-            <h3 className="text-sm font-bold text-white mb-1 tracking-wide">Leitor Automático de Matriz</h3>
-            <p className="text-xs text-zinc-400 max-w-xs mx-auto">
-              Arraste um arquivo <span className="font-mono text-purple-300">.DST</span> ou <span className="font-mono text-blue-300">.EMB</span> aqui ou clique para selecionar. O sistema preencherá os pontos, cores e tamanho sozinho.
+            <h3 className="text-sm font-bold text-white mb-1 tracking-wide">Arraste ou Selecione</h3>
+            <p className="text-[10px] text-zinc-400 max-w-xs mx-auto">
+              Formatos suportados: <span className="font-mono text-purple-300">.DST</span> e <span className="font-mono text-blue-300">.EMB</span>
             </p>
           </>
         )}

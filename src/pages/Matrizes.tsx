@@ -31,6 +31,7 @@ export const Matrizes: React.FC = () => {
   const [previewUrl, setPreviewUrl] = useState<string | undefined>();
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
 
   React.useEffect(() => {
     fetchMatrices();
@@ -128,20 +129,31 @@ export const Matrizes: React.FC = () => {
 
   const handleAddMatrix = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !clientId || !selectedFile) {
-      toast.error('Por favor, preencha todos os campos e faça o upload do arquivo.');
+    setFormError(null);
+    
+    if (!selectedFile) {
+      setFormError('Você precisa fazer o upload do arquivo da matriz.');
+      return;
+    }
+    if (!name) {
+      setFormError('Você precisa informar o Nome da Matriz.');
+      return;
+    }
+    if (!clientId) {
+      setFormError('Você precisa selecionar um Cliente para vincular esta matriz.');
       return;
     }
 
     setIsSaving(true);
     toast.info('Iniciando envio da matriz...', { id: 'upload-toast' });
     try {
+      const uniqueSuffix = Math.random().toString(36).substring(2, 6).toUpperCase();
       const { data: matrixData, error: matrixError } = await supabase
         .from('matrices')
         .insert({
           name,
           client_id: clientId,
-          code: `MAT-${String(matrices.length + 1).padStart(3, '0')}`,
+          code: `MAT-${Date.now().toString(36).toUpperCase()}-${uniqueSuffix}`,
           status: 'approved',
           category: 'Geral',
         })
@@ -557,6 +569,13 @@ export const Matrizes: React.FC = () => {
             </h3>
 
             <form onSubmit={handleAddMatrix} className="space-y-4">
+              {formError && (
+                <div className="p-3 rounded-2xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs font-bold flex items-center justify-center gap-2">
+                  <AlertCircle className="h-4 w-4" />
+                  {formError}
+                </div>
+              )}
+              
               <div className="mb-6">
                 <EmbroideryDropzone onFileParsed={handleFileParsed} />
               </div>
@@ -575,8 +594,10 @@ export const Matrizes: React.FC = () => {
               </div>
 
               <div>
-                <label className="text-xs font-bold text-zinc-400 uppercase">Cliente</label>
-                <div className="mt-1">
+                <label className="text-xs font-bold text-zinc-400 uppercase flex items-center gap-2">
+                  Cliente <span className="text-red-500 text-[10px]">*Obrigatório</span>
+                </label>
+                <div className={`mt-1 rounded-2xl transition-all ${!clientId && formError?.includes('Cliente') ? 'ring-2 ring-red-500/50' : ''}`}>
                   <ClientSelect value={clientId} onChange={setClientId} />
                 </div>
               </div>

@@ -1030,7 +1030,7 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
                       <button
                         type="button"
                         onClick={() => setIsDropzoneExpanded(!isDropzoneExpanded)}
-                        className="w-full p-4 flex items-center justify-between hover:bg-slate-100 dark:hover:bg-white/10 transition-colors text-left"
+                        className="w-full p-3 flex items-center justify-between hover:bg-slate-100 dark:hover:bg-white/10 transition-colors text-left"
                       >
                         <div className="flex items-center gap-3">
                           <div className="p-2.5 rounded-2xl flex items-center justify-center" style={{ backgroundColor: `${settings.primaryColor}20`, color: settings.primaryColor }}>
@@ -1060,15 +1060,15 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
                       </button>
 
                       {isDropzoneExpanded && (
-                        <div className="p-5 border-t border-slate-200 dark:border-white/10">
+                        <div className="p-3 border-t border-slate-200 dark:border-white/10">
                           <EmbroideryDropzone onFileParsed={handleFileParsed} primaryColor={settings.primaryColor} />
                           
                           {/* Botão Adicionar Manualmente (substitui o antigo) */}
-                          <div className="mt-4 pt-4 border-t border-slate-200 dark:border-white/10">
+                          <div className="mt-3 pt-3 border-t border-slate-200 dark:border-white/10">
                             <button
                               type="button"
                               onClick={handleAddNewItem}
-                              className="w-full py-2.5 rounded-xl border border-dashed border-emerald-500/40 bg-emerald-500/5 hover:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-sm"
+                              className="w-full py-2 rounded-xl border border-dashed border-emerald-500/40 bg-emerald-500/5 hover:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-sm"
                             >
                               <Plus className="h-4 w-4" />
                               ADICIONAR MATRIZ MANUALMENTE
@@ -1103,8 +1103,8 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
                       )}
                     </div>
 
-                    {/* Tabela do Carrinho (Mostra se houver itens) */}
-                    {orderItemsList.length > 0 && (
+                    {/* Tabela do Carrinho (Mostra se houver itens preenchidos) */}
+                    {(orderItemsList.length > 1 || (orderItemsList.length === 1 && (orderItemsList[0].matrixName || orderItemsList[0].stitchCount > 0))) && (
                       <div className="p-4 sm:p-5 border-t" style={{ borderColor: `${settings.primaryColor}30` }}>
                         <div className="flex items-center justify-between mb-3">
                           <h4 className="text-xs font-black uppercase tracking-wider flex items-center gap-2" style={{ color: settings.primaryColor }}>
@@ -1178,12 +1178,12 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
 
                 {/* 2. Client & Technical details */}
                 {(!orderItemsList.length || selectedItemId) && (
-                  <div className="glass-panel p-6 rounded-3xl border border-slate-200 dark:border-white/10 space-y-5 relative z-20 animate-in fade-in zoom-in-95 duration-200">
+                  <div className="glass-panel p-4 rounded-3xl border border-slate-200 dark:border-white/10 space-y-3 relative z-20 animate-in fade-in zoom-in-95 duration-200">
                     <h3 className="text-xs font-black uppercase tracking-widest flex items-center gap-2" style={{ color: settings.primaryColor }}>
                       <Layers className="h-4 w-4" /> Configuração do Item Selecionado
                     </h3>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <label className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400 mb-1.5 block">
                         Cliente Registrado {!selectedClientId && <span className="text-red-500">*</span>}
@@ -1214,7 +1214,7 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
 
                   {/* Saved matrices select list */}
                   {entryMode === 'budget' && selectedClientId && clientMatrices.length > 0 && (
-                    <div className="p-3.5 rounded-2xl bg-slate-100 dark:bg-black/40 border border-slate-200 dark:border-white/10 space-y-2">
+                    <div className="p-2.5 rounded-2xl bg-slate-100 dark:bg-black/40 border border-slate-200 dark:border-white/10 space-y-2">
                       <div className="flex items-center justify-between">
                         <span className="text-[11px] font-black uppercase tracking-wider text-slate-600 dark:text-zinc-400 flex items-center gap-1.5">
                           <Layers className="h-3.5 w-3.5" style={{ color: settings.primaryColor }} /> Matrizes Históricas ({clientMatrices.length})
@@ -1227,11 +1227,13 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
                         >
                           {showMatrixSelector ? 'Ocultar' : 'Ver Matrizes'}
                           <ChevronDown className={`h-3 w-3 transition-transform ${showMatrixSelector ? 'rotate-180' : ''}`} />
+                          {showMatrixSelector ? 'Ocultar' : 'Listar'}
+                          <ChevronDown className={`h-2.5 w-2.5 transition-transform ${showMatrixSelector ? 'rotate-180' : ''}`} />
                         </button>
                       </div>
 
                       {showMatrixSelector && (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 max-h-36 overflow-y-auto custom-scrollbar">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pt-1 max-h-24 overflow-y-auto custom-scrollbar">
                           {clientMatrices.map(m => {
                             const ver = m.current_version;
                             const isSelected = selectedMatrixId === m.id;
@@ -1239,11 +1241,10 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
                               <div
                                 key={m.id}
                                 onClick={() => handleSelectSavedMatrix(m)}
-                                className="p-2.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between text-slate-800 dark:text-zinc-200"
+                                className="p-2 rounded-xl border transition-all cursor-pointer flex items-center justify-between text-slate-800 dark:text-zinc-200"
                                 style={isSelected ? { backgroundColor: `${settings.primaryColor}20`, borderColor: `${settings.primaryColor}50`, color: settings.primaryColor } : { borderColor: 'rgba(255,255,255,0.05)' }}
                               >
                                 <div className="min-w-0 flex-1">
-                                  <p className="text-xs font-bold truncate">{m.name}</p>
                                   <div className="flex items-center gap-2 mt-0.5 text-[10px] text-slate-500 dark:text-zinc-400">
                                     {ver?.stitch_count && <span>🪡 {ver.stitch_count.toLocaleString()} pts</span>}
                                     {ver?.color_count && <span>🎨 {ver.color_count} cores</span>}
@@ -1261,16 +1262,16 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
                   {/* Technical Values / Quick Entry Fields */}
                   {entryMode === 'budget' ? (
                     <>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                       <div>
-                        <label className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400 mb-1.5 block">
+                        <label className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400 mb-1 block">
                           Quantidade Pontos
                         </label>
                         <input
                           type="number"
                           value={stitchCount}
                           onChange={e => setStitchCount(e.target.value === '' ? '' : Number(e.target.value))}
-                          className={`w-full bg-slate-50 dark:bg-white/5 border rounded-2xl px-4 py-2 text-xs font-bold text-slate-900 dark:text-white focus:outline-none transition-all ${
+                          className={`w-full bg-slate-50 dark:bg-white/5 border rounded-2xl px-4 py-1.5 text-xs font-bold text-slate-900 dark:text-white focus:outline-none transition-all ${
                             !stitchCount ? 'border-red-500/40 bg-red-500/5' : 'border-slate-300 dark:border-white/10'
                           }`}
                           style={stitchCount ? { borderColor: `${settings.primaryColor}30` } : undefined}
@@ -1279,28 +1280,28 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
                       </div>
 
                       <div>
-                        <label className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400 mb-1.5 block">
+                        <label className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400 mb-1 block">
                           Número de Cores
                         </label>
                         <input
                           type="number"
                           value={colorCount}
                           onChange={e => setColorCount(e.target.value === '' ? '' : Number(e.target.value))}
-                          className="w-full bg-slate-50 dark:bg-white/5 border border-slate-300 dark:border-white/10 rounded-2xl px-4 py-2 text-xs text-slate-900 dark:text-white focus:outline-none"
+                          className="w-full bg-slate-50 dark:bg-white/5 border border-slate-300 dark:border-white/10 rounded-2xl px-4 py-1.5 text-xs text-slate-900 dark:text-white focus:outline-none"
                           style={colorCount ? { borderColor: `${settings.primaryColor}30` } : undefined}
                           placeholder="Ex: 4"
                         />
                       </div>
 
                       <div>
-                        <label className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400 mb-1.5 block">
+                        <label className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400 mb-1 block">
                           Qtd Peças
                         </label>
                         <input
                           type="number"
                           value={quantity}
                           onChange={e => setQuantity(e.target.value === '' ? '' : Number(e.target.value))}
-                          className={`w-full bg-slate-50 dark:bg-white/5 border rounded-2xl px-4 py-2 text-xs font-bold text-slate-900 dark:text-white focus:outline-none transition-all ${
+                          className={`w-full bg-slate-50 dark:bg-white/5 border rounded-2xl px-4 py-1.5 text-xs font-bold text-slate-900 dark:text-white focus:outline-none transition-all ${
                             !quantity ? 'border-red-500/40 bg-red-500/5' : 'border-slate-300 dark:border-white/10'
                           }`}
                           style={quantity ? { borderColor: `${settings.primaryColor}30` } : undefined}
@@ -1310,12 +1311,12 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
 
                       {/* ⏱️ Tempo Estimado de Máquina */}
                       <div>
-                        <label className="text-[10px] font-black uppercase tracking-wider text-amber-500 dark:text-amber-400 mb-1.5 block flex items-center gap-1">
-                          <Clock className="h-3.5 w-3.5" /> Tempo Estimado Máquina
+                        <label className="text-[10px] font-black uppercase tracking-wider text-amber-500 dark:text-amber-400 mb-1 block flex items-center gap-1">
+                          <Clock className="h-3.5 w-3.5" /> Tempo Máquina
                         </label>
-                        <div className="w-full bg-amber-500/10 border border-amber-500/30 rounded-2xl px-4 py-2 text-xs font-black text-amber-600 dark:text-amber-300 flex items-center justify-between">
-                          <span>{estimatedMinutesPerPiece > 0 ? `${formatTimeLabel(estimatedMinutesPerPiece)} / pc` : '0 min'}</span>
-                          <span className="text-[10px] font-bold bg-amber-500/20 px-2 py-0.5 rounded-full text-amber-400">
+                        <div className="w-full bg-amber-500/10 border border-amber-500/30 rounded-2xl px-4 py-1.5 text-xs font-black text-amber-600 dark:text-amber-300 flex items-center justify-between">
+                          <span>{estimatedMinutesPerPiece > 0 ? `${formatTimeLabel(estimatedMinutesPerPiece)}/pc` : '0 min'}</span>
+                          <span className="text-[10px] font-bold bg-amber-500/20 px-1.5 py-0.5 rounded-full text-amber-400">
                             {formatTimeLabel(totalEstimatedMinutes)} total
                           </span>
                         </div>
@@ -1374,24 +1375,24 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
 
                 {/* 3. Tactile Addons */}
                 {entryMode === 'budget' && (
-                  <div className="glass-panel p-6 rounded-3xl border border-slate-200 dark:border-white/10 space-y-4">
+                  <div className="glass-panel p-4 rounded-3xl border border-slate-200 dark:border-white/10 space-y-3">
                     <h3 className="text-xs font-black uppercase tracking-widest text-slate-600 dark:text-zinc-400 flex items-center gap-2">
-                      <CheckCircle2 className="h-4 w-4" style={{ color: settings.primaryColor }} /> Adicionais Operacionais (Toque para Ativar)
+                      <CheckCircle2 className="h-4 w-4" style={{ color: settings.primaryColor }} /> Adicionais Operacionais
                     </h3>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
                       {[
-                        { label: 'Peça Pronta (Camisa Fechada)', badge: '+50%', state: isReadyPiece, setter: setIsReadyPiece, info: 'Exige maior dificuldade na fixação' },
-                        { label: 'Bastidor Grande', badge: '+30%', state: isBigHoop, setter: setIsBigHoop, info: 'Tamanho estendido de produção' },
-                        { label: 'Aplicação de Fringe', badge: '+30%', state: isFringe, setter: setIsFringe, info: 'Efeito 3D com fios cortados' },
-                        { label: 'Corte a Laser', badge: '+R$ 0,50/un', state: hasLaser, setter: setHasLaser, info: 'Corte automático de alta precisão' },
-                        { label: 'Prensa Térmica', badge: '+R$ 0,50/un', state: hasPress, setter: setHasPress, info: 'Fixação de apliques prévia' },
+                        { label: 'Camisa Fechada', badge: '+50%', state: isReadyPiece, setter: setIsReadyPiece, info: 'Fixação difícil' },
+                        { label: 'Bastidor Grande', badge: '+30%', state: isBigHoop, setter: setIsBigHoop, info: 'Maior produção' },
+                        { label: 'Fringe (3D)', badge: '+30%', state: isFringe, setter: setIsFringe, info: 'Efeito 3D' },
+                        { label: 'Corte Laser', badge: '+R$ 0,50', state: hasLaser, setter: setHasLaser, info: 'Corte contorno' },
+                        { label: 'Prensa Térmica', badge: '+R$ 0,50', state: hasPress, setter: setHasPress, info: 'Pré-fixação' },
                       ].map((addon, idx) => (
                         <button
                           key={idx}
                           type="button"
                           onClick={() => addon.setter(!addon.state)}
-                          className={`group flex flex-col justify-between p-3.5 rounded-2xl border text-left transition-all duration-300 ${
+                          className={`group flex flex-col justify-between p-2 rounded-2xl border text-left transition-all duration-300 ${
                             addon.state
                               ? 'text-slate-900 dark:text-white'
                               : 'bg-slate-50 dark:bg-white/5 border-slate-200 dark:border-white/5 text-slate-600 dark:text-zinc-400 hover:border-slate-300 dark:hover:border-white/10'
@@ -1399,19 +1400,21 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
                           style={addon.state ? { backgroundColor: `${settings.primaryColor}15`, borderColor: settings.primaryColor, boxShadow: `0 0 15px ${settings.primaryColor}20` } : undefined}
                         >
                           <div className="flex items-start justify-between w-full mb-1">
-                            <span className="text-xs font-black tracking-tight text-slate-800 dark:text-zinc-200" style={addon.state ? { color: settings.primaryColor } : undefined}>
+                            <span className="text-[10px] font-black tracking-tight text-slate-800 dark:text-zinc-200 leading-tight" style={addon.state ? { color: settings.primaryColor } : undefined}>
                               {addon.label}
                             </span>
+                          </div>
+                          <div className="flex items-end justify-between w-full">
+                            <span className="text-[9px] text-slate-500 dark:text-zinc-500 leading-none">
+                              {addon.info}
+                            </span>
                             <span 
-                              className="text-[9px] font-black px-2 py-0.5 rounded-lg border leading-none bg-slate-100 dark:bg-white/5 border-slate-200 dark:border-white/10 text-slate-500"
+                              className="text-[9px] font-black px-1.5 py-0.5 rounded-md border leading-none bg-slate-100 dark:bg-white/5 border-slate-200 dark:border-white/10 text-slate-500 ml-1"
                               style={addon.state ? { backgroundColor: `${settings.primaryColor}20`, borderColor: `${settings.primaryColor}30`, color: settings.primaryColor } : undefined}
                             >
                               {addon.badge}
                             </span>
                           </div>
-                          <span className="text-[10px] text-slate-500 dark:text-zinc-500 leading-snug">
-                            {addon.info}
-                          </span>
                         </button>
                       ))}
                     </div>
@@ -1459,7 +1462,7 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
                 </div>
 
                 {/* 2. Visual payment billing selections */}
-                <div className="glass-panel p-6 rounded-3xl border border-slate-200 dark:border-white/10 space-y-6">
+                <div className="glass-panel p-4 rounded-3xl border border-slate-200 dark:border-white/10 space-y-4">
                   <h3 className="text-xs font-black uppercase tracking-widest flex items-center gap-2" style={{ color: settings.primaryColor }}>
                     <DollarSign className="h-4 w-4" /> Condições Financeiras
                   </h3>
@@ -1482,7 +1485,7 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
                             key={st.id}
                             type="button"
                             onClick={() => setPaymentStatus(st.id as any)}
-                            className={`p-4 rounded-2xl border text-left transition-all ${
+                            className={`p-3 rounded-2xl border text-left transition-all ${
                               isSelected 
                                 ? `${st.color} border-2 shadow-sm font-black` 
                                 : 'border-slate-200 dark:border-white/5 bg-slate-50 dark:bg-white/5 opacity-60 hover:opacity-100'
@@ -1574,9 +1577,9 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
         </div>
 
         {/* Right Side: Pricing / Specifications Live Panel */}
-        <div className="lg:col-span-5 space-y-6">
-          <div className="glass-panel p-4 sm:p-6 rounded-3xl border border-slate-200 dark:border-white/10 space-y-6 lg:sticky lg:top-6">
-            <div className="flex items-center justify-between border-b border-slate-200 dark:border-white/10 pb-4">
+        <div className="lg:col-span-5 space-y-4">
+          <div className="glass-panel p-4 rounded-3xl border border-slate-200 dark:border-white/10 space-y-4 lg:sticky lg:top-4">
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-white/10 pb-3">
               <h3 className="text-xs font-black uppercase tracking-widest text-slate-500 dark:text-zinc-400">
                 {isUnlocked ? 'Resumo de Custos' : 'Resumo de Especificações'}
               </h3>
@@ -1593,8 +1596,8 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
             </div>
 
             {/* Specifications & Calculations items list */}
-            <div className="space-y-3.5">
-              <div className="space-y-1">
+            <div className="space-y-2">
+              <div className="space-y-0.5">
                 <p className="text-xs font-black text-slate-800 dark:text-zinc-200 truncate">
                   {selectedClientId ? 'Cliente Definido' : 'Cliente Não Selecionado'}
                 </p>
@@ -1694,7 +1697,7 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
               )}
 
               {/* Total Card Display */}
-              <div className="p-5 rounded-3xl text-white relative overflow-hidden" style={{ background: `linear-gradient(135deg, ${settings.primaryColor} 0%, ${settings.primaryColor}dd 100%)`, boxShadow: `0 10px 15px -3px ${settings.primaryColor}30` }}>
+              <div className="p-4 rounded-2xl text-white relative overflow-hidden" style={{ background: `linear-gradient(135deg, ${settings.primaryColor} 0%, ${settings.primaryColor}dd 100%)`, boxShadow: `0 10px 15px -3px ${settings.primaryColor}30` }}>
                 <div className="absolute right-0 bottom-0 opacity-10 translate-x-4 translate-y-4">
                   {isUnlocked ? <DollarSign className="h-32 w-32" /> : <Package className="h-32 w-32" />}
                 </div>
@@ -1722,7 +1725,7 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
                     type="button"
                     onClick={handleCreateOrder}
                     disabled={isSaving || !isFormValid}
-                    className="w-full py-4 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:opacity-95 text-white font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 active:scale-[0.98] transition-all disabled:opacity-50"
+                    className="w-full py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:opacity-95 text-white font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 active:scale-[0.98] transition-all disabled:opacity-50"
                   >
                     <Save className="h-4 w-4" />
                     {isSaving ? 'Registrando Entrada...' : '📥 Confirmar Entrada de Peças'}
@@ -1738,7 +1741,7 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
                         }
                         setStep(2);
                       }}
-                      className="w-full py-4 rounded-2xl hover:opacity-95 text-white font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
+                      className="w-full py-3 rounded-xl hover:opacity-95 text-white font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
                       style={{ background: `linear-gradient(135deg, ${settings.primaryColor} 0%, ${settings.primaryColor}dd 100%)`, boxShadow: `0 4px 6px -1px ${settings.primaryColor}30` }}
                     >
                       <span>Prosseguir para Fechamento</span>
@@ -1757,7 +1760,7 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
                         type="button"
                         onClick={handleCreateOrder}
                         disabled={isSaving || !isFormValid}
-                        className="flex-1 py-4 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:opacity-95 text-white font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 active:scale-[0.98] transition-all disabled:opacity-50"
+                        className="flex-1 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:opacity-95 text-white font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 active:scale-[0.98] transition-all disabled:opacity-50"
                       >
                         <Save className="h-4 w-4" />
                         {isSaving ? 'Registrando...' : 'Confirmar & Registrar Pedido'}
@@ -1794,25 +1797,25 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
                   {/* Chave 1: Avisar Recebimento de Peças */}
                   <div 
                     onClick={() => setWhatsappNotifyReceipt(!whatsappNotifyReceipt)}
-                    className={`flex items-center justify-between p-3 rounded-2xl border transition-all cursor-pointer select-none ${
+                    className={`flex items-center justify-between p-2.5 rounded-xl border transition-all cursor-pointer select-none ${
                       whatsappNotifyReceipt 
                         ? 'bg-emerald-500/10 border-emerald-500/40 shadow-sm shadow-emerald-500/10' 
                         : 'bg-slate-100 dark:bg-white/5 border-slate-200 dark:border-white/10 hover:border-white/20'
                     }`}
                   >
                     <div className="flex items-center gap-3 pr-2 min-w-0">
-                      <div className={`h-8 w-8 rounded-xl flex items-center justify-center shrink-0 border ${
+                      <div className={`h-7 w-7 rounded-lg flex items-center justify-center shrink-0 border ${
                         whatsappNotifyReceipt
                           ? 'bg-emerald-500/20 border-emerald-500/30 text-emerald-400'
                           : 'bg-white/5 border-white/10 text-zinc-400'
                       }`}>
-                        <Package className="h-4 w-4" />
+                        <Package className="h-3.5 w-3.5" />
                       </div>
                       <div className="min-w-0">
-                        <span className="font-bold text-slate-800 dark:text-zinc-100 block text-xs leading-tight">
+                        <span className="font-bold text-slate-800 dark:text-zinc-100 block text-[11px] leading-tight">
                           Avisar recebimento das peças
                         </span>
-                        <span className="text-[10px] text-slate-500 dark:text-zinc-400 block mt-0.5 truncate">
+                        <span className="text-[9px] text-slate-500 dark:text-zinc-400 block mt-0.5 truncate">
                           Notifica o cliente que as peças deram entrada
                         </span>
                       </div>
@@ -1841,25 +1844,25 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
                   {/* Chave 2: Solicitar Imagem/Referência */}
                   <div 
                     onClick={() => setWhatsappRequestRef(!whatsappRequestRef)}
-                    className={`flex items-center justify-between p-3 rounded-2xl border transition-all cursor-pointer select-none ${
+                    className={`flex items-center justify-between p-2.5 rounded-xl border transition-all cursor-pointer select-none ${
                       whatsappRequestRef 
                         ? 'bg-emerald-500/10 border-emerald-500/40 shadow-sm shadow-emerald-500/10' 
                         : 'bg-slate-100 dark:bg-white/5 border-slate-200 dark:border-white/10 hover:border-white/20'
                     }`}
                   >
                     <div className="flex items-center gap-3 pr-2 min-w-0">
-                      <div className={`h-8 w-8 rounded-xl flex items-center justify-center shrink-0 border ${
+                      <div className={`h-7 w-7 rounded-lg flex items-center justify-center shrink-0 border ${
                         whatsappRequestRef
                           ? 'bg-emerald-500/20 border-emerald-500/30 text-emerald-400'
                           : 'bg-white/5 border-white/10 text-zinc-400'
                       }`}>
-                        <Image className="h-4 w-4" />
+                        <Image className="h-3.5 w-3.5" />
                       </div>
                       <div className="min-w-0">
-                        <span className="font-bold text-slate-800 dark:text-zinc-100 block text-xs leading-tight">
+                        <span className="font-bold text-slate-800 dark:text-zinc-100 block text-[11px] leading-tight">
                           Solicitar imagem / referência
                         </span>
-                        <span className="text-[10px] text-slate-500 dark:text-zinc-400 block mt-0.5 truncate">
+                        <span className="text-[9px] text-slate-500 dark:text-zinc-400 block mt-0.5 truncate">
                           Pede a foto/logomarca do bordado no WhatsApp
                         </span>
                       </div>
