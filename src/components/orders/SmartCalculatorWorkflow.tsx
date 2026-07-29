@@ -311,29 +311,58 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
   };
 
   const handleSelectSavedMatrix = (matrix: any) => {
-    // Se o usuário selecionou uma matriz do histórico, atualizamos o carrinho ou criamos um item se não houver selecionado
-    if (!selectedItemId) {
-      handleAddNewItem(); // Vai preencher no tick seguinte devido ao React, então forçamos a atualização manual abaixo
-    }
-    
-    setMatrixName(matrix.name);
-    setSelectedMatrixId(matrix.id);
-    const ver = matrix.current_version;
-    if (ver) {
-      if (ver.stitch_count) setStitchCount(ver.stitch_count);
-      if (ver.color_count) setColorCount(ver.color_count);
-    }
-    toast.success(`Matriz "${matrix.name}" carregada!`);
+    const pStitches = matrix.current_version?.stitch_count || 0;
+    const pColors = matrix.current_version?.color_count || 1;
+    const pQuantity = Math.max(1, Number(quantity) || 1);
+
+    const calcPrice = calculateEmbroideryPrice(
+      {
+        stitchCount: Math.max(0, pStitches),
+        colorCount: Math.max(1, pColors),
+        quantity: pQuantity,
+        chargeColorAddon,
+        isBigHoop,
+        isReadyPiece,
+        isFringe,
+        hasLaser,
+        hasPress,
+      },
+      rules
+    );
+
+    const newItemData = {
+      matrixName: matrix.name,
+      stitchCount: pStitches,
+      colorCount: pColors,
+      quantity: pQuantity,
+      unitPrice: calcPrice.unitPrice,
+      totalPrice: calcPrice.totalPrice,
+      matrixId: matrix.id
+    };
+
+    setOrderItemsList(prev => {
+      const currentItem = prev.find(i => i.id === selectedItemId);
+      if (currentItem && !currentItem.matrixName && !currentItem.stitchCount) {
+        const updatedItem = { ...currentItem, ...newItemData };
+        setTimeout(() => handleSelectItem(updatedItem), 0);
+        return prev.map(i => i.id === selectedItemId ? updatedItem : i);
+      }
+      
+      const newItem = {
+        id: `item_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+        ...newItemData
+      };
+      setTimeout(() => handleSelectItem(newItem), 0);
+      return [...prev, newItem];
+    });
+
+    toast.success(`Matriz "${matrix.name}" adicionada ao carrinho!`);
   };
 
   const handleFileParsed = (meta: EmbroideryMetadata, file: File) => {
     const parsedName = meta.name || file.name.replace(/\.[^/.]+$/, "");
     const parsedStitches = meta.stitches || 0;
     const parsedColors = meta.colors || 1;
-
-    setMatrixName(parsedName);
-    if (parsedStitches > 0) setStitchCount(parsedStitches);
-    if (parsedColors > 0) setColorCount(parsedColors);
 
     setLastParsedFile(parsedName);
     setParsedMatrixFile(file);
@@ -989,142 +1018,159 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
                   </div>
                 )}
 
-                {/* 0. Lista de Matrizes do Pedido (Somente no Orçamento Completo) */}
-                {entryMode === 'budget' && orderItemsList.length > 0 && (
-                  <div className="glass-panel p-4 sm:p-5 rounded-3xl border border-purple-500/30 dark:border-purple-500/20 bg-purple-500/5 shadow-sm space-y-3">
-                    <div className="flex items-center justify-between">
-                      <h4 className="text-xs font-black uppercase tracking-wider text-purple-600 dark:text-purple-400 flex items-center gap-2">
-                        <Layers className="h-4 w-4" /> Carrinho do Pedido ({orderItemsList.length} Matrizes)
-                      </h4>
-                      <div className="flex items-center gap-3">
-                        <span className="text-xs font-black text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/20">
-                          Total: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totalOrderAmount)}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="rounded-2xl border border-slate-200 dark:border-white/10 overflow-hidden bg-white dark:bg-black/40">
-                      <table className="w-full text-left text-xs">
-                        <thead className="bg-slate-100 dark:bg-white/5 text-slate-700 dark:text-zinc-300 font-bold uppercase text-[9px] tracking-wider">
-                          <tr>
-                            <th className="p-3">Matriz / Descrição</th>
-                            <th className="p-3 text-center">Qtd</th>
-                            <th className="p-3 text-right">Valor Unit.</th>
-                            <th className="p-3 text-right">Subtotal</th>
-                            <th className="p-3 text-center">Ação</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100 dark:divide-white/5 font-medium text-slate-800 dark:text-zinc-200">
-                          {orderItemsList.map((it) => (
-                            <tr 
-                              key={it.id} 
-                              onClick={() => handleSelectItem(it)}
-                              className={`cursor-pointer transition-colors ${
-                                selectedItemId === it.id 
-                                  ? 'bg-purple-500/10 dark:bg-purple-500/20 border-l-4 border-purple-500' 
-                                  : 'hover:bg-slate-50 dark:hover:bg-white/[0.02] border-l-4 border-transparent'
-                              }`}
-                            >
-                              <td className="p-3 font-bold">
-                                <span className="block truncate max-w-[150px] sm:max-w-[200px]">
-                                  {it.matrixName || <span className="text-zinc-400 italic font-normal">Nome não informado</span>}
-                                </span>
-                                <span className="text-[10px] text-zinc-500 font-normal">🪡 {it.stitchCount.toLocaleString()} pts • 🎨 {it.colorCount} cores</span>
-                              </td>
-                              <td className="p-3 text-center font-bold">{it.quantity} un</td>
-                              <td className="p-3 text-right text-slate-600 dark:text-zinc-400">
-                                {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(it.unitPrice)}
-                              </td>
-                              <td className="p-3 text-right font-black text-purple-600 dark:text-purple-400">
-                                {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(it.totalPrice)}
-                              </td>
-                              <td className="p-3 text-center">
-                                <button
-                                  type="button"
-                                  onClick={(e) => handleRemoveItemFromList(e, it.id)}
-                                  className="p-1.5 bg-red-500/10 text-red-500 dark:text-red-400 rounded-lg hover:bg-red-500/20 transition-colors"
-                                  title="Remover matriz do pedido"
-                                >
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+                {/* 0. Carrinho de Matrizes e Leitor Automático (Unificados) */}
+                {entryMode === 'budget' && (
+                  <div 
+                    className="glass-panel rounded-3xl border shadow-sm space-y-0 overflow-hidden relative z-20 animate-in fade-in zoom-in-95 duration-200"
+                    style={{ borderColor: `${settings.primaryColor}40`, backgroundColor: `${settings.primaryColor}0A` }}
+                  >
                     
-                    {/* Botão Adicionar Mais Matrizes */}
-                    <button
-                      type="button"
-                      onClick={handleAddNewItem}
-                      className="w-full py-2.5 rounded-xl border border-dashed border-emerald-500/40 bg-emerald-500/5 hover:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-sm"
-                    >
-                      <Plus className="h-4 w-4" />
-                      ADICIONAR NOVA MATRIZ
-                    </button>
-                  </div>
-                )}
-
-                {/* 1. Drag and Drop Parser (Mostra apenas se o carrinho estiver vazio ou no item em branco) */}
-                {entryMode === 'budget' && (!orderItemsList.length || (selectedItemId && !matrixName && !stitchCount)) && (
-                  <div className="glass-panel rounded-3xl border border-slate-200 dark:border-white/10 overflow-hidden shadow-sm animate-in fade-in zoom-in-95 duration-200">
-                    <button
-                      type="button"
-                      onClick={() => setIsDropzoneExpanded(!isDropzoneExpanded)}
-                      className="w-full p-4 flex items-center justify-between bg-slate-50/50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 transition-colors text-left"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="p-2.5 rounded-2xl flex items-center justify-center" style={{ backgroundColor: `${settings.primaryColor}20`, color: settings.primaryColor }}>
-                          <Upload className="h-4 w-4" />
-                        </div>
-                        <div>
-                          <h3 className="text-xs font-black uppercase tracking-widest text-slate-900 dark:text-white flex items-center gap-2">
-                            <span>LEITOR AUTOMÁTICO DE MATRIZ</span>
-                            <span className="text-[10px] bg-purple-500/20 text-purple-400 px-2 py-0.5 rounded-full font-mono normal-case">.EMB / .DST</span>
-                          </h3>
-                          <p className="text-[11px] text-slate-500 dark:text-zinc-400 mt-0.5">
-                            {lastParsedFile ? `Carregado: ${lastParsedFile}` : 'Arraste um arquivo para adicionar ao carrinho.'}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {lastParsedFile && (
-                          <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 flex items-center gap-1">
-                            <FileCheck className="h-3.5 w-3.5" /> Ok
-                          </span>
-                        )}
-                        <ChevronDown className={`h-4 w-4 text-slate-400 transition-transform ${isDropzoneExpanded ? 'rotate-180' : ''}`} />
-                      </div>
-                    </button>
-                    {isDropzoneExpanded && (
-                      <div className="p-5 border-t border-slate-200 dark:border-white/10">
-                        <EmbroideryDropzone onFileParsed={handleFileParsed} />
-                      </div>
-                    )}
-                    
-                    {/* Save to Library Toggle */}
-                    {lastParsedFile && (
-                      <div className="px-4 py-3 border-t border-slate-200 dark:border-white/10 flex items-center justify-between bg-slate-50/50 dark:bg-white/[0.02]">
-                        <div className="flex items-center gap-2.5">
-                          <div className="h-7 w-7 rounded-xl flex items-center justify-center" style={{ backgroundColor: saveToLibrary ? `${settings.primaryColor}20` : 'transparent', border: `1px solid ${saveToLibrary ? settings.primaryColor + '40' : '#ffffff20'}` }}>
-                            <Layers className="h-3.5 w-3.5" style={{ color: saveToLibrary ? settings.primaryColor : '#6b7280' }} />
+                    {/* Leitor Automático & Adicionar Manual (AGORA NO TOPO) */}
+                    <div className="bg-slate-50/50 dark:bg-white/5">
+                      <button
+                        type="button"
+                        onClick={() => setIsDropzoneExpanded(!isDropzoneExpanded)}
+                        className="w-full p-4 flex items-center justify-between hover:bg-slate-100 dark:hover:bg-white/10 transition-colors text-left"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="p-2.5 rounded-2xl flex items-center justify-center" style={{ backgroundColor: `${settings.primaryColor}20`, color: settings.primaryColor }}>
+                            <Upload className="h-4 w-4" />
                           </div>
                           <div>
-                            <p className="text-xs font-black text-slate-800 dark:text-white">Salvar na Biblioteca do Cliente</p>
-                            <p className="text-[10px] text-slate-400 dark:text-zinc-500">{saveToLibrary ? 'O arquivo será arquivado' : 'Somente para este pedido'}</p>
+                            <h3 className="text-xs font-black uppercase tracking-widest text-slate-900 dark:text-white flex items-center gap-2">
+                              <span>LEITOR AUTOMÁTICO DE MATRIZ</span>
+                              <span 
+                                className="text-[10px] px-2 py-0.5 rounded-full font-mono normal-case"
+                                style={{ backgroundColor: `${settings.primaryColor}20`, color: settings.primaryColor }}
+                              >.EMB / .DST</span>
+                            </h3>
+                            <p className="text-[11px] text-slate-500 dark:text-zinc-400 mt-0.5">
+                              {lastParsedFile ? `Carregado: ${lastParsedFile}` : 'Arraste um arquivo para adicionar ao carrinho.'}
+                            </p>
                           </div>
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => setSaveToLibrary(v => !v)}
-                          className={`relative h-6 w-11 rounded-full transition-all duration-300 focus:outline-none shrink-0`}
-                          style={{ backgroundColor: saveToLibrary ? settings.primaryColor : '#374151' }}
-                        >
-                          <span
-                            className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow-md transition-transform duration-300 ${saveToLibrary ? 'translate-x-5' : 'translate-x-0'}`}
-                          />
-                        </button>
+                        <div className="flex items-center gap-2">
+                          {lastParsedFile && (
+                            <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 flex items-center gap-1">
+                              <FileCheck className="h-3.5 w-3.5" /> Ok
+                            </span>
+                          )}
+                          <ChevronDown className={`h-4 w-4 text-slate-400 transition-transform ${isDropzoneExpanded ? 'rotate-180' : ''}`} />
+                        </div>
+                      </button>
+
+                      {isDropzoneExpanded && (
+                        <div className="p-5 border-t border-slate-200 dark:border-white/10">
+                          <EmbroideryDropzone onFileParsed={handleFileParsed} primaryColor={settings.primaryColor} />
+                          
+                          {/* Botão Adicionar Manualmente (substitui o antigo) */}
+                          <div className="mt-4 pt-4 border-t border-slate-200 dark:border-white/10">
+                            <button
+                              type="button"
+                              onClick={handleAddNewItem}
+                              className="w-full py-2.5 rounded-xl border border-dashed border-emerald-500/40 bg-emerald-500/5 hover:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-sm"
+                            >
+                              <Plus className="h-4 w-4" />
+                              ADICIONAR MATRIZ MANUALMENTE
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Save to Library Toggle */}
+                      {lastParsedFile && isDropzoneExpanded && (
+                        <div className="px-4 py-3 border-t border-slate-200 dark:border-white/10 flex items-center justify-between bg-slate-50/50 dark:bg-white/[0.02]">
+                          <div className="flex items-center gap-2.5">
+                            <div className="h-7 w-7 rounded-xl flex items-center justify-center" style={{ backgroundColor: saveToLibrary ? `${settings.primaryColor}20` : 'transparent', border: `1px solid ${saveToLibrary ? settings.primaryColor + '40' : '#ffffff20'}` }}>
+                              <Layers className="h-3.5 w-3.5" style={{ color: saveToLibrary ? settings.primaryColor : '#6b7280' }} />
+                            </div>
+                            <div>
+                              <p className="text-xs font-black text-slate-800 dark:text-white">Salvar na Biblioteca do Cliente</p>
+                              <p className="text-[10px] text-slate-400 dark:text-zinc-500">{saveToLibrary ? 'O arquivo será arquivado' : 'Somente para este pedido'}</p>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setSaveToLibrary(v => !v)}
+                            className={`relative h-6 w-11 rounded-full transition-all duration-300 focus:outline-none shrink-0`}
+                            style={{ backgroundColor: saveToLibrary ? settings.primaryColor : '#374151' }}
+                          >
+                            <span
+                              className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow-md transition-transform duration-300 ${saveToLibrary ? 'translate-x-5' : 'translate-x-0'}`}
+                            />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Tabela do Carrinho (Mostra se houver itens) */}
+                    {orderItemsList.length > 0 && (
+                      <div className="p-4 sm:p-5 border-t" style={{ borderColor: `${settings.primaryColor}30` }}>
+                        <div className="flex items-center justify-between mb-3">
+                          <h4 className="text-xs font-black uppercase tracking-wider flex items-center gap-2" style={{ color: settings.primaryColor }}>
+                            <Layers className="h-4 w-4" /> Carrinho do Pedido ({orderItemsList.length} Matrizes)
+                          </h4>
+                          <div className="flex items-center gap-3">
+                            <span className="text-xs font-black text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/20">
+                              Total: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totalOrderAmount)}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="rounded-2xl border border-slate-200 dark:border-white/10 overflow-hidden bg-white dark:bg-black/40">
+                          <table className="w-full text-left text-xs">
+                            <thead className="bg-slate-100 dark:bg-white/5 text-slate-700 dark:text-zinc-300 font-bold uppercase text-[9px] tracking-wider">
+                              <tr>
+                                <th className="p-3">Matriz / Descrição</th>
+                                <th className="p-3 text-center">Qtd</th>
+                                <th className="p-3 text-right">Valor Unit.</th>
+                                <th className="p-3 text-right">Subtotal</th>
+                                <th className="p-3 text-center">Ação</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100 dark:divide-white/5 font-medium text-slate-800 dark:text-zinc-200">
+                              {orderItemsList.map((it) => (
+                                <tr 
+                                  key={it.id} 
+                                  onClick={() => handleSelectItem(it)}
+                                  className={`cursor-pointer transition-colors ${
+                                    selectedItemId === it.id 
+                                      ? 'border-l-4' 
+                                      : 'hover:bg-slate-50 dark:hover:bg-white/[0.02] border-l-4 border-transparent'
+                                  }`}
+                                  style={selectedItemId === it.id ? { 
+                                    backgroundColor: `${settings.primaryColor}15`, 
+                                    borderLeftColor: settings.primaryColor 
+                                  } : undefined}
+                                >
+                                  <td className="p-3 font-bold">
+                                    <span className="block truncate max-w-[150px] sm:max-w-[200px]">
+                                      {it.matrixName || <span className="text-zinc-400 italic font-normal">Nome não informado</span>}
+                                    </span>
+                                    <span className="text-[10px] text-zinc-500 font-normal">🪡 {it.stitchCount.toLocaleString()} pts • 🎨 {it.colorCount} cores</span>
+                                  </td>
+                                  <td className="p-3 text-center font-bold">{it.quantity} un</td>
+                                  <td className="p-3 text-right text-slate-600 dark:text-zinc-400">
+                                    {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(it.unitPrice)}
+                                  </td>
+                                  <td className="p-3 text-right font-black" style={{ color: settings.primaryColor }}>
+                                    {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(it.totalPrice)}
+                                  </td>
+                                  <td className="p-3 text-center">
+                                    <button
+                                      type="button"
+                                      onClick={(e) => handleRemoveItemFromList(e, it.id)}
+                                      className="p-1.5 bg-red-500/10 text-red-500 dark:text-red-400 rounded-lg hover:bg-red-500/20 transition-colors"
+                                      title="Remover matriz do pedido"
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </button>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
                       </div>
                     )}
                   </div>

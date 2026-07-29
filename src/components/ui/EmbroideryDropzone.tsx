@@ -4,9 +4,10 @@ import { parseEmbroideryFile, EmbroideryMetadata } from '../../utils/embroideryP
 
 interface EmbroideryDropzoneProps {
   onFileParsed: (metadata: EmbroideryMetadata, file: File) => void;
+  primaryColor?: string;
 }
 
-export const EmbroideryDropzone: React.FC<EmbroideryDropzoneProps> = ({ onFileParsed }) => {
+export const EmbroideryDropzone: React.FC<EmbroideryDropzoneProps> = ({ onFileParsed, primaryColor = '#a855f7' }) => {
   const [isDragging, setIsDragging] = useState(false);
   const [isParsing, setIsParsing] = useState(false);
   const [status, setStatus] = useState<'idle' | 'success' | 'partial' | 'error'>('idle');
@@ -74,11 +75,12 @@ export const EmbroideryDropzone: React.FC<EmbroideryDropzoneProps> = ({ onFilePa
   return (
     <div 
       className={`relative w-full border-2 border-dashed rounded-3xl p-6 transition-all flex flex-col items-center justify-center text-center overflow-hidden
-        ${isDragging ? 'border-purple-500 bg-purple-500/10 scale-[1.02]' : 'border-white/10 bg-black/40 hover:bg-white/5 hover:border-white/20'}
+        ${isDragging ? 'scale-[1.02]' : 'border-white/10 bg-black/40 hover:bg-white/5 hover:border-white/20'}
         ${status === 'success' ? 'border-emerald-500/50 bg-emerald-500/10' : ''}
         ${status === 'partial' ? 'border-amber-500/50 bg-amber-500/10' : ''}
         ${status === 'error' ? 'border-red-500/50 bg-red-500/10' : ''}
       `}
+      style={isDragging && status === 'idle' ? { borderColor: primaryColor, backgroundColor: `${primaryColor}1A` } : undefined}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
@@ -95,8 +97,8 @@ export const EmbroideryDropzone: React.FC<EmbroideryDropzoneProps> = ({ onFilePa
       <div className="pointer-events-none flex flex-col items-center">
         {isParsing ? (
           <>
-            <div className="h-12 w-12 rounded-full bg-purple-500/20 flex items-center justify-center mb-3 animate-pulse">
-              <Loader2 className="h-6 w-6 text-purple-400 animate-spin" />
+            <div className="h-12 w-12 rounded-full flex items-center justify-center mb-3 animate-pulse" style={{ backgroundColor: `${primaryColor}33` }}>
+              <Loader2 className="h-6 w-6 animate-spin" style={{ color: primaryColor }} />
             </div>
             <h3 className="text-sm font-bold text-white mb-1">Decodificando Arquivo...</h3>
             <p className="text-xs text-zinc-400">Extraindo dados, pontos e dimensões.</p>
@@ -133,8 +135,8 @@ export const EmbroideryDropzone: React.FC<EmbroideryDropzoneProps> = ({ onFilePa
               <div className="h-12 w-12 rounded-full bg-blue-500/20 flex items-center justify-center border border-blue-500/30">
                 <FileCode className="h-5 w-5 text-blue-400" />
               </div>
-              <div className="h-12 w-12 rounded-full bg-purple-500/20 flex items-center justify-center border border-purple-500/30">
-                <UploadCloud className="h-5 w-5 text-purple-400" />
+              <div className="h-12 w-12 rounded-full flex items-center justify-center border" style={{ backgroundColor: `${primaryColor}33`, borderColor: `${primaryColor}4D` }}>
+                <UploadCloud className="h-5 w-5" style={{ color: primaryColor }} />
               </div>
             </div>
             <h3 className="text-sm font-bold text-white mb-1 tracking-wide">Leitor Automático de Matriz</h3>
