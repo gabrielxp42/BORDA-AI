@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Layers, Plus, Search, FileCode, CheckCircle, Tag, Eye, ChevronDown, ChevronRight, User, FolderOpen, Folder, Download, Hash, Maximize2, Clock, X, HardDrive, AlertCircle, DollarSign, RefreshCw, Save } from 'lucide-react';
+import { Layers, Plus, Search, FileCode, CheckCircle, Tag, Eye, ChevronDown, ChevronRight, User, FolderOpen, Folder, Download, Hash, Maximize2, Clock, X, HardDrive, AlertCircle, DollarSign, RefreshCw, Save, Edit2 } from 'lucide-react';
 import { Matrix } from '@/types/borda';
 import { ClientSelect } from '../components/ui/ClientSelect';
 import { EmbroideryDropzone } from '../components/ui/EmbroideryDropzone';
@@ -8,12 +8,15 @@ import { MatrixDetailsModal } from '../components/matrices/MatrixDetailsModal';
 import { supabase } from '../integrations/supabase/client';
 import { useCompanySettings } from '../contexts/CompanySettingsContext';
 import { useProfile } from '@/contexts/ProfileContext';
+import { usePricing } from '@/contexts/PricingContext';
+import { calculateEmbroideryPrice } from '@/services/pricingEngine';
 import { formatCurrency } from '@/utils/currencyFormatter';
 import { toast } from 'sonner';
 
 export const Matrizes: React.FC = () => {
   const { settings } = useCompanySettings();
   const { permissions } = useProfile();
+  const { rules } = usePricing();
   const [matrices, setMatrices] = useState<Matrix[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -25,6 +28,8 @@ export const Matrizes: React.FC = () => {
   const [detailsMatrix, setDetailsMatrix] = useState<Matrix | null>(null);
   const [expandedClients, setExpandedClients] = useState<Set<string>>(new Set());
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  const [editingMatrixDataId, setEditingMatrixDataId] = useState<string | null>(null);
+  const [editingMatrixVersionId, setEditingMatrixVersionId] = useState<string | null>(null);
 
   // Form State
   const [name, setName] = useState('');
@@ -178,7 +183,7 @@ export const Matrizes: React.FC = () => {
     e.preventDefault();
     setFormError(null);
     
-    if (!selectedFile) {
+    if (!editingMatrixDataId && !selectedFile) {
       setFormError('Você precisa fazer o upload do arquivo da matriz.');
       return;
     }
@@ -194,78 +199,114 @@ export const Matrizes: React.FC = () => {
     setIsSaving(true);
     toast.info('Iniciando envio da matriz...', { id: 'upload-toast' });
     try {
-      const uniqueSuffix = Math.random().toString(36).substring(2, 6).toUpperCase();
-      const { data: matrixData, error: matrixError } = await supabase
-        .from('matrices')
-        .insert({
-          name,
-          client_id: clientId,
-          code: `MAT-${Date.now().toString(36).toUpperCase()}-${uniqueSuffix}`,
-          status: 'approved',
-          category: 'Geral',
-        })
-        .select()
-        .single();
+      if (editingMatrixDataId) {
+        toast.info('Atualizando matriz...', { id: 'upload-toast' });
+        const { error: matrixError } = await supabase
+          .from('matrices')
+          .update({ name, client_id: clientId })
+          .eq('id', editingMatrixDataId);
+        
+        if (matrixError) throw matrixError;
 
-      if (matrixError) throw matrixError;
-
-      const fileExt = selectedFile.name.split('.').pop();
-      const filePath = `${matrixData.id}/${Date.now()}.${fileExt}`;
-      const { error: uploadError } = await supabase.storage
-        .from('embroidery_files')
-        .upload(filePath, selectedFile);
-
-      if (uploadError) throw uploadError;
-
-      toast.success('Arquivo subido com sucesso, salvando dados...', { id: 'upload-toast' });
-      const fileUrl = supabase.storage.from('embroidery_files').getPublicUrl(filePath).data.publicUrl;
-
-      let finalPreviewUrl = null;
-      if (previewUrl) {
-        try {
-          const res = await fetch(previewUrl);
-          const blob = await res.blob();
-          const previewPath = `${matrixData.id}/preview.jpg`;
-          await supabase.storage.from('embroidery_files').upload(previewPath, blob);
-          finalPreviewUrl = supabase.storage.from('embroidery_files').getPublicUrl(previewPath).data.publicUrl;
-        } catch (prevErr) {
-          console.error('Erro ao fazer upload do preview', prevErr);
+        if (editingMatrixVersionId) {
+          const { error: versionError } = await supabase
+            .from('matrix_versions')
+            .update({
+              file_format: format,
+              stitch_count: Number(stitchCount),
+              width_mm: Number(widthMm),
+              height_mm: Number(heightMm),
+              color_count: Number(colorCount),
+              estimated_time_minutes: Math.round((stitchCount / 1000) * 0.7),
+            })
+            .eq('id', editingMatrixVersionId);
+            
+          if (versionError) throw versionError;
         }
+
+        toast.success('Matriz atualizada com sucesso!', { id: 'upload-toast' });
+      } else {
+        const uniqueSuffix = Math.random().toString(36).substring(2, 6).toUpperCase();
+        const { data: matrixData, error: matrixError } = await supabase
+          .from('matrices')
+          .insert({
+            name,
+            client_id: clientId,
+            code: `MAT-${Date.now().toString(36).toUpperCase()}-${uniqueSuffix}`,
+            status: 'approved',
+            category: 'Geral',
+          })
+          .select()
+          .single();
+
+        if (matrixError) throw matrixError;
+
+        const fileExt = selectedFile!.name.split('.').pop();
+        const filePath = `${matrixData.id}/${Date.now()}.${fileExt}`;
+        const { error: uploadError } = await supabase.storage
+          .from('embroidery_files')
+          .upload(filePath, selectedFile!);
+
+        if (uploadError) throw uploadError;
+
+        toast.success('Arquivo subido com sucesso, salvando dados...', { id: 'upload-toast' });
+        const fileUrl = supabase.storage.from('embroidery_files').getPublicUrl(filePath).data.publicUrl;
+
+        let finalPreviewUrl = null;
+        if (previewUrl) {
+          try {
+            const res = await fetch(previewUrl);
+            const blob = await res.blob();
+            const previewPath = `${matrixData.id}/preview.jpg`;
+            await supabase.storage.from('embroidery_files').upload(previewPath, blob);
+            finalPreviewUrl = supabase.storage.from('embroidery_files').getPublicUrl(previewPath).data.publicUrl;
+          } catch (prevErr) {
+            console.error('Erro ao fazer upload do preview', prevErr);
+          }
+        }
+
+        const { data: versionData, error: versionError } = await supabase
+          .from('matrix_versions')
+          .insert({
+            matrix_id: matrixData.id,
+            version_number: 1,
+            file_name: selectedFile!.name,
+            file_url: fileUrl,
+            preview_url: finalPreviewUrl,
+            file_format: format,
+            stitch_count: Number(stitchCount),
+            width_mm: Number(widthMm),
+            height_mm: Number(heightMm),
+            color_count: Number(colorCount),
+            estimated_time_minutes: Math.round((stitchCount / 1000) * 0.7),
+          })
+          .select()
+          .single();
+
+        if (versionError) throw versionError;
+
+        await supabase
+          .from('matrices')
+          .update({ current_version_id: versionData.id })
+          .eq('id', matrixData.id);
+
+        toast.success('Matriz salva com sucesso!', { id: 'upload-toast' });
       }
 
-      const { data: versionData, error: versionError } = await supabase
-        .from('matrix_versions')
-        .insert({
-          matrix_id: matrixData.id,
-          version_number: 1,
-          file_name: selectedFile.name,
-          file_url: fileUrl,
-          preview_url: finalPreviewUrl,
-          file_format: format,
-          stitch_count: Number(stitchCount),
-          width_mm: Number(widthMm),
-          height_mm: Number(heightMm),
-          color_count: Number(colorCount),
-          estimated_time_minutes: Math.round((stitchCount / 1000) * 0.7),
-        })
-        .select()
-        .single();
-
-      if (versionError) throw versionError;
-
-      await supabase.from('matrices').update({ current_version_id: versionData.id }).eq('id', matrixData.id);
-
-      await fetchMatrices();
-
       setIsModalOpen(false);
+      setEditingMatrixDataId(null);
+      setEditingMatrixVersionId(null);
       setName('');
       setClientId('');
-      setPreviewUrl(undefined);
+      setStitchCount(15000);
+      setColorCount(4);
+      setWidthMm(80);
+      setHeightMm(60);
+      setFormat('dst');
       setSelectedFile(null);
-
-      toast.success('Matriz cadastrada com sucesso!', { id: 'upload-toast' });
+      setPreviewUrl(undefined);
+      fetchMatrices();
     } catch (err: any) {
-      console.error(err);
       toast.error('Erro ao salvar matriz: ' + err.message, { id: 'upload-toast' });
     } finally {
       setIsSaving(false);
@@ -294,14 +335,26 @@ export const Matrizes: React.FC = () => {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {permissions?.canSeeFinancials !== false && (
+            <button
+              onClick={() => setIsBulkPriceModalOpen(true)}
+              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-2xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-zinc-300 font-bold text-xs hover:bg-slate-50 dark:hover:bg-white/10 transition-all active:scale-95"
+            >
+              <DollarSign className="h-4 w-4" /> Reajuste de Preços
+            </button>
+          )}
           <button
-            onClick={() => setIsBulkPriceModalOpen(true)}
-            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-2xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-zinc-300 font-bold text-xs hover:bg-slate-50 dark:hover:bg-white/10 transition-all active:scale-95"
-          >
-            <DollarSign className="h-4 w-4" /> Reajuste de Preços
-          </button>
-          <button
-            onClick={() => setIsModalOpen(true)}
+            onClick={() => {
+              setEditingMatrixDataId(null);
+              setEditingMatrixVersionId(null);
+              setName('');
+              setStitchCount(15000);
+              setColorCount(4);
+              setWidthMm(80);
+              setHeightMm(60);
+              setSelectedFile(null);
+              setIsModalOpen(true);
+            }}
             className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-2xl text-white font-bold text-xs shadow-lg hover:opacity-90 transition-all active:scale-95"
             style={{
               backgroundColor: settings.primaryColor,
@@ -550,12 +603,31 @@ export const Matrizes: React.FC = () => {
                                   </button>
                                 </div>
                               ) : (
-                                <button 
-                                  onClick={() => { setEditingPriceId(m.id); setEditPriceValue(m.fixed_price ? m.fixed_price.toString() : ''); }}
-                                  className="text-xs font-black text-emerald-500 dark:text-emerald-400 hover:opacity-80 transition-opacity"
-                                >
-                                  {m.fixed_price ? `R$ ${Number(m.fixed_price).toFixed(2)}` : 'Automático'}
-                                </button>
+                                  <button 
+                                    onClick={() => { setEditingPriceId(m.id); setEditPriceValue(m.fixed_price ? m.fixed_price.toString() : ''); }}
+                                    className="flex items-center gap-1.5 text-xs font-black text-emerald-500 dark:text-emerald-400 hover:opacity-80 transition-opacity bg-emerald-500/10 px-2 py-1 rounded-md border border-emerald-500/20"
+                                    title="Editar preço de venda"
+                                  >
+                                    <Edit2 className="h-3 w-3 opacity-70" />
+                                    {(() => {
+                                      if (m.fixed_price) {
+                                        return formatCurrency(Number(m.fixed_price), permissions?.canSeeFinancials ?? true);
+                                      } else {
+                                        const calcPrice = calculateEmbroideryPrice({
+                                          stitchCount: v?.stitch_count || 0,
+                                          colorCount: v?.color_count || 1,
+                                          quantity: 1,
+                                          chargeColorAddon: true,
+                                          isBigHoop: false,
+                                          isReadyPiece: false,
+                                          isFringe: false,
+                                          hasLaser: false,
+                                          hasPress: false
+                                        }, rules).unitPrice;
+                                        return `${formatCurrency(calcPrice, permissions?.canSeeFinancials ?? true)} (Auto)`;
+                                      }
+                                    })()}
+                                  </button>
                               )}
                             </div>
 
@@ -611,18 +683,34 @@ export const Matrizes: React.FC = () => {
                               </div>
                             )}
 
-                            {/* Actions */}
-                            <div className="flex items-center gap-2 pt-1 border-t border-slate-200 dark:border-white/10">
-                              <button
-                                onClick={() => setDetailsMatrix(m)}
-                                className="flex-1 py-2 rounded-xl text-[11px] font-bold flex items-center justify-center gap-1.5 transition-all hover:opacity-80"
-                                style={{
-                                  backgroundColor: `${settings.primaryColor}15`,
-                                  color: settings.primaryColor,
-                                }}
-                              >
-                                <Eye className="h-3.5 w-3.5" /> Detalhes
-                              </button>
+                              <div className="flex items-center gap-2 pt-1 border-t border-slate-200 dark:border-white/10">
+                                <button
+                                  onClick={() => {
+                                    setEditingMatrixDataId(m.id);
+                                    setEditingMatrixVersionId(v?.id || null);
+                                    setName(m.name);
+                                    setClientId(m.client_id || '');
+                                    setStitchCount(v?.stitch_count || 15000);
+                                    setColorCount(v?.color_count || 1);
+                                    setWidthMm(v?.width_mm || 80);
+                                    setHeightMm(v?.height_mm || 60);
+                                    setFormat(v?.file_format || 'dst');
+                                    setIsModalOpen(true);
+                                  }}
+                                  className="flex-1 py-2 rounded-xl text-[11px] font-bold flex items-center justify-center gap-1.5 transition-all hover:bg-slate-100 dark:hover:bg-white/10 text-slate-600 dark:text-zinc-300 border border-slate-200 dark:border-white/10"
+                                >
+                                  <Edit2 className="h-3.5 w-3.5" /> Editar
+                                </button>
+                                <button
+                                  onClick={() => setDetailsMatrix(m)}
+                                  className="flex-1 py-2 rounded-xl text-[11px] font-bold flex items-center justify-center gap-1.5 transition-all hover:opacity-80"
+                                  style={{
+                                    backgroundColor: `${settings.primaryColor}15`,
+                                    color: settings.primaryColor,
+                                  }}
+                                >
+                                  <Eye className="h-3.5 w-3.5" /> Detalhes
+                                </button>
                               {v?.file_url && (
                                 <button
                                   onClick={() => window.open(v.file_url, '_blank')}
@@ -650,7 +738,7 @@ export const Matrizes: React.FC = () => {
           <div className="glass-panel p-6 rounded-3xl border border-white/10 w-full max-w-lg space-y-4 max-h-[90vh] overflow-y-auto custom-scrollbar">
             <h3 className="text-lg font-black text-white flex items-center gap-2">
               <FileCode className="h-5 w-5" style={{ color: settings.primaryColor }} />
-              Cadastrar Matriz de Bordado
+              {editingMatrixDataId ? 'Editar Matriz de Bordado' : 'Cadastrar Matriz de Bordado'}
             </h3>
 
             <form onSubmit={handleAddMatrix} className="space-y-4">
@@ -661,9 +749,11 @@ export const Matrizes: React.FC = () => {
                 </div>
               )}
               
-              <div className="mb-6">
-                <EmbroideryDropzone onFileParsed={handleFileParsed} />
-              </div>
+              {!editingMatrixDataId && (
+                <div className="mb-6">
+                  <EmbroideryDropzone onFileParsed={handleFileParsed} />
+                </div>
+              )}
 
               <div>
                 <label className="text-xs font-bold text-zinc-400 uppercase">Nome da Matriz / Logo</label>
