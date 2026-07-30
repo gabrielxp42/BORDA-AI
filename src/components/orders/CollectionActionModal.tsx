@@ -5,6 +5,8 @@ import {
   ShieldAlert, Copy, ExternalLink, QrCode, CheckCircle2, FileText, Package
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { useProfile } from '@/contexts/ProfileContext';
+import { formatCurrency } from '@/utils/currencyFormatter';
 import { sendEvolutionText, getWhatsAppWebLink, handleWhatsAppDispatchError } from '@/services/whatsappService';
 import { useBackgroundTasks } from '@/hooks/useBackgroundTasks';
 import { useCompanySettings } from '@/contexts/CompanySettingsContext';
@@ -99,6 +101,7 @@ export const CollectionActionModal: React.FC<CollectionActionModalProps> = ({
   onMessageSent
 }) => {
   const { settings } = useCompanySettings();
+  const { permissions } = useProfile();
   const addTask = useBackgroundTasks(state => state.addTask);
   const updateTask = useBackgroundTasks(state => state.updateTask);
   const updateStep = useBackgroundTasks(state => state.updateStep);
@@ -122,7 +125,7 @@ export const CollectionActionModal: React.FC<CollectionActionModalProps> = ({
 
   const clientName = order.clients?.name || order.client?.name || 'Cliente';
   const orderCode = order.order_number ? `#${order.order_number}` : `#${order.id.slice(0, 4)}`;
-  const totalFormatted = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(order.total_amount || 0);
+  const totalFormatted = formatCurrency(order.total_amount || 0, permissions?.canSeeFinancials ?? true);
 
   const items = order.order_items || order.items || [];
   const itemsText = items.map(i => `• ${i.description} (${i.quantity}x)`).join('\n') || '• Bordado Personalizado';

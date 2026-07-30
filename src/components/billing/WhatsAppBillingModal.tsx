@@ -7,6 +7,8 @@ import { sendEvolutionText, getWhatsAppWebLink, handleWhatsAppDispatchError } fr
 import { getStoredTemplates, formatEmbroideryTemplate } from '@/services/whatsappTemplatesService';
 import { useCompanySettings } from '@/contexts/CompanySettingsContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { useProfile } from '@/contexts/ProfileContext';
+import { formatCurrency } from '@/utils/currencyFormatter';
 
 interface WhatsAppBillingModalProps {
   isOpen: boolean;
@@ -23,6 +25,7 @@ interface WhatsAppBillingModalProps {
 
 export const WhatsAppBillingModal: React.FC<WhatsAppBillingModalProps> = ({ isOpen, onClose, clientData }) => {
   const { profile } = useAuth();
+  const { permissions } = useProfile();
   const { settings } = useCompanySettings();
   const [phoneNumber, setPhoneNumber] = useState(clientData?.phone || '');
   const [isSending, setIsSending] = useState(false);
@@ -31,7 +34,7 @@ export const WhatsAppBillingModal: React.FC<WhatsAppBillingModalProps> = ({ isOp
   if (!isOpen || !clientData) return null;
 
   const currentMonth = format(new Date(), 'MMMM', { locale: ptBR });
-  const formattedTotal = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(clientData.totalAmount);
+  const formattedTotal = formatCurrency(clientData.totalAmount, permissions?.canSeeFinancials ?? true);
 
   // Tenta carregar template de cobrança personalizado da Central GABI (/gabi)
   const gabiTemplates = getStoredTemplates();

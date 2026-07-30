@@ -187,6 +187,64 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
   }, [orderItemsList]);
 
   // Master-Detail Sync Effect (Syncs form inputs to the currently selected item)
+
+  // SISTEMA DE RASCUNHO (Auto-Save & Load)
+  useEffect(() => {
+    if (initialData?.orderId) return; // Se está editando um pedido existente, ignora o rascunho
+    
+    // Tentamos carregar o rascunho apenas na montagem inicial se não for edição
+    const saved = localStorage.getItem('borda_order_draft');
+    if (saved) {
+      try {
+        const draft = JSON.parse(saved);
+        if (draft.selectedClientId) setSelectedClientId(draft.selectedClientId);
+        if (draft.entryMode) setEntryMode(draft.entryMode);
+        if (draft.observations) setObservations(draft.observations);
+        if (draft.paymentStatus) setPaymentStatus(draft.paymentStatus);
+        if (draft.paymentMethod) setPaymentMethod(draft.paymentMethod);
+        if (draft.depositAmount) setDepositAmount(draft.depositAmount);
+        
+        if (draft.orderItemsList && draft.orderItemsList.length > 0) {
+          setOrderItemsList(draft.orderItemsList);
+          if (draft.selectedItemId) {
+            setSelectedItemId(draft.selectedItemId);
+            const item = draft.orderItemsList.find((i: any) => i.id === draft.selectedItemId);
+            if (item) {
+              setMatrixName(item.matrixName);
+              setStitchCount(item.stitchCount ? item.stitchCount : '');
+              setColorCount(item.colorCount ? item.colorCount : '');
+              setQuantity(item.quantity);
+              setSelectedMatrixId(item.matrixId || null);
+            }
+          }
+        }
+      } catch (e) {
+        console.error("Erro ao carregar rascunho do localStorage", e);
+      }
+    }
+  }, [initialData]);
+
+  useEffect(() => {
+    // Se for edição de um pedido existente, NÃO salva rascunho
+    if (initialData?.orderId) return;
+    
+    const draft = {
+      selectedClientId,
+      entryMode,
+      observations,
+      paymentStatus,
+      paymentMethod,
+      depositAmount,
+      orderItemsList,
+      selectedItemId
+    };
+    
+    // Só salva no rascunho se tiver algo preenchido
+    if (selectedClientId || orderItemsList.length > 0 || observations) {
+      localStorage.setItem('borda_order_draft', JSON.stringify(draft));
+    }
+  }, [selectedClientId, entryMode, observations, paymentStatus, paymentMethod, depositAmount, orderItemsList, selectedItemId, initialData]);
+
   useEffect(() => {
     if (selectedItemId && entryMode === 'budget') {
       setOrderItemsList(prev => prev.map(item => {
@@ -208,11 +266,11 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
     }
   }, [matrixName, stitchCount, colorCount, quantity, calculation.unitPrice, calculation.totalPrice, selectedMatrixId, selectedItemId, entryMode]);
 
-  const handleManualSubtotalChange = (id: string, value: string) => {
+  const handleManualUnitPriceChange = (id: string, value: string) => {
     const numValue = value === '' ? undefined : Number(value);
     setOrderItemsList(prev => prev.map(item => {
       if (item.id === id) {
-        const newUnitPrice = numValue !== undefined ? numValue / (item.quantity || 1) : undefined;
+        const newUnitPrice = numValue !== undefined ? numValue : undefined;
         const finalUnitPrice = newUnitPrice !== undefined ? newUnitPrice : (item.id === selectedItemId ? calculation.unitPrice : item.unitPrice);
         return {
           ...item,
@@ -682,6 +740,7 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
       }
 
       toast.success(initialData?.orderId ? "Pedido atualizado com sucesso!" : "Pedido criado com sucesso!");
+      localStorage.removeItem('borda_order_draft'); // Limpa o rascunho após salvar com sucesso
 
       // 4. Fecha a modal e atualiza a interface INSTANTANEAMENTE (sem travar no botão de registrando)
       if (onOrderCreated) {
@@ -1259,9 +1318,6 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
                                     <span className="text-[9px] text-zinc-500 font-normal">🪡 {it.stitchCount.toLocaleString()} pts • 🎨 {it.colorCount} cores</span>
                                   </td>
                                   <td className="p-2.5 text-center font-bold">{it.quantity} un</td>
-                                  <td className="p-2.5 text-right text-slate-600 dark:text-zinc-400">
-                                    {formatPrice(it.unitPrice)}
-                                  </td>
                                   <td className="p-2.5 text-right font-black" style={{ color: settings.primaryColor }}>
                                     <div className="flex items-center justify-end gap-1.5 group">
                                       <Edit2 className="h-3 w-3 opacity-30 group-hover:opacity-100 transition-opacity" style={{ color: settings.primaryColor }} />
@@ -1270,8 +1326,8 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
                                         type={canViewPrices ? "number" : "text"}
                                         step="0.01"
                                         min="0"
-                                        value={canViewPrices ? (it.manualUnitPrice !== undefined ? (it.manualUnitPrice * it.quantity).toFixed(2) : it.totalPrice.toFixed(2)) : '***'}
-                                        onChange={(e) => canViewPrices && handleManualSubtotalChange(it.id, e.target.value)}
+                                        value={canViewPrices ? (it.manualUnitPrice !== undefined ? it.manualUnitPrice.toFixed(2) : it.unitPrice.toFixed(2)) : '***'}
+                                        onChange={(e) => canViewPrices && handleManualUnitPriceChange(it.id, e.target.value)}
                                         onClick={(e) => e.stopPropagation()}
                                         readOnly={!canViewPrices}
                                         className={`w-16 bg-white/5 dark:bg-black/20 px-1 py-0.5 rounded-md border-b-2 text-right focus:outline-none transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
@@ -1279,9 +1335,12 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
                                             ? 'border-emerald-500 text-emerald-600 dark:text-emerald-400 font-bold bg-emerald-500/10' 
                                             : 'border-slate-300 dark:border-white/20 hover:border-slate-400 dark:hover:border-white/40'
                                         }`}
-                                        title="Editar Subtotal Manualmente"
+                                        title="Editar Valor Unitário"
                                       />
                                     </div>
+                                  </td>
+                                  <td className="p-2.5 text-right text-slate-600 dark:text-zinc-400">
+                                    {formatPrice(it.totalPrice)}
                                   </td>
                                   <td className="p-2.5 text-center">
                                     <button

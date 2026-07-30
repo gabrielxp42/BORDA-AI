@@ -5,6 +5,8 @@ import {
   Send, Sparkles, QrCode, Maximize2, Layers, Palette, Clock, Check, Image as ImageIcon, RefreshCw
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { useProfile } from '@/contexts/ProfileContext';
+import { formatCurrency } from '@/utils/currencyFormatter';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { getWhatsAppWebLink, sendEvolutionText, formatWhatsAppNumber } from '@/services/whatsappService';
@@ -58,6 +60,7 @@ const PedidoGridCardComponent: React.FC<PedidoGridCardProps> = ({
   onCobrarOrder,
 }) => {
   const { settings } = useCompanySettings();
+  const { permissions } = useProfile();
   const [activeLightbox, setActiveLightbox] = useState<string | null>(null);
   const [showFiscalModal, setShowFiscalModal] = useState(false);
   const [isIssuingNfe, setIsIssuingNfe] = useState(false);
@@ -294,7 +297,7 @@ const PedidoGridCardComponent: React.FC<PedidoGridCardProps> = ({
                 </span>
               ) : (
                 <span className="text-lg font-black text-slate-900 dark:text-white tracking-tight">
-                  {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(order.total_amount || 0)}
+                  {formatCurrency(order.total_amount || 0, permissions?.canSeeFinancials ?? true)}
                 </span>
               )}
             </div>
@@ -435,7 +438,7 @@ const PedidoGridCardComponent: React.FC<PedidoGridCardProps> = ({
                 <div className="flex justify-between pt-2 border-t border-white/10 text-sm">
                   <span className="font-bold text-zinc-300">Valor Total da Nota:</span>
                   <span className="font-black text-emerald-400">
-                    {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(order.total_amount || 0)}
+                    {formatCurrency(order.total_amount || 0, permissions?.canSeeFinancials ?? true)}
                   </span>
                 </div>
               </div>
@@ -478,7 +481,7 @@ const PedidoGridCardComponent: React.FC<PedidoGridCardProps> = ({
                     {clientPhone && (
                       <button
                         onClick={() => {
-                          const msg = `Olá ${clientName}, segue a sua Nota Fiscal (NFS-e nº ${issuedNfeResult.nfeNumber}) referente ao pedido ${orderCode} no valor de ${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(order.total_amount || 0)}.`;
+                          const msg = `Olá ${clientName}, segue a sua Nota Fiscal (NFS-e nº ${issuedNfeResult.nfeNumber}) referente ao pedido ${orderCode} no valor de ${formatCurrency(order.total_amount || 0, permissions?.canSeeFinancials ?? true)}.`;
                           const link = getWhatsAppWebLink(clientPhone, msg);
                           window.open(link, '_blank');
                         }}

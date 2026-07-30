@@ -7,10 +7,13 @@ import { EmbroideryMetadata } from '../utils/embroideryParser';
 import { MatrixDetailsModal } from '../components/matrices/MatrixDetailsModal';
 import { supabase } from '../integrations/supabase/client';
 import { useCompanySettings } from '../contexts/CompanySettingsContext';
+import { useProfile } from '@/contexts/ProfileContext';
+import { formatCurrency } from '@/utils/currencyFormatter';
 import { toast } from 'sonner';
 
 export const Matrizes: React.FC = () => {
   const { settings } = useCompanySettings();
+  const { permissions } = useProfile();
   const [matrices, setMatrices] = useState<Matrix[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');

@@ -52,6 +52,7 @@ import { FinancialTransaction, FinancialTransactionType } from '@/types/stockTyp
 import { format, startOfMonth, endOfMonth, subMonths, eachMonthOfInterval, eachDayOfInterval, isSameDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
+import { formatCurrency } from '@/utils/currencyFormatter';
 
 interface ClientBillingData {
   id: string;
@@ -65,7 +66,7 @@ interface ClientBillingData {
 }
 
 export const Faturamento: React.FC = () => {
-  const { isUnlocked } = useProfile();
+  const { isUnlocked, permissions } = useProfile();
   const { settings } = useCompanySettings();
   const pc = settings.primaryColor;
   
@@ -578,7 +579,7 @@ export const Faturamento: React.FC = () => {
             </div>
           </div>
           <h2 className="text-xl font-black text-white">
-            {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(grandTotal)}
+            {formatCurrency(grandTotal, permissions?.canSeeFinancials ?? true)}
           </h2>
           <p className="text-[11px] text-zinc-400 mt-1 capitalize">
             {format(targetMonthDate, 'MMMM yyyy', { locale: ptBR })}
@@ -594,7 +595,7 @@ export const Faturamento: React.FC = () => {
             </div>
           </div>
           <h2 className="text-xl font-black text-emerald-400">
-            {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(paidTotal)}
+            {formatCurrency(paidTotal, permissions?.canSeeFinancials ?? true)}
           </h2>
           <span className="inline-block text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 mt-1">
             {paidPercentage}% Liquidado
@@ -610,7 +611,7 @@ export const Faturamento: React.FC = () => {
             </div>
           </div>
           <h2 className="text-xl font-black text-amber-400">
-            {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(pendingTotal)}
+            {formatCurrency(pendingTotal, permissions?.canSeeFinancials ?? true)}
           </h2>
           <p className="text-[11px] text-zinc-400 mt-1">
             Faturas em aberto
@@ -626,7 +627,7 @@ export const Faturamento: React.FC = () => {
             </div>
           </div>
           <h2 className={`text-xl font-black ${netProfit >= 0 ? 'text-cyan-400' : 'text-rose-400'}`}>
-            {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(netProfit)}
+            {formatCurrency(netProfit, permissions?.canSeeFinancials ?? true)}
           </h2>
           <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-full mt-1 border ${
             netProfit >= 0 
@@ -646,7 +647,7 @@ export const Faturamento: React.FC = () => {
             </div>
           </div>
           <h2 className="text-xl font-black text-white">
-            {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(avgTicket)}
+            {formatCurrency(avgTicket, permissions?.canSeeFinancials ?? true)}
           </h2>
           <p className="text-[11px] text-zinc-400 mt-1">
             Por pedido de bordado
@@ -665,7 +666,7 @@ export const Faturamento: React.FC = () => {
             {topClient ? topClient.name : 'Nenhum'}
           </h2>
           <p className="text-xs font-bold text-purple-400 mt-0.5">
-            {topClient ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(topClient.totalAmount) : 'R$ 0,00'}
+            {topClient ? formatCurrency(topClient.totalAmount, permissions?.canSeeFinancials ?? true) : 'R$ 0,00'}
           </p>
         </div>
       </div>
@@ -707,10 +708,10 @@ export const Faturamento: React.FC = () => {
                     <div className="bg-[#111118] border border-white/10 rounded-xl px-3 py-2 text-xs shadow-xl space-y-1">
                       <p className="font-bold text-zinc-400">{label}</p>
                       <p className="font-black text-purple-400">
-                        Dia: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(payload[0].value as number)}
+                        Dia: {formatCurrency(payload[0].value as number, permissions?.canSeeFinancials ?? true)}
                       </p>
                       <p className="font-bold text-emerald-400">
-                        Acumulado: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(payload[1]?.value as number || 0)}
+                        Acumulado: {formatCurrency(payload[1]?.value as number || 0, permissions?.canSeeFinancials ?? true)}
                       </p>
                     </div>
                   );
@@ -749,8 +750,8 @@ export const Faturamento: React.FC = () => {
                   return (
                     <div className="bg-[#111118] border border-white/10 rounded-xl px-3 py-2 text-xs shadow-xl space-y-1">
                       <p className="font-bold text-zinc-300">{label}</p>
-                      <p className="font-bold text-emerald-400">Receita: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(payload[0].value as number)}</p>
-                      <p className="font-bold text-rose-400">Despesas: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(payload[1].value as number)}</p>
+                      <p className="font-bold text-emerald-400">Receita: {formatCurrency(payload[0].value as number, permissions?.canSeeFinancials ?? true)}</p>
+                      <p className="font-bold text-rose-400">Despesas: {formatCurrency(payload[1].value as number, permissions?.canSeeFinancials ?? true)}</p>
                     </div>
                   );
                 }}
@@ -800,7 +801,7 @@ export const Faturamento: React.FC = () => {
                     return (
                       <div className="bg-[#111118] border border-white/10 rounded-xl px-3 py-2 text-xs shadow-xl">
                         <p className="font-black" style={{ color: d.fill }}>
-                          {d.name}: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(d.value)}
+                          {d.name}: {formatCurrency(d.value, permissions?.canSeeFinancials ?? true)}
                         </p>
                       </div>
                     );
@@ -812,11 +813,11 @@ export const Faturamento: React.FC = () => {
             <div className="space-y-3">
               <div className="p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/20">
                 <p className="text-[10px] font-black uppercase text-emerald-400">Total Liquidado</p>
-                <p className="text-base font-black text-white">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(paidTotal)}</p>
+                <p className="text-base font-black text-white">{formatCurrency(paidTotal, permissions?.canSeeFinancials ?? true)}</p>
               </div>
               <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/20">
                 <p className="text-[10px] font-black uppercase text-amber-400">A Receber</p>
-                <p className="text-base font-black text-white">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(pendingTotal)}</p>
+                <p className="text-base font-black text-white">{formatCurrency(pendingTotal, permissions?.canSeeFinancials ?? true)}</p>
               </div>
             </div>
           </div>
@@ -834,7 +835,7 @@ export const Faturamento: React.FC = () => {
               </p>
             </div>
             <span className="text-xs font-black text-rose-400">
-              {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(manualExpenses)}
+              {formatCurrency(manualExpenses, permissions?.canSeeFinancials ?? true)}
             </span>
           </div>
 
@@ -861,7 +862,7 @@ export const Faturamento: React.FC = () => {
                     return (
                       <div className="bg-[#111118] border border-white/10 rounded-xl px-3 py-2 text-xs shadow-xl">
                         <p className="font-black" style={{ color: d.fill }}>
-                          {d.name}: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(d.value)}
+                          {d.name}: {formatCurrency(d.value, permissions?.canSeeFinancials ?? true)}
                         </p>
                       </div>
                     );
@@ -916,7 +917,7 @@ export const Faturamento: React.FC = () => {
               </div>
             </div>
             <span className="text-sm font-black text-emerald-400">
-              {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totalRevenue)}
+              {formatCurrency(totalRevenue, permissions?.canSeeFinancials ?? true)}
             </span>
           </div>
 
@@ -930,7 +931,7 @@ export const Faturamento: React.FC = () => {
               </div>
             </div>
             <span className="text-sm font-black text-rose-400">
-              - {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(manualExpenses)}
+              - {formatCurrency(manualExpenses, permissions?.canSeeFinancials ?? true)}
             </span>
           </div>
 
@@ -948,7 +949,7 @@ export const Faturamento: React.FC = () => {
               </div>
             </div>
             <span className={`text-xl font-black ${netProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-              {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(netProfit)}
+              {formatCurrency(netProfit, permissions?.canSeeFinancials ?? true)}
             </span>
           </div>
         </div>
@@ -973,7 +974,7 @@ export const Faturamento: React.FC = () => {
           <div className="p-3 rounded-2xl bg-purple-500/10 border border-purple-500/30 text-right">
             <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400 block">Total em Adicionais</span>
             <span className="text-xl font-black text-amber-400">
-              {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(addOnReportData.grandAddOnTotal)}
+              {formatCurrency(addOnReportData.grandAddOnTotal, permissions?.canSeeFinancials ?? true)}
             </span>
             <span className="text-[10px] font-bold text-purple-300 block mt-0.5">
               Representa {addOnReportData.percentageOfTotal}% do faturamento
@@ -990,7 +991,7 @@ export const Faturamento: React.FC = () => {
               <span className="px-2 py-0.5 rounded-full bg-purple-500/20 text-[10px]">{addOnReportData.edicaoMatrizCount}x vendas</span>
             </div>
             <p className="text-xl font-black text-white pt-1">
-              {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(addOnReportData.edicaoMatrizTotal)}
+              {formatCurrency(addOnReportData.edicaoMatrizTotal, permissions?.canSeeFinancials ?? true)}
             </p>
             <p className="text-[10px] text-zinc-400">Vetorização e ajuste de programas</p>
           </div>
@@ -1002,7 +1003,7 @@ export const Faturamento: React.FC = () => {
               <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-[10px]">{addOnReportData.urgenciaCount}x express</span>
             </div>
             <p className="text-xl font-black text-white pt-1">
-              {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(addOnReportData.urgenciaTotal)}
+              {formatCurrency(addOnReportData.urgenciaTotal, permissions?.canSeeFinancials ?? true)}
             </p>
             <p className="text-[10px] text-zinc-400">Liberação prioritária de bordadeiras</p>
           </div>
@@ -1014,7 +1015,7 @@ export const Faturamento: React.FC = () => {
               <span className="px-2 py-0.5 rounded-full bg-pink-500/20 text-[10px]">{addOnReportData.especiaisCount}x pedidos</span>
             </div>
             <p className="text-xl font-black text-white pt-1">
-              {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(addOnReportData.especiaisTotal)}
+              {formatCurrency(addOnReportData.especiaisTotal, permissions?.canSeeFinancials ?? true)}
             </p>
             <p className="text-[10px] text-zinc-400">Fita 3D (EVA), Aplique, Termocolante</p>
           </div>
@@ -1026,7 +1027,7 @@ export const Faturamento: React.FC = () => {
               <span className="px-2 py-0.5 rounded-full bg-cyan-500/20 text-[10px]">{addOnReportData.taxasMinimasCount}x lotes</span>
             </div>
             <p className="text-xl font-black text-white pt-1">
-              {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(addOnReportData.taxasMinimasTotal)}
+              {formatCurrency(addOnReportData.taxasMinimasTotal, permissions?.canSeeFinancials ?? true)}
             </p>
             <p className="text-[10px] text-zinc-400">Taxas operacionais de lote pequeno</p>
           </div>
@@ -1056,7 +1057,7 @@ export const Faturamento: React.FC = () => {
                   return (
                     <div className="bg-[#111118] border border-white/10 rounded-xl px-3 py-2 text-xs shadow-xl">
                       <p className="font-black" style={{ color: d.fill }}>
-                        {d.name}: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(d.value)}
+                        {d.name}: {formatCurrency(d.value, permissions?.canSeeFinancials ?? true)}
                       </p>
                     </div>
                   );
@@ -1076,7 +1077,7 @@ export const Faturamento: React.FC = () => {
                   </div>
                 </div>
                 <span className="font-black text-white text-sm">
-                  {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.value)}
+                  {formatCurrency(item.value, permissions?.canSeeFinancials ?? true)}
                 </span>
               </div>
             ))}
@@ -1132,7 +1133,7 @@ export const Faturamento: React.FC = () => {
                     <td className={`px-6 py-3.5 text-right font-black ${
                       tx.type === 'income' ? 'text-emerald-400' : 'text-rose-400'
                     }`}>
-                      {tx.type === 'income' ? '+' : '-'} {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(tx.amount)}
+                      {tx.type === 'income' ? '+' : '-'} {formatCurrency(tx.amount, permissions?.canSeeFinancials ?? true)}
                     </td>
                     <td className="px-6 py-3.5 text-center">
                       <button
@@ -1213,13 +1214,13 @@ export const Faturamento: React.FC = () => {
                       </span>
                     </td>
                     <td className="px-6 py-4 text-right font-bold text-emerald-400">
-                      {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(client.paidAmount)}
+                      {formatCurrency(client.paidAmount, permissions?.canSeeFinancials ?? true)}
                     </td>
                     <td className="px-6 py-4 text-right font-bold text-amber-400">
-                      {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(client.pendingAmount)}
+                      {formatCurrency(client.pendingAmount, permissions?.canSeeFinancials ?? true)}
                     </td>
                     <td className="px-6 py-4 text-right font-black text-white">
-                      {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(client.totalAmount)}
+                      {formatCurrency(client.totalAmount, permissions?.canSeeFinancials ?? true)}
                     </td>
                     <td className="px-6 py-4 text-center">
                       <button

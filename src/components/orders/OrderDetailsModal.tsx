@@ -10,6 +10,7 @@ import { useProfile } from '@/contexts/ProfileContext';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
+import { formatCurrency } from '@/utils/currencyFormatter';
 import { parsePaymentMetadata } from '@/utils/paymentHelper';
 
 interface OrderDetailsModalProps {
@@ -28,7 +29,7 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
   onPriceOrder
 }) => {
   const { settings } = useCompanySettings();
-  const { isUnlocked } = useProfile();
+  const { isUnlocked, permissions } = useProfile();
 
   const [matrixUrls, setMatrixUrls] = useState<Record<string, string>>({});
   const [matrixPreviews, setMatrixPreviews] = useState<Record<string, string>>({});
@@ -395,10 +396,10 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                           {isUnlocked ? (
                             <>
                               <td className="p-3 text-right">
-                                {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.unit_price || 0)}
+                                {formatCurrency(item.unit_price || 0, permissions?.canSeeFinancials ?? true)}
                               </td>
                               <td className="p-3 text-right font-black">
-                                {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.total_price || 0)}
+                                {formatCurrency(item.total_price || 0, permissions?.canSeeFinancials ?? true)}
                               </td>
                             </>
                           ) : (
@@ -517,7 +518,7 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                   </span>
                   <h3 className="text-lg sm:text-2xl font-black text-slate-900 dark:text-white leading-tight">
                     {isUnlocked ? (
-                      new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(order.total_amount || 0)
+                      formatCurrency(order.total_amount || 0, permissions?.canSeeFinancials ?? true)
                     ) : (
                       `${order.order_items?.reduce((acc: number, it: any) => acc + (it.quantity || 1), 0) || 1} Peça(s) no Lote`
                     )}
@@ -543,13 +544,13 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                       <div className="flex justify-between items-center text-slate-600 dark:text-zinc-400">
                         <span>Sinal Recebido:</span>
                         <strong className="text-blue-500 dark:text-blue-400">
-                          {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(metadata?.depositAmount || 0)}
+                          {formatCurrency(metadata?.depositAmount || 0, permissions?.canSeeFinancials ?? true)}
                         </strong>
                       </div>
                       <div className="flex justify-between items-center text-slate-600 dark:text-zinc-400">
                         <span>Restante a Pagar:</span>
                         <strong className="text-slate-900 dark:text-white font-black">
-                          {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Math.max(0, (order.total_amount || 0) - (metadata?.depositAmount || 0)))}
+                          {formatCurrency(Math.max(0, (order.total_amount || 0) - (metadata?.depositAmount || 0)), permissions?.canSeeFinancials ?? true)}
                         </strong>
                       </div>
                     </div>
@@ -577,7 +578,7 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                             {h.status === 'half_paid' ? 'Sinal' : h.status === 'paid' ? 'Quitação' : 'Pendente'} ({paymentLabels[h.method] || String(h.method).toUpperCase()})
                           </span>
                           <span>
-                            {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(h.amount)} - {format(new Date(h.timestamp), "dd/MM/yy HH:mm")}
+                            {formatCurrency(h.amount, permissions?.canSeeFinancials ?? true)} - {format(new Date(h.timestamp), "dd/MM/yy HH:mm")}
                           </span>
                         </div>
                       ))}

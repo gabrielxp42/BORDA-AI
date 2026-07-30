@@ -6,8 +6,12 @@ import { useCompanySettings } from '@/contexts/CompanySettingsContext';
 import { CreateClientModal } from '@/components/clients/CreateClientModal';
 import { ClientDetailsModal } from '@/components/clients/ClientDetailsModal';
 import { toast } from 'sonner';
+import { useProfile } from '@/contexts/ProfileContext';
+import { formatCurrency } from '@/utils/currencyFormatter';
 
 export const Clientes: React.FC = () => {
+  const { permissions } = useProfile();
+
   const { settings } = useCompanySettings();
   const [clients, setClients] = useState<Client[]>([]);
   const [clientPendingMap, setClientPendingMap] = useState<Record<string, number>>({});
@@ -259,7 +263,7 @@ export const Clientes: React.FC = () => {
                     }}
                   >
                     <Clock className="h-3.5 w-3.5 stroke-[2.5]" />
-                    Pendente: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(clientPendingMap[c.id])}
+                    Pendente: {formatCurrency(clientPendingMap[c.id], permissions?.canSeeFinancials ?? true)}
                   </span>
                 ) : (
                   <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold text-emerald-500 bg-emerald-500/10 border border-emerald-500/20">

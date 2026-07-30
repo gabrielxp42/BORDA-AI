@@ -12,11 +12,15 @@ import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
+import { useProfile } from '@/contexts/ProfileContext';
+import { formatCurrency } from '@/utils/currencyFormatter';
 
 // Sem insumos de exemplo — cada conta começa com estoque zerado e cadastra os seus próprios
 
 
 export const Estoque: React.FC = () => {
+  const { permissions } = useProfile();
+
   const { settings } = useCompanySettings();
 
   // Active Tab: 'inventory' | 'history'
@@ -580,7 +584,7 @@ export const Estoque: React.FC = () => {
                           {/* Preço de Custo */}
                           <td className="px-6 py-4 text-right font-bold text-zinc-400">
                             {item.cost_price
-                              ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.cost_price)
+                              ? formatCurrency(item.cost_price, permissions?.canSeeFinancials ?? true)
                               : '—'}
                           </td>
 
