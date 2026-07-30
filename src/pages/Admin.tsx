@@ -19,6 +19,7 @@ interface UserProfileData {
   email: string;
   role: string;
   created_at: string;
+  can_view_prices?: boolean;
 }
 
 export const Admin: React.FC = () => {
@@ -44,7 +45,7 @@ export const Admin: React.FC = () => {
     try {
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, full_name, email, role, created_at')
+        .select('id, full_name, email, role, created_at, can_view_prices')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -66,6 +67,21 @@ export const Admin: React.FC = () => {
       if (error) throw error;
       toast.success('Permissão do usuário atualizada!');
       setUsersList(prev => prev.map(u => u.id === userId ? { ...u, role: newRole } : u));
+    } catch (err: any) {
+      toast.error('Erro ao atualizar permissão: ' + err.message);
+    }
+  };
+
+  const handleChangePriceVisibility = async (userId: string, canView: boolean) => {
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ can_view_prices: canView })
+        .eq('id', userId);
+
+      if (error) throw error;
+      toast.success(canView ? 'Usuário agora pode ver preços.' : 'Preços ocultados para o usuário.');
+      setUsersList(prev => prev.map(u => u.id === userId ? { ...u, can_view_prices: canView } : u));
     } catch (err: any) {
       toast.error('Erro ao atualizar permissão: ' + err.message);
     }

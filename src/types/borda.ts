@@ -14,6 +14,7 @@ export interface Profile {
   whatsapp_instance_id?: string;
   whatsapp_status?: WhatsAppStatus;
   whatsapp_qr_cache?: string | null;
+  can_view_prices?: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -50,6 +51,7 @@ export interface Matrix {
   status: MatrixStatus;
   current_version_id?: string;
   current_version?: MatrixVersion;
+  fixed_price?: number;
   created_at: string;
   updated_at: string;
 }

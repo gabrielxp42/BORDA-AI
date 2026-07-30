@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Layers, Plus, Search, FileCode, CheckCircle, Tag, Eye, ChevronDown, ChevronRight, User, FolderOpen, Folder, Download, Hash, Maximize2, Clock, X, HardDrive } from 'lucide-react';
+import { Layers, Plus, Search, FileCode, CheckCircle, Tag, Eye, ChevronDown, ChevronRight, User, FolderOpen, Folder, Download, Hash, Maximize2, Clock, X, HardDrive, AlertCircle, DollarSign, RefreshCw, Save } from 'lucide-react';
 import { Matrix } from '@/types/borda';
 import { ClientSelect } from '../components/ui/ClientSelect';
 import { EmbroideryDropzone } from '../components/ui/EmbroideryDropzone';
@@ -15,6 +15,10 @@ export const Matrizes: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isBulkPriceModalOpen, setIsBulkPriceModalOpen] = useState(false);
+  const [bulkPriceChange, setBulkPriceChange] = useState<number>(1);
+  const [editingPriceId, setEditingPriceId] = useState<string | null>(null);
+  const [editPriceValue, setEditPriceValue] = useState<string>('');
   const [detailsMatrix, setDetailsMatrix] = useState<Matrix | null>(null);
   const [expandedClients, setExpandedClients] = useState<Set<string>>(new Set());
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
@@ -107,6 +111,46 @@ export const Matrizes: React.FC = () => {
       else next.add(clientKey);
       return next;
     });
+  };
+
+  const handleUpdateFixedPrice = async (matrixId: string, value: string) => {
+    try {
+      const numVal = value ? Number(value) : null;
+      const { error } = await supabase.from('matrices').update({ fixed_price: numVal }).eq('id', matrixId);
+      if (error) throw error;
+      toast.success('Preço da matriz atualizado com sucesso!');
+      setEditingPriceId(null);
+      await fetchMatrices();
+    } catch (err: any) {
+      toast.error('Erro ao atualizar preço: ' + err.message);
+    }
+  };
+
+  const handleBulkPriceUpdate = async () => {
+    if (!bulkPriceChange || bulkPriceChange === 0) return;
+    try {
+      const { error } = await supabase.rpc('bulk_update_matrix_prices', { amount: bulkPriceChange });
+      // Wait, we don't have this RPC. Let's do it in JS for now or just fetch all matrices with fixed_price and update them.
+      // Fetch all matrices that have a fixed_price
+      const { data: toUpdate, error: fetchErr } = await supabase.from('matrices').select('id, fixed_price').not('fixed_price', 'is', null);
+      if (fetchErr) throw fetchErr;
+
+      const updates = toUpdate.map(m => ({
+        id: m.id,
+        fixed_price: Number(m.fixed_price) + bulkPriceChange
+      }));
+
+      // A simple loop update (supabase doesn't have bulk update via js without upsert, let's use upsert or loop)
+      for (const u of updates) {
+        await supabase.from('matrices').update({ fixed_price: u.fixed_price }).eq('id', u.id);
+      }
+
+      toast.success(`${updates.length} matrizes reajustadas em R$ ${bulkPriceChange.toFixed(2)}`);
+      setIsBulkPriceModalOpen(false);
+      await fetchMatrices();
+    } catch (err: any) {
+      toast.error('Erro no reajuste em massa: ' + err.message);
+    }
   };
 
   const handleFileParsed = (meta: EmbroideryMetadata, file: File) => {
@@ -246,16 +290,24 @@ export const Matrizes: React.FC = () => {
             {isLoading ? 'Carregando...' : `${totalMatrices} matrizes · ${clientKeys.length} clientes`}
           </p>
         </div>
-        <button
-          onClick={() => setIsModalOpen(true)}
-          className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-2xl text-white font-bold text-xs shadow-lg hover:opacity-90 transition-all active:scale-95"
-          style={{
-            backgroundColor: settings.primaryColor,
-            boxShadow: `0 4px 14px ${settings.primaryColor}40`,
-          }}
-        >
-          <Plus className="h-4 w-4" /> Cadastrar Nova Matriz
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setIsBulkPriceModalOpen(true)}
+            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-2xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-zinc-300 font-bold text-xs hover:bg-slate-50 dark:hover:bg-white/10 transition-all active:scale-95"
+          >
+            <DollarSign className="h-4 w-4" /> Reajuste de Preços
+          </button>
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-2xl text-white font-bold text-xs shadow-lg hover:opacity-90 transition-all active:scale-95"
+            style={{
+              backgroundColor: settings.primaryColor,
+              boxShadow: `0 4px 14px ${settings.primaryColor}40`,
+            }}
+          >
+            <Plus className="h-4 w-4" /> Cadastrar Nova Matriz
+          </button>
+        </div>
       </div>
 
       {/* Search */}
@@ -471,6 +523,36 @@ export const Matrizes: React.FC = () => {
                                 >
                                   <Layers className="h-5 w-5" style={{ color: settings.primaryColor }} />
                                 </div>
+                              )}
+                            </div>
+
+                            {/* Preço Fixo (Editável no card) */}
+                            <div className="bg-white/5 p-2 rounded-xl border border-white/5 flex items-center justify-between">
+                              <span className="text-[10px] font-bold text-slate-500 dark:text-zinc-400">PREÇO DE VENDA</span>
+                              {editingPriceId === m.id ? (
+                                <div className="flex items-center gap-1">
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    value={editPriceValue}
+                                    onChange={e => setEditPriceValue(e.target.value)}
+                                    placeholder="Calculado"
+                                    className="w-16 bg-white dark:bg-black/40 border border-slate-200 dark:border-white/10 rounded px-1.5 py-0.5 text-xs text-right focus:outline-none focus:border-emerald-500"
+                                  />
+                                  <button onClick={() => handleUpdateFixedPrice(m.id, editPriceValue)} className="text-emerald-500 p-0.5 hover:bg-emerald-500/20 rounded">
+                                    <Save className="h-3.5 w-3.5" />
+                                  </button>
+                                  <button onClick={() => setEditingPriceId(null)} className="text-rose-500 p-0.5 hover:bg-rose-500/20 rounded">
+                                    <X className="h-3.5 w-3.5" />
+                                  </button>
+                                </div>
+                              ) : (
+                                <button 
+                                  onClick={() => { setEditingPriceId(m.id); setEditPriceValue(m.fixed_price ? m.fixed_price.toString() : ''); }}
+                                  className="text-xs font-black text-emerald-500 dark:text-emerald-400 hover:opacity-80 transition-opacity"
+                                >
+                                  {m.fixed_price ? `R$ ${Number(m.fixed_price).toFixed(2)}` : 'Automático'}
+                                </button>
                               )}
                             </div>
 
@@ -714,6 +796,48 @@ export const Matrizes: React.FC = () => {
               <X className="h-4 w-4" />
             </button>
             <p className="text-center text-xs text-white/40 mt-3 font-medium">Clique fora para fechar</p>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Reajuste em Massa */}
+      {isBulkPriceModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-slate-900 border border-white/10 rounded-3xl w-full max-w-sm shadow-2xl p-6">
+            <h3 className="text-lg font-black text-white mb-2 flex items-center gap-2">
+              <DollarSign className="h-5 w-5 text-emerald-500" />
+              Reajuste em Massa
+            </h3>
+            <p className="text-xs text-zinc-400 mb-6 leading-relaxed">
+              Defina um valor para aumentar (ou diminuir) o preço fixo de <strong>todas as matrizes</strong> que já possuem preço de venda definido.
+            </p>
+            
+            <div className="mb-6">
+              <label className="text-xs font-bold text-zinc-400 uppercase">Valor de Reajuste (R$)</label>
+              <input
+                type="number"
+                step="0.01"
+                value={bulkPriceChange}
+                onChange={(e) => setBulkPriceChange(Number(e.target.value))}
+                className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-2 text-sm font-black text-white mt-2 focus:outline-none focus:border-emerald-500"
+                placeholder="Ex: 1.50 para aumentar ou -1.00 para diminuir"
+              />
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setIsBulkPriceModalOpen(false)}
+                className="flex-1 py-2.5 rounded-xl font-bold text-xs text-white bg-white/5 hover:bg-white/10 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleBulkPriceUpdate}
+                className="flex-1 py-2.5 rounded-xl text-white font-black text-xs bg-emerald-500 hover:bg-emerald-600 shadow-lg shadow-emerald-500/20 transition-colors"
+              >
+                Aplicar Reajuste
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -82,7 +82,7 @@ async function getEvolutionCredentials() {
   // Fallback: busca em admin profiles
   const { data: adminProfile } = await supabase
     .from('profiles')
-    .select('whatsapp_api_url, whatsapp_api_key')
+    .select('id, whatsapp_api_url, whatsapp_api_key, whatsapp_instance_id')
     .not('whatsapp_api_url', 'is', null)
     .not('whatsapp_api_key', 'is', null)
     .limit(1)
@@ -92,7 +92,7 @@ async function getEvolutionCredentials() {
     return {
       apiUrl: adminProfile.whatsapp_api_url.replace(/\/$/, ''),
       apiKey: adminProfile.whatsapp_api_key,
-      instanceId: profile?.whatsapp_instance_id || `borda_${user.id.substring(0, 6)}`
+      instanceId: adminProfile.whatsapp_instance_id || `borda_${adminProfile.id.substring(0, 6)}`
     };
   }
 

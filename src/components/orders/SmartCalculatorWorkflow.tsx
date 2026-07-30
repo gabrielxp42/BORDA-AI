@@ -4,7 +4,7 @@ import {
   X, UserPlus, Calendar, Plus, Trash2, Package, Save, Lock, Layers, Sparkles, 
   CheckCircle2, DollarSign, ChevronDown, Check, Upload, FileCheck, ChevronUp, 
   Sliders, Send, Clock, CreditCard, Landmark, Coins, ArrowRight, ArrowLeft, Camera, Paperclip,
-  MessageSquare, Image, FileText, QrCode, User, CheckCircle, Settings
+  MessageSquare, Image, FileText, QrCode, User, CheckCircle, Settings, Edit2
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { calculateEmbroideryPrice } from '@/services/pricingEngine';
@@ -15,6 +15,7 @@ import { DatePicker } from '../ui/DatePicker';
 import { useCompanySettings } from '@/contexts/CompanySettingsContext';
 import { usePricing } from '@/contexts/PricingContext';
 import { useProfile } from '@/contexts/ProfileContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
@@ -48,7 +49,15 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
   const { settings } = useCompanySettings();
   const { rules, openPricingModal } = usePricing();
   const { isUnlocked } = useProfile();
+  const { profile } = useAuth();
   const navigate = useNavigate();
+
+  const canViewPrices = profile?.can_view_prices !== false;
+  const formatPrice = (val: number | undefined | null) => {
+    if (!canViewPrices) return 'R$ ***';
+    if (val === undefined || val === null) return 'R$ 0,00';
+    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
+  };
 
   // Active step: 1 = Orçamento, 2 = Fechamento (only relevant if saving order)
   const [step, setStep] = useState<1 | 2>(1);
@@ -199,14 +208,15 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
     }
   }, [matrixName, stitchCount, colorCount, quantity, calculation.unitPrice, calculation.totalPrice, selectedMatrixId, selectedItemId, entryMode]);
 
-  const handleManualPriceChange = (id: string, value: string) => {
+  const handleManualSubtotalChange = (id: string, value: string) => {
     const numValue = value === '' ? undefined : Number(value);
     setOrderItemsList(prev => prev.map(item => {
       if (item.id === id) {
-        const finalUnitPrice = numValue !== undefined ? numValue : (item.id === selectedItemId ? calculation.unitPrice : item.unitPrice);
+        const newUnitPrice = numValue !== undefined ? numValue / (item.quantity || 1) : undefined;
+        const finalUnitPrice = newUnitPrice !== undefined ? newUnitPrice : (item.id === selectedItemId ? calculation.unitPrice : item.unitPrice);
         return {
           ...item,
-          manualUnitPrice: numValue,
+          manualUnitPrice: newUnitPrice,
           unitPrice: finalUnitPrice,
           totalPrice: finalUnitPrice * item.quantity
         };
@@ -357,13 +367,17 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
       rules
     );
 
+    const hasFixedPrice = matrix.fixed_price !== null && matrix.fixed_price !== undefined;
+    const finalUnitPrice = hasFixedPrice ? Number(matrix.fixed_price) : calcPrice.unitPrice;
+
     const newItemData = {
       matrixName: matrix.name,
       stitchCount: pStitches,
       colorCount: pColors,
       quantity: pQuantity,
-      unitPrice: calcPrice.unitPrice,
-      totalPrice: calcPrice.totalPrice,
+      unitPrice: finalUnitPrice,
+      totalPrice: finalUnitPrice * pQuantity,
+      manualUnitPrice: hasFixedPrice ? Number(matrix.fixed_price) : undefined,
       matrixId: matrix.id
     };
 
@@ -1048,8 +1062,7 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
                 )}
 
                 {/* 1. DADOS DO PEDIDO E CLIENTE */}
-                {entryMode === 'budget' && (
-                  <div className="glass-panel p-5 rounded-3xl border shadow-sm space-y-4 relative z-50 animate-in fade-in zoom-in-95 duration-200 mb-4" style={{ borderColor: `${settings.primaryColor}40`, backgroundColor: `${settings.primaryColor}05` }}>
+                <div className="glass-panel p-5 rounded-3xl border shadow-sm space-y-4 relative z-50 animate-in fade-in zoom-in-95 duration-200 mb-4" style={{ borderColor: `${settings.primaryColor}40`, backgroundColor: `${settings.primaryColor}05` }}>
                     <h3 className="text-xs font-black uppercase tracking-widest flex items-center gap-2" style={{ color: settings.primaryColor }}>
                       <User className="h-4 w-4" /> 1. Dados do Pedido
                     </h3>
@@ -1068,7 +1081,6 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
                       </div>
                     </div>
                   </div>
-                )}
 
                 {/* 2. BIBLIOTECA DO CLIENTE */}
                 {entryMode === 'budget' && selectedClientId && (
@@ -1209,7 +1221,7 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
                           </h4>
                           <div className="flex items-center gap-3">
                             <span className="text-[11px] font-black text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/20">
-                              Total: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totalOrderAmount)}
+                              Total: {formatPrice(totalOrderAmount)}
                             </span>
                           </div>
                         </div>
@@ -1248,25 +1260,28 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
                                   </td>
                                   <td className="p-2.5 text-center font-bold">{it.quantity} un</td>
                                   <td className="p-2.5 text-right text-slate-600 dark:text-zinc-400">
-                                    <div className="flex items-center justify-end gap-1">
-                                      <span className="text-[10px] text-slate-400">R$</span>
-                                      <input
-                                        type="number"
-                                        step="0.01"
-                                        value={it.manualUnitPrice !== undefined ? it.manualUnitPrice : it.unitPrice}
-                                        onChange={(e) => handleManualPriceChange(it.id, e.target.value)}
-                                        onClick={(e) => e.stopPropagation()}
-                                        className={`w-16 bg-transparent border-b border-dashed text-right focus:outline-none transition-colors ${
-                                          it.manualUnitPrice !== undefined 
-                                            ? 'border-emerald-500 text-emerald-600 dark:text-emerald-400 font-bold' 
-                                            : 'border-slate-300 dark:border-white/20 hover:border-slate-400 dark:hover:border-white/40'
-                                        }`}
-                                        title={it.manualUnitPrice !== undefined ? "Valor editado manualmente" : "Clique para editar o valor"}
-                                      />
-                                    </div>
+                                    {formatPrice(it.unitPrice)}
                                   </td>
                                   <td className="p-2.5 text-right font-black" style={{ color: settings.primaryColor }}>
-                                    {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(it.totalPrice)}
+                                    <div className="flex items-center justify-end gap-1.5 group">
+                                      <Edit2 className="h-3 w-3 opacity-30 group-hover:opacity-100 transition-opacity" style={{ color: settings.primaryColor }} />
+                                      <span className="text-[10px] opacity-60">R$</span>
+                                      <input
+                                        type={canViewPrices ? "number" : "text"}
+                                        step="0.01"
+                                        min="0"
+                                        value={canViewPrices ? (it.manualUnitPrice !== undefined ? (it.manualUnitPrice * it.quantity).toFixed(2) : it.totalPrice.toFixed(2)) : '***'}
+                                        onChange={(e) => canViewPrices && handleManualSubtotalChange(it.id, e.target.value)}
+                                        onClick={(e) => e.stopPropagation()}
+                                        readOnly={!canViewPrices}
+                                        className={`w-16 bg-white/5 dark:bg-black/20 px-1 py-0.5 rounded-md border-b-2 text-right focus:outline-none transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
+                                          it.manualUnitPrice !== undefined 
+                                            ? 'border-emerald-500 text-emerald-600 dark:text-emerald-400 font-bold bg-emerald-500/10' 
+                                            : 'border-slate-300 dark:border-white/20 hover:border-slate-400 dark:hover:border-white/40'
+                                        }`}
+                                        title="Editar Subtotal Manualmente"
+                                      />
+                                    </div>
                                   </td>
                                   <td className="p-2.5 text-center">
                                     <button
@@ -1300,7 +1315,8 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
 
                     {(() => {
                       const editingItem = orderItemsList.find(it => it.id === selectedItemId);
-                      const isAutoFilled = !!editingItem && (!!editingItem.matrixFile || !!editingItem.matrixId);
+                      // Se tem matrixId (veio da biblioteca) ou se já tem um nome e pontos (veio do leitor)
+                      const isAutoFilled = !!editingItem && (!!editingItem.matrixId || (editingItem.matrixName && editingItem.stitchCount > 0));
                       const inputBorderClass = isAutoFilled ? 'border-emerald-500/40 bg-emerald-500/5' : 'border-slate-300 dark:border-white/10';
                       const inputColorStyle = isAutoFilled ? { borderColor: '#10b98180' } : undefined;
 
@@ -1684,7 +1700,7 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
                           {isColorLine && !chargeColorAddon ? `Cores (${colorCount || 1}) — Isento` : item.label}
                         </span>
                         <span className={`font-semibold ${isColorLine && !chargeColorAddon ? 'line-through opacity-50' : 'text-slate-800 dark:text-zinc-200'}`}>
-                          {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.amount)}
+                          {formatPrice(item.amount)}
                         </span>
                       </div>
                     );
@@ -1764,7 +1780,7 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
                 <div className="flex items-center justify-between mt-1">
                   <span className="text-xl font-black tracking-tight">
                     {isUnlocked
-                      ? (entryMode === 'quick' ? 'Aguardando Orçamento' : new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(calculation.totalPrice))
+                      ? (entryMode === 'quick' ? 'Aguardando Orçamento' : formatPrice(calculation.totalPrice))
                       : `${quantity || 0} Peças no Lote`}
                   </span>
                   <CheckCircle2 className="h-6 w-6 opacity-90" />

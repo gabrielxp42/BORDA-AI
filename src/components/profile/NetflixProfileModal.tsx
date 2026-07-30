@@ -5,7 +5,7 @@ import {
   Crown, Scissors, KeyRound, Lock, Unlock, X, Check, ShieldCheck,
   Sparkles, Delete, RotateCcw, Settings, Plus, Trash2, Edit3, Shield,
   Eye, LayoutDashboard, ShoppingBag, Calculator, Layers, Boxes, FileSpreadsheet,
-  Users, Cpu, MessageCircle, ChevronRight, Save, ToggleLeft, ToggleRight
+  Users, Cpu, MessageCircle, ChevronRight, Save, ToggleLeft, ToggleRight, DollarSign
 } from 'lucide-react';
 import { useProfile, CustomProfile, ProfilePermissions, CHEFE_PERMISSIONS, PRODUCAO_PERMISSIONS } from '@/contexts/ProfileContext';
 import { useCompanySettings } from '@/contexts/CompanySettingsContext';
@@ -37,14 +37,14 @@ const ROUTE_LABELS: { key: keyof ProfilePermissions['routes']; label: string; ic
   { key: 'perfil', label: 'Perfil & Ajustes', icon: <ShieldCheck className="h-4 w-4" /> },
 ];
 
-const FEATURE_LABELS: { key: keyof Omit<ProfilePermissions, 'routes'>; label: string; description: string }[] = [
-  { key: 'canSeeFinancials', label: 'Ver Valores Financeiros', description: 'Exibe faturamento, preços totais e lucros nos pedidos' },
-  { key: 'canEditOrders', label: 'Criar & Editar Pedidos', description: 'Permite alterar status e criar novos orçamentos' },
-  { key: 'canManageClients', label: 'Gerenciar Clientes', description: 'Adicionar, editar e remover cadastro de clientes' },
-  { key: 'canManageStock', label: 'Gerenciar Estoque', description: 'Alterar quantidade de insumos, linhas e agulhas' },
-  { key: 'canExportReports', label: 'Exportar Relatórios', description: 'Gerar PDFs de pedidos, orçamentos e relatórios' },
-  { key: 'canSendWhatsApp', label: 'Enviar WhatsApp', description: 'Disparar mensagens para clientes e equipe via Evolution API' },
-  { key: 'canChangeSettings', label: 'Alterar Configurações', description: 'Acesso total às configurações da empresa e logo' },
+const FEATURE_LABELS: { key: keyof Omit<ProfilePermissions, 'routes'>; label: string; description: string; icon: React.ReactNode }[] = [
+  { key: 'canSeeFinancials', label: 'Ver Valores Financeiros', description: 'Exibe faturamento, preços totais e lucros nos pedidos', icon: <DollarSign className="h-4 w-4" /> },
+  { key: 'canEditOrders', label: 'Criar & Editar Pedidos', description: 'Permite alterar status e criar novos orçamentos', icon: <Edit3 className="h-4 w-4" /> },
+  { key: 'canManageClients', label: 'Gerenciar Clientes', description: 'Adicionar, editar e remover cadastro de clientes', icon: <Users className="h-4 w-4" /> },
+  { key: 'canManageStock', label: 'Gerenciar Estoque', description: 'Alterar quantidade de insumos, linhas e agulhas', icon: <Boxes className="h-4 w-4" /> },
+  { key: 'canExportReports', label: 'Exportar Relatórios', description: 'Gerar PDFs de pedidos, orçamentos e relatórios', icon: <FileSpreadsheet className="h-4 w-4" /> },
+  { key: 'canSendWhatsApp', label: 'Enviar WhatsApp', description: 'Disparar mensagens para clientes e equipe via Evolution API', icon: <MessageCircle className="h-4 w-4" /> },
+  { key: 'canChangeSettings', label: 'Alterar Configurações', description: 'Acesso total às configurações da empresa e logo', icon: <Settings className="h-4 w-4" /> },
 ];
 
 export const NetflixProfileModal: React.FC = () => {
@@ -274,16 +274,43 @@ export const NetflixProfileModal: React.FC = () => {
                       </span>
                     )}
 
-                    {/* Engrenagem / Lápis de editar permissões no próprio card (visível no Modo Chefe) */}
+                    {/* Botões de Ação Rapida no Card (visível no Modo Chefe) */}
                     {isUnlocked && (
-                      <button
-                        type="button"
-                        onClick={e => handleOpenEditPermissions(p, e)}
-                        className="absolute top-3 left-3 p-2 rounded-xl bg-zinc-100 dark:bg-white/10 hover:bg-zinc-200 dark:hover:bg-white/20 text-zinc-500 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white transition-all shadow-md z-10"
-                        title="Editar Permissões deste Perfil"
-                      >
-                        <Settings className="h-4 w-4 text-purple-300" />
-                      </button>
+                      <div className="absolute top-3 left-3 flex items-center gap-2 z-10">
+                        <button
+                          type="button"
+                          onClick={e => handleOpenEditPermissions(p, e)}
+                          className="p-2 rounded-xl bg-zinc-100 dark:bg-white/10 hover:bg-zinc-200 dark:hover:bg-white/20 text-zinc-500 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white transition-all shadow-md"
+                          title="Editar Permissões deste Perfil"
+                        >
+                          <Settings className="h-4 w-4 text-purple-300" />
+                        </button>
+                        
+                        <button
+                          type="button"
+                          onClick={e => {
+                            e.stopPropagation();
+                            // Toggle rápido da permissão de ver valores financeiros
+                            const updatedProfile = {
+                              ...p,
+                              permissions: {
+                                ...p.permissions,
+                                canSeeFinancials: !p.permissions.canSeeFinancials
+                              }
+                            };
+                            updateProfile(p.id, updatedProfile);
+                            toast.success(`Acesso Financeiro ${updatedProfile.permissions.canSeeFinancials ? 'Liberado' : 'Bloqueado'} para ${p.name}`);
+                          }}
+                          className={`p-2 rounded-xl transition-all shadow-md ${
+                            p.permissions.canSeeFinancials
+                              ? 'bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 border border-emerald-500/20'
+                              : 'bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/20'
+                          }`}
+                          title={p.permissions.canSeeFinancials ? "Ocultar Valores Financeiros" : "Liberar Valores Financeiros"}
+                        >
+                          {p.permissions.canSeeFinancials ? <DollarSign className="h-4 w-4" /> : <DollarSign className="h-4 w-4 opacity-50 line-through" />}
+                        </button>
+                      </div>
                     )}
 
                     {/* Avatar Icon */}
@@ -622,6 +649,8 @@ export const NetflixProfileModal: React.FC = () => {
               <div className="space-y-2">
                 {FEATURE_LABELS.map(f => {
                   const enabled = Boolean(profilePermissions[f.key]);
+                  const isFinancial = f.key === 'canSeeFinancials';
+                  
                   return (
                     <button
                       key={f.key}
@@ -633,19 +662,38 @@ export const NetflixProfileModal: React.FC = () => {
                         }));
                       }}
                       className={`w-full flex items-center justify-between p-3.5 rounded-2xl border text-left transition-all ${
-                        enabled
-                          ? 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-300 dark:border-emerald-500/30 text-emerald-900 dark:text-white'
-                          : 'bg-zinc-50 dark:bg-white/[0.02] border-zinc-200 dark:border-white/5 text-zinc-500 dark:text-zinc-500'
+                        isFinancial
+                          ? enabled 
+                            ? 'bg-emerald-500/20 border-emerald-500/50 shadow-[0_0_15px_rgba(16,185,129,0.3)] ring-1 ring-emerald-500' 
+                            : 'bg-red-500/10 border-red-500/30 shadow-[0_0_15px_rgba(239,68,68,0.15)] ring-1 ring-red-500/50'
+                          : enabled
+                            ? 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-300 dark:border-emerald-500/30'
+                            : 'bg-zinc-50 dark:bg-white/[0.02] border-zinc-200 dark:border-white/5'
                       }`}
                     >
                       <div>
-                        <p className={`text-xs font-bold ${enabled ? 'text-emerald-900 dark:text-white' : 'text-zinc-500'}`}>{f.label}</p>
-                        <p className="text-[11px] text-zinc-400 mt-0.5">{f.description}</p>
+                        <p className={`text-xs font-bold flex items-center gap-1.5 ${
+                          isFinancial 
+                            ? enabled ? 'text-emerald-400' : 'text-red-400'
+                            : enabled ? 'text-emerald-900 dark:text-white' : 'text-zinc-500'
+                        }`}>
+                          {f.icon && <span className={
+                            isFinancial 
+                              ? enabled ? 'text-emerald-400 drop-shadow-md' : 'text-red-400 opacity-70'
+                              : enabled ? 'text-emerald-500' : 'text-zinc-500'
+                          }>{f.icon}</span>}
+                          {f.label}
+                        </p>
+                        <p className={`text-[11px] mt-0.5 ${
+                          isFinancial
+                            ? enabled ? 'text-emerald-500/80' : 'text-red-500/70'
+                            : 'text-zinc-400'
+                        }`}>{f.description}</p>
                       </div>
                       {enabled ? (
-                        <ToggleRight className="h-6 w-6 text-emerald-400 flex-shrink-0 ml-3" />
+                        <ToggleRight className={`h-6 w-6 flex-shrink-0 ml-3 ${isFinancial ? 'text-emerald-400 drop-shadow-md' : 'text-emerald-400'}`} />
                       ) : (
-                        <ToggleLeft className="h-6 w-6 text-zinc-600 flex-shrink-0 ml-3" />
+                        <ToggleLeft className={`h-6 w-6 flex-shrink-0 ml-3 ${isFinancial ? 'text-red-400/80' : 'text-zinc-600'}`} />
                       )}
                     </button>
                   );

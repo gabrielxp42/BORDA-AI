@@ -7,6 +7,7 @@ import {
 import { supabase } from '@/integrations/supabase/client';
 import { useProfile } from '@/contexts/ProfileContext';
 import { useCompanySettings } from '@/contexts/CompanySettingsContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { parsePaymentMetadata } from '@/utils/paymentHelper';
 import { printOrderReceipt } from '@/services/pdfGenerator';
 import { sendEvolutionText, getWhatsAppWebLink, handleWhatsAppDispatchError } from '@/services/whatsappService';
@@ -61,6 +62,10 @@ export const PedidosKanban: React.FC<PedidosKanbanProps> = ({
   const [loading, setLoading] = useState(true);
   const { isUnlocked } = useProfile();
   const { settings } = useCompanySettings();
+  const { profile } = useAuth();
+  
+  const canViewPrices = profile?.can_view_prices !== false;
+  const formatPrice = (val: number) => canViewPrices ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val) : 'R$ ***';
 
   useEffect(() => {
     fetchOrders();
@@ -305,7 +310,7 @@ export const PedidosKanban: React.FC<PedidosKanbanProps> = ({
                             {isUnlocked ? (
                               ord.total_amount > 0 ? (
                                 <span className="text-xs font-black text-emerald-400 block">
-                                  {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(ord.total_amount)}
+                                  {formatPrice(ord.total_amount)}
                                 </span>
                               ) : (
                                 <span className="text-[10px] font-bold text-amber-400 block">Aguardando</span>
