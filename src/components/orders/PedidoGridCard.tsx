@@ -331,8 +331,8 @@ const PedidoGridCardComponent: React.FC<PedidoGridCardProps> = ({
           </div>
 
           {/* Barra de Ações Rápidas Audita e Otimizada */}
-          <div className="flex items-center justify-between gap-1 pt-1" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center gap-1">
+          <div className="flex flex-wrap items-center justify-between gap-2 pt-1" onClick={(e) => e.stopPropagation()}>
+            <div className="flex flex-wrap items-center gap-1">
               {/* 1. Ver Detalhes */}
               <button
                 onClick={() => onOpenDetails(order)}
@@ -419,7 +419,7 @@ const PedidoGridCardComponent: React.FC<PedidoGridCardProps> = ({
             {/* Botão de Cobrar/WhatsApp Destacado */}
             <button
               onClick={(e) => onCobrarOrder(order)}
-              className="px-3 py-1.5 rounded-xl bg-purple-600/10 dark:bg-purple-500/20 text-purple-600 dark:text-purple-300 hover:bg-purple-600 dark:hover:bg-purple-500 hover:text-white border border-purple-500/30 text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm"
+              className="px-3 py-1.5 rounded-xl bg-purple-600/10 dark:bg-purple-500/20 text-purple-600 dark:text-purple-300 hover:bg-purple-600 dark:hover:bg-purple-500 hover:text-white border border-purple-500/30 text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm whitespace-nowrap"
             >
               <Send className="h-3.5 w-3.5" /> Cobrar
             </button>

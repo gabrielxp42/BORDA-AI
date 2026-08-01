@@ -351,7 +351,7 @@ export const PedidosKanban: React.FC<PedidosKanbanProps> = ({
                                 >
                         {/* Header do Card no Kanban */}
                         <div className="flex items-start justify-between gap-2">
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-1 min-w-0">
                             <div className={`h-8 w-8 rounded-xl border flex items-center justify-center shrink-0 font-black text-[11px] ${
                               isUnpriced
                                 ? 'bg-amber-500/20 border-amber-500/30 text-amber-400'
@@ -359,18 +359,18 @@ export const PedidosKanban: React.FC<PedidosKanbanProps> = ({
                             }`}>
                               #{ord.order_number || ord.id.slice(0, 4)}
                             </div>
-                            <div className="min-w-0">
-                              <h4 className="text-xs font-bold text-white truncate max-w-[130px]" title={ord.client?.name}>
+                            <div className="min-w-0 flex-1">
+                              <h4 className="text-xs font-bold text-white truncate" title={ord.client?.name}>
                                 {ord.client?.name || 'Cliente'}
                               </h4>
                               <p className="text-[10px] text-zinc-400 truncate flex items-center gap-1">
-                                <Building className="h-2.5 w-2.5" /> {ord.client?.company_name || 'Particular'}
+                                <Building className="h-2.5 w-2.5 shrink-0" /> <span className="truncate">{ord.client?.company_name || 'Particular'}</span>
                               </p>
                             </div>
                           </div>
 
                           {/* Preço / Tag de Pagamento */}
-                          <div className="text-right shrink-0">
+                          <div className="text-right shrink-0 ml-1">
                             {isUnlocked ? (
                               ord.total_amount > 0 ? (
                                 <span className="text-xs font-black text-emerald-400 block">
@@ -442,8 +442,8 @@ export const PedidosKanban: React.FC<PedidosKanbanProps> = ({
                         )}
 
                         {/* BARRA DE ATALHOS RÁPIDOS DO CARD DO KANBAN */}
-                        <div className="pt-2 border-t border-white/10 flex items-center justify-between gap-1">
-                          <div className="flex items-center gap-1">
+                        <div className="pt-2 border-t border-white/10 flex flex-wrap items-center justify-between gap-2">
+                          <div className="flex flex-wrap items-center gap-1">
                             {/* Atalho 1: Ficha / Detalhes */}
                             <button
                               type="button"
@@ -524,21 +524,21 @@ export const PedidosKanban: React.FC<PedidosKanbanProps> = ({
                           </div>
 
                           {/* Avançar Status no Kanban */}
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              const nextStatusMap: Record<string, string> = {
-                                pending: 'design',
-                                design: 'embroidering',
-                                embroidering: 'finishing',
-                                finishing: 'completed',
-                                completed: 'pending',
-                              };
-                              moveOrder(ord.id, nextStatusMap[ord.status]);
-                            }}
-                            className="text-[10px] font-bold px-2 py-1 rounded-lg bg-purple-500/10 hover:bg-purple-500/20 text-purple-300 border border-purple-500/30 flex items-center gap-1 transition-all active:scale-95"
-                          >
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const nextStatusMap: Record<string, string> = {
+                                  pending: 'design',
+                                  design: 'embroidering',
+                                  embroidering: 'finishing',
+                                  finishing: 'completed',
+                                  completed: 'pending',
+                                };
+                                moveOrder(ord.id, nextStatusMap[ord.status]);
+                              }}
+                              className="text-[10px] font-bold px-2 py-1 rounded-lg bg-purple-500/10 hover:bg-purple-500/20 text-purple-300 border border-purple-500/30 flex items-center gap-1 transition-all active:scale-95 whitespace-nowrap"
+                            >
                             <Play className="h-3 w-3 fill-purple-300" /> {ord.status === 'completed' ? 'Reiniciar' : 'Avançar'}
                                   </button>
                                 </div>

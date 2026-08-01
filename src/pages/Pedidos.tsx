@@ -4,7 +4,7 @@ import {
   CheckCircle2, Clock, DollarSign, User, Package, FileText, ChevronRight,
   RefreshCw, Trash2, Edit3, ArrowUpRight, ChevronDown, ChevronUp,
   AlertTriangle, Paperclip, MessageSquare, ExternalLink, Shield, Maximize2, Minimize2, Phone,
-  Zap, Sparkles, Printer
+  Zap, Sparkles, Printer, Eye
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useCompanySettings } from '@/contexts/CompanySettingsContext';
@@ -19,6 +19,8 @@ import { toast } from 'sonner';
 import { parsePaymentMetadata } from '@/utils/paymentHelper';
 import { sendEvolutionText, getWhatsAppWebLink, formatWhatsAppNumber } from '@/services/whatsappService';
 import { useBackgroundTasks } from '@/hooks/useBackgroundTasks';
+import { printOrderReceipt } from '@/services/pdfGenerator';
+import { printThermalReceipt } from '@/services/thermalPrinter';
 
 interface OrderItem {
   id: string;
@@ -75,15 +77,48 @@ export const Pedidos: React.FC = () => {
   const [selectedOrderForStatus, setSelectedOrderForStatus] = useState<Order | null>(null);
   const [selectedOrderForDetails, setSelectedOrderForDetails] = useState<Order | null>(null);
   const [selectedOrderForCobrar, setSelectedOrderForCobrar] = useState<Order | null>(null);
+  const [activePrintOption, setActivePrintOption] = useState<string | null>(null);
 
   // Background Task Store
   const addTask = useBackgroundTasks(state => state.addTask);
   const updateTask = useBackgroundTasks(state => state.updateTask);
   const updateStep = useBackgroundTasks(state => state.updateStep);
 
-  const handleCobrarPedido = (order: Order, e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
+  const handleCobrarPedido = async (order: Order, e: React.MouseEvent) => {
+    e.stopPropagation();
     setSelectedOrderForCobrar(order);
+  };
+
+  const handlePrintPDF = (order: Order) => {
+    printOrderReceipt({
+      id: order.id,
+      client_id: order.client_id,
+      total_amount: order.total_amount,
+      due_date: order.due_date,
+      created_at: order.created_at,
+      status: order.status,
+      payment_status: order.payment_status,
+      payment_method: order.payment_method,
+      notes: order.notes,
+      clients: order.clients,
+      order_items: order.order_items
+    } as any);
+  };
+
+  const handlePrintThermal = (order: Order) => {
+    printThermalReceipt({
+      id: order.id,
+      client_id: order.client_id,
+      total_amount: order.total_amount,
+      due_date: order.due_date,
+      created_at: order.created_at,
+      status: order.status,
+      payment_status: order.payment_status,
+      payment_method: order.payment_method,
+      notes: order.notes,
+      clients: order.clients,
+      order_items: order.order_items
+    } as any, true);
   };
 
   useEffect(() => {
@@ -614,14 +649,51 @@ export const Pedidos: React.FC = () => {
                               ⚡ Cobrar Cliente (Gabi)
                             </button>
 
-                            {/* Botão de Ver Ficha Completa / PDF */}
-                            <button
-                              type="button"
-                              onClick={() => setSelectedOrderForDetails(order)}
-                              className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-white/10 dark:hover:bg-white/15 border border-slate-200 dark:border-white/10 text-slate-800 dark:text-white text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
-                            >
-                              <FileText className="h-3.5 w-3.5" /> Ficha de Produção & PDF
-                            </button>
+                            {/* Botões de Ação Compactos (Ver, Imprimir) */}
+                            <div className="flex items-center gap-1 bg-slate-100 dark:bg-white/5 p-1 rounded-xl border border-slate-200 dark:border-white/10">
+                              <button
+                                type="button"
+                                onClick={() => setSelectedOrderForDetails(order)}
+                                className="p-2 rounded-lg text-slate-600 dark:text-zinc-400 hover:text-purple-600 dark:hover:text-purple-400 hover:bg-white dark:hover:bg-white/10 transition-all"
+                                title="Ver Detalhes Completos"
+                              >
+                                <Eye className="h-4 w-4" />
+                              </button>
+
+                              {activePrintOption === order.id ? (
+                                <div className="flex items-center gap-1 bg-indigo-500/10 rounded-lg p-0.5 animate-in zoom-in-95 duration-200">
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); handlePrintPDF(order); setActivePrintOption(null); }}
+                                    className="px-2 py-1.5 rounded-md text-indigo-700 dark:text-indigo-300 hover:bg-white dark:hover:bg-indigo-500/20 text-[10px] font-bold flex items-center gap-1 transition-colors"
+                                    title="Imprimir A4 (PDF)"
+                                  >
+                                    <FileText className="h-3 w-3" /> A4
+                                  </button>
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); handlePrintThermal(order); setActivePrintOption(null); }}
+                                    className="px-2 py-1.5 rounded-md text-indigo-700 dark:text-indigo-300 hover:bg-white dark:hover:bg-indigo-500/20 text-[10px] font-bold flex items-center gap-1 transition-colors"
+                                    title="Imprimir Cupom Térmico (80mm)"
+                                  >
+                                    <Printer className="h-3 w-3" /> Bobina
+                                  </button>
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); setActivePrintOption(null); }}
+                                    className="px-1.5 py-1 text-slate-400 hover:text-slate-600 dark:hover:text-zinc-300"
+                                  >
+                                    ×
+                                  </button>
+                                </div>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={(e) => { e.stopPropagation(); setActivePrintOption(order.id); }}
+                                  className="p-2 rounded-lg text-slate-600 dark:text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-white dark:hover:bg-white/10 transition-all"
+                                  title="Opções de Impressão"
+                                >
+                                  <Printer className="h-4 w-4" />
+                                </button>
+                              )}
+                            </div>
                           </div>
 
                           {/* Botão de Excluir (Apenas perfil Chefe / Unlocked) */}
