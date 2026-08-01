@@ -713,6 +713,12 @@ export const Pedidos: React.FC = () => {
           setSelectedOrderForDetails(null);
           setIsCreateModalOpen(true);
         }}
+        onOrderUpdated={(updatedOrder) => {
+          if (updatedOrder) {
+            setSelectedOrderForDetails(updatedOrder);
+          }
+          fetchOrders();
+        }}
       />
 
       {/* Modal de Cobrança Inteligente WhatsApp */}

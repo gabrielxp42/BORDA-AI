@@ -28,10 +28,12 @@ export interface OrderPDFData {
   companyDocument?: string;
   pixKey?: string;
   workingHours?: string;
+  canSeeFinancials?: boolean;
 }
 
 export const printOrderReceipt = (order: OrderPDFData) => {
   const { cleanNotes } = parsePaymentMetadata(order.notes);
+  const canSee = order.canSeeFinancials !== false; // defaults to true if not provided
 
   const brandColor = order.companyColor || '#9333ea';
   const companyName = order.companyName || 'GUAÇU BORDADOS';
@@ -65,10 +67,9 @@ export const printOrderReceipt = (order: OrderPDFData) => {
     ? new Date(order.dueDate).toLocaleDateString('pt-BR')
     : 'A combinar';
 
-  const formattedTotal = new Intl.NumberFormat('pt-BR', {
-    style: 'currency',
-    currency: 'BRL'
-  }).format(order.totalAmount || 0);
+  const formattedTotal = canSee
+    ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(order.totalAmount || 0)
+    : 'R$ ***,**';
 
   // Remove iframe anterior se existir
   const existingFrame = document.getElementById('borda-print-iframe');
@@ -399,8 +400,8 @@ export const printOrderReceipt = (order: OrderPDFData) => {
             <tr>
               <th>Descrição do Serviço / Matriz</th>
               <th class="text-center">Quantidade</th>
-              <th class="text-right">Valor Unitário</th>
-              <th class="text-right">Total</th>
+              ${canSee ? '<th class="text-right">Valor Unitário</th>' : ''}
+              ${canSee ? '<th class="text-right">Total</th>' : ''}
             </tr>
           </thead>
           <tbody>
@@ -410,8 +411,8 @@ export const printOrderReceipt = (order: OrderPDFData) => {
               <tr>
                 <td class="font-bold">${cleanDesc}</td>
                 <td class="text-center">${item.quantity} un</td>
-                <td class="text-right">${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.unitPrice || 0)}</td>
-                <td class="text-right font-bold">${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.totalPrice || 0)}</td>
+                ${canSee ? `<td class="text-right">${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.unitPrice || 0)}</td>` : ''}
+                ${canSee ? `<td class="text-right font-bold">${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.totalPrice || 0)}</td>` : ''}
               </tr>
             `}).join('')}
           </tbody>
@@ -431,16 +432,18 @@ export const printOrderReceipt = (order: OrderPDFData) => {
         <div class="payment-info-box">
           <div class="payment-info-title">🔑 Dados para Pagamento & Atendimento</div>
           <div class="payment-info-text">
-            ${order.pixKey ? `Chave PIX: <strong>${order.pixKey}</strong><br/>` : ''}
+            ${canSee && order.pixKey ? `Chave PIX: <strong>${order.pixKey}</strong><br/>` : ''}
             ${order.workingHours ? `Horário de Funcionamento: <strong>${order.workingHours}</strong><br/>` : ''}
             Qualquer dúvida sobre a programação ou produção, entre em contato via WhatsApp!
           </div>
         </div>
 
+        ${canSee ? `
         <div class="total-box">
           <div class="total-label">Valor Total do Pedido</div>
           <div class="total-amount">${formattedTotal}</div>
         </div>
+        ` : ''}
       </div>
 
       <!-- Rodapé Oficial -->

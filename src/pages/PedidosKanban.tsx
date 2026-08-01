@@ -183,7 +183,8 @@ export const PedidosKanban: React.FC<PedidosKanbanProps> = ({
         unitPrice: it.unit_price || 0,
         totalPrice: it.total_price || 0
       })),
-      companyName: settings.systemName
+      companyName: settings.systemName,
+      canSeeFinancials: canViewPrices,
     });
   };
 
@@ -206,7 +207,7 @@ export const PedidosKanban: React.FC<PedidosKanbanProps> = ({
         totalPrice: it.total_price || 0
       })),
       companyName: settings.systemName
-    });
+    }, canViewPrices);
   };
 
   const handleSendWhatsApp = async (order: KanbanOrder) => {

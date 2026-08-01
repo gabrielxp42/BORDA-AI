@@ -4,7 +4,7 @@ import {
   Sparkles, Brain, AlertTriangle, Clock, Users, Send,
   ChevronRight, CheckCircle2, Zap, Activity, Gauge,
   AlertCircle, Package, MessageCircle, RefreshCw, Wrench,
-  ShieldAlert, Timer
+  ShieldAlert, Timer, Eye
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useCompanySettings } from '@/contexts/CompanySettingsContext';
@@ -12,17 +12,24 @@ import { useProfile } from '@/contexts/ProfileContext';
 import { sendEvolutionText } from '@/services/whatsappService';
 import { toast } from 'sonner';
 
+interface GabiAlertItem {
+  id: string;
+  title: string;
+  subtitle?: string;
+  actionPhone?: string;
+  actionMessage?: string;
+  orderId?: number;
+  orderUuid?: string;
+}
+
 interface GabiAlert {
   id: string;
-  type: 'orcamento_pendente' | 'cliente_inativo' | 'pedido_atrasado' | 'producao';
+  type: string;
   icon: React.ReactNode;
   title: string;
   description: string;
   severity: 'warning' | 'danger' | 'info';
-  actionLabel?: string;
-  actionPhone?: string;
-  actionMessage?: string;
-  orderId?: number;
+  items?: GabiAlertItem[];
 }
 
 function getGreeting(): string {
@@ -48,66 +55,168 @@ export const GabiHeroWidget: React.FC = () => {
   const [sendingId, setSendingId] = useState<string | null>(null);
   const [prodCount, setProdCount] = useState(0);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+
+  const toggleGroup = (id: string) => {
+    setExpandedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
   const loadChefeAlerts = useCallback(async () => {
     setLoading(true);
     const newAlerts: GabiAlert[] = [];
 
     try {
-      // 1. Orçamentos pendentes (>2 dias)
-      const twoDaysAgo = new Date(Date.now() - 2 * 86400000).toISOString();
-      const { data: pendingQuotes } = await supabase
+      const now = Date.now();
+
+      // 1. Pedidos Sem Orçamento (Gargalo de Entrada)
+      const { data: noQuoteOrders } = await supabase
         .from('orders')
-        .select('id, order_number, client_id, created_at, clients(name, phone)')
-        .eq('status', 'orcamento')
-        .lt('created_at', twoDaysAgo)
-        .limit(5);
+        .select('id, order_number, client_id, notes, total_amount, created_at, clients(name, phone)')
+        .eq('status', 'pending')
+        .limit(20);
 
-      pendingQuotes?.forEach((o: any) => {
-        const d = daysAgo(o.created_at);
+      const semOrcamento = (noQuoteOrders || []).filter((o: any) => o.total_amount === 0 || o.notes?.includes('"isQuickEntry":true'));
+      
+      if (semOrcamento.length > 0) {
         newAlerts.push({
-          id: `orc_${o.id}`,
-          type: 'orcamento_pendente',
-          icon: <Clock className="h-5 w-5" />,
-          title: `Orçamento #${o.order_number || o.id} pendente há ${d} dias`,
-          description: `Cliente: ${o.clients?.name || 'Sem nome'}. Aguardando aprovação.`,
-          severity: d > 5 ? 'danger' : 'warning',
-          actionLabel: 'Enviar Lembrete WhatsApp',
-          actionPhone: o.clients?.phone,
-          actionMessage: `Olá ${o.clients?.name || ''}! Seu orçamento #${o.order_number || o.id} da ${settings.systemName} está pronto para aprovação. Podemos prosseguir? 😊`,
-          orderId: o.id,
+          id: 'group_sem_orcamento',
+          type: 'sem_orcamento',
+          icon: <AlertCircle className="h-5 w-5" />,
+          title: `${semOrcamento.length} pedido${semOrcamento.length > 1 ? 's' : ''} sem orçamento`,
+          description: 'Aguardando definição de preço para iniciar.',
+          severity: 'danger',
+          items: semOrcamento.map((o: any) => ({
+            id: `noq_${o.id}`,
+            title: `Pedido #${o.order_number || o.id.slice(0,4)}`,
+            subtitle: `${o.clients?.name || 'Cliente'} (${daysAgo(o.created_at)} dias)`,
+            orderUuid: o.id,
+          }))
         });
-      });
+      }
 
-      // 2. Pedidos atrasados (>7 dias, não concluídos)
-      const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString();
-      const { data: lateOrders } = await supabase
+      // 2. Aguardando Aprovação / Pagamento Inicial
+      const { data: unpaidPending } = await supabase
+        .from('orders')
+        .select('id, order_number, client_id, total_amount, payment_status, created_at, clients(name, phone)')
+        .eq('status', 'pending')
+        .gt('total_amount', 0)
+        .eq('payment_status', 'pending')
+        .limit(20);
+
+      const aguardandoPagto = (unpaidPending || []).filter((o: any) => daysAgo(o.created_at) >= 1);
+
+      if (aguardandoPagto.length > 0) {
+        newAlerts.push({
+          id: 'group_aguardando_pagto',
+          type: 'aguardando_pagto',
+          icon: <Clock className="h-5 w-5" />,
+          title: `${aguardandoPagto.length} aguardando pagamento/aprovação`,
+          description: 'Já orçados, mas travados na entrada.',
+          severity: 'warning',
+          items: aguardandoPagto.map((o: any) => ({
+            id: `up_${o.id}`,
+            title: `Pedido #${o.order_number || o.id.slice(0,4)}`,
+            subtitle: `${o.clients?.name || 'Cliente'} - R$ ${o.total_amount}`,
+            actionPhone: o.clients?.phone,
+            actionMessage: `Olá ${o.clients?.name || ''}! Seu orçamento #${o.order_number || o.id.slice(0,4)} da ${settings.systemName} está pronto. O valor ficou R$ ${o.total_amount}. Podemos prosseguir com o pagamento do sinal para liberar a produção? 😊`,
+            orderUuid: o.id,
+          }))
+        });
+      }
+
+      // 3. Atrasos Severos de Produção (Gargalo na Máquina)
+      const fiveDaysAgo = new Date(now - 5 * 86400000).toISOString();
+      const { data: productionDelays } = await supabase
         .from('orders')
         .select('id, order_number, client_id, status, created_at, clients(name, phone)')
-        .not('status', 'in', '("concluido","cancelado","orcamento")')
-        .lt('created_at', sevenDaysAgo)
-        .limit(5);
+        .in('status', ['design', 'embroidering', 'finishing'])
+        .lt('created_at', fiveDaysAgo)
+        .limit(20);
 
-      lateOrders?.forEach((o: any) => {
-        const d = daysAgo(o.created_at);
+      if (productionDelays && productionDelays.length > 0) {
         newAlerts.push({
-          id: `late_${o.id}`,
-          type: 'pedido_atrasado',
+          id: 'group_atrasos_producao',
+          type: 'atraso_producao',
           icon: <AlertTriangle className="h-5 w-5" />,
-          title: `Pedido #${o.order_number || o.id} há ${d} dias em "${o.status}"`,
-          description: `Cliente: ${o.clients?.name || 'N/A'}. Verifique o andamento.`,
+          title: `${productionDelays.length} pedido${productionDelays.length > 1 ? 's' : ''} travado${productionDelays.length > 1 ? 's' : ''} na produção`,
+          description: 'Na oficina há mais de 5 dias sem conclusão.',
           severity: 'danger',
-          actionLabel: 'Ver Pedido',
-          orderId: o.id,
+          items: productionDelays.map((o: any) => ({
+            id: `prod_${o.id}`,
+            title: `Pedido #${o.order_number || o.id.slice(0,4)}`,
+            subtitle: `Status: ${o.status} (${daysAgo(o.created_at)} dias)`,
+            orderUuid: o.id,
+          }))
         });
-      });
+      }
+
+      // 4. Prontos e Esquecidos (Gargalo de Saída)
+      const threeDaysAgo = new Date(now - 3 * 86400000).toISOString();
+      const { data: readyForgotten } = await supabase
+        .from('orders')
+        .select('id, order_number, client_id, status, created_at, clients(name, phone)')
+        .eq('status', 'completed')
+        .lt('created_at', threeDaysAgo)
+        .limit(20);
+
+      if (readyForgotten && readyForgotten.length > 0) {
+        newAlerts.push({
+          id: 'group_prontos_esquecidos',
+          type: 'prontos_esquecidos',
+          icon: <Package className="h-5 w-5" />,
+          title: `${readyForgotten.length} pedido${readyForgotten.length > 1 ? 's' : ''} pronto${readyForgotten.length > 1 ? 's' : ''} esquecido${readyForgotten.length > 1 ? 's' : ''}`,
+          description: 'Prontos para retirada há mais de 3 dias.',
+          severity: 'warning',
+          items: readyForgotten.map((o: any) => ({
+            id: `ready_${o.id}`,
+            title: `Pedido #${o.order_number || o.id.slice(0,4)}`,
+            subtitle: `${o.clients?.name || 'Cliente'} (${daysAgo(o.created_at)} dias)`,
+            actionPhone: o.clients?.phone,
+            actionMessage: `Olá ${o.clients?.name || ''}! Seu pedido #${o.order_number || o.id.slice(0,4)} da ${settings.systemName} está prontinho te aguardando para retirada. Quando pretende passar aqui? 📦`,
+            orderUuid: o.id,
+          }))
+        });
+      }
+
+      // 5. Entregues Não Quitados (Furo Financeiro)
+      // We will look for orders that are 'completed' but still 'pending' or 'half_paid' payment.
+      const { data: unpaidCompleted } = await supabase
+        .from('orders')
+        .select('id, order_number, client_id, total_amount, payment_status, created_at, clients(name, phone)')
+        .eq('status', 'completed')
+        .in('payment_status', ['pending', 'half_paid'])
+        .limit(20);
+
+      if (unpaidCompleted && unpaidCompleted.length > 0) {
+        newAlerts.push({
+          id: 'group_nao_quitados',
+          type: 'nao_quitados',
+          icon: <Zap className="h-5 w-5" />,
+          title: `${unpaidCompleted.length} finalizado${unpaidCompleted.length > 1 ? 's' : ''} com pendência financeira`,
+          description: 'Pedidos finalizados que ainda não foram totalmente pagos.',
+          severity: 'danger',
+          items: unpaidCompleted.map((o: any) => ({
+            id: `debt_${o.id}`,
+            title: `Pedido #${o.order_number || o.id.slice(0,4)}`,
+            subtitle: `${o.clients?.name || 'Cliente'} - Pago: ${o.payment_status === 'half_paid' ? '50%' : '0%'}`,
+            actionPhone: o.clients?.phone,
+            actionMessage: `Olá ${o.clients?.name || ''}! Aqui é da ${settings.systemName}. Vimos que o pedido #${o.order_number || o.id.slice(0,4)} já está finalizado, mas consta um valor em aberto. Poderia verificar, por favor? 💳`,
+            orderUuid: o.id,
+          }))
+        });
+      }
 
       // 3. Clientes inativos (>30 dias sem pedido)
       const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString();
       const { data: allClients } = await supabase
         .from('clients')
         .select('id, name, phone, created_at')
-        .limit(100);
+        .limit(200);
 
       if (allClients && allClients.length > 0) {
         const { data: recentOrders } = await supabase
@@ -120,19 +229,24 @@ export const GabiHeroWidget: React.FC = () => {
           (c: any) => !activeClientIds.has(c.id) && daysAgo(c.created_at) > 30
         );
 
-        inactiveClients.slice(0, 3).forEach((c: any) => {
+        if (inactiveClients.length > 0) {
+          const topInactive = inactiveClients.slice(0, 10);
           newAlerts.push({
-            id: `inactive_${c.id}`,
+            id: 'group_inativos',
             type: 'cliente_inativo',
             icon: <Users className="h-5 w-5" />,
-            title: `${c.name} está inativo há +30 dias`,
-            description: 'Nenhum pedido recente. Reative o contato!',
+            title: `${inactiveClients.length} cliente${inactiveClients.length > 1 ? 's' : ''} inativo${inactiveClients.length > 1 ? 's' : ''}`,
+            description: 'Sem pedidos recentes há mais de 30 dias.',
             severity: 'info',
-            actionLabel: 'Enviar WhatsApp',
-            actionPhone: c.phone,
-            actionMessage: `Olá ${c.name}! Aqui é a ${settings.systemName} 🧵. Sentimos sua falta! Temos condições especiais essa semana. Vamos conversar?`,
+            items: topInactive.map((c: any) => ({
+              id: `inactive_${c.id}`,
+              title: c.name,
+              subtitle: `Inativo há ${daysAgo(c.created_at)} dias`,
+              actionPhone: c.phone,
+              actionMessage: `Olá ${c.name}! Aqui é a ${settings.systemName} 🧵. Sentimos sua falta! Temos condições especiais essa semana. Vamos conversar?`
+            }))
           });
-        });
+        }
       }
     } catch (err) {
       console.error('[Gabi] Erro ao carregar alertas:', err);
@@ -161,14 +275,14 @@ export const GabiHeroWidget: React.FC = () => {
     else loadOperadorData();
   }, [isChefe, loadChefeAlerts, loadOperadorData, refreshKey]);
 
-  const handleWhatsAppAction = async (alert: GabiAlert) => {
-    if (!alert.actionPhone || !alert.actionMessage) {
-      if (alert.orderId) navigate('/pedidos');
+  const handleWhatsAppAction = async (item: GabiAlertItem) => {
+    if (!item.actionPhone || !item.actionMessage) {
+      if (item.orderUuid) navigate('/pedidos');
       return;
     }
-    setSendingId(alert.id);
+    setSendingId(item.id);
     try {
-      await sendEvolutionText(alert.actionPhone, alert.actionMessage);
+      await sendEvolutionText(item.actionPhone, item.actionMessage);
       toast.success('Mensagem enviada via WhatsApp!');
     } catch (err: any) {
       toast.error(`Falha no envio: ${err.message}`);
@@ -278,44 +392,70 @@ export const GabiHeroWidget: React.FC = () => {
               <div className="space-y-2.5">
                 {alerts.map(alert => {
                   const colors = severityColors[alert.severity];
+                  const isExpanded = expandedGroups.has(alert.id);
+                  const hasItems = alert.items && alert.items.length > 0;
+                  
                   return (
                     <div
                       key={alert.id}
-                      className="rounded-2xl p-3.5 transition-all duration-300 hover:scale-[1.01]"
+                      className={`rounded-2xl transition-all duration-300 ${!isExpanded ? 'hover:scale-[1.01]' : ''}`}
                       style={{
                         backgroundColor: colors.bg,
                         border: `1px solid ${colors.border}`,
                       }}
                     >
-                      <div className="flex items-start gap-3">
-                        <span style={{ color: colors.text }} className="mt-0.5 flex-shrink-0">
-                          {alert.icon}
-                        </span>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-white text-sm font-semibold leading-tight">{alert.title}</p>
-                          <p className="text-zinc-400 text-xs mt-1">{alert.description}</p>
+                      {/* Cabecalho clicavel */}
+                      <div 
+                        className={`p-3.5 flex items-center justify-between cursor-pointer`}
+                        onClick={() => hasItems && toggleGroup(alert.id)}
+                      >
+                        <div className="flex items-center gap-3">
+                          <span style={{ color: colors.text }} className="flex-shrink-0">
+                            {alert.icon}
+                          </span>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-white text-sm font-semibold leading-tight">{alert.title}</p>
+                            <p className="text-zinc-400 text-[11px] mt-0.5">{alert.description}</p>
+                          </div>
                         </div>
+                        {hasItems && (
+                          <ChevronRight className={`h-4 w-4 text-zinc-500 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
+                        )}
                       </div>
-                      {alert.actionLabel && (
-                        <button
-                          onClick={() => handleWhatsAppAction(alert)}
-                          disabled={sendingId === alert.id}
-                          className="mt-2.5 w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl text-xs font-semibold transition-all duration-200 hover:brightness-110 disabled:opacity-50"
-                          style={{
-                            backgroundColor: alert.actionPhone ? '#25d36633' : `${pc}33`,
-                            color: alert.actionPhone ? '#25d366' : pc,
-                            border: `1px solid ${alert.actionPhone ? '#25d36644' : pc + '44'}`,
-                          }}
-                        >
-                          {sendingId === alert.id ? (
-                            <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                          ) : alert.actionPhone ? (
-                            <MessageCircle className="h-3.5 w-3.5" />
-                          ) : (
-                            <ChevronRight className="h-3.5 w-3.5" />
-                          )}
-                          {sendingId === alert.id ? 'Enviando...' : alert.actionLabel}
-                        </button>
+
+                      {/* Itens expandidos */}
+                      {isExpanded && hasItems && (
+                        <div className="px-3.5 pb-3.5 pt-1 space-y-2 border-t border-white/10 mt-1">
+                          {alert.items!.map(item => (
+                            <div key={item.id} className="bg-black/20 rounded-xl p-2.5 flex items-center justify-between gap-2 border border-white/5">
+                              <div className="min-w-0">
+                                <p className="text-white text-[11px] font-semibold truncate">{item.title}</p>
+                                {item.subtitle && <p className="text-zinc-400 text-[10px] truncate">{item.subtitle}</p>}
+                              </div>
+                              <div className="flex gap-1 shrink-0">
+                                {item.orderUuid && (
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); navigate('/pedidos'); }}
+                                    className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors"
+                                    title="Ver Pedido"
+                                  >
+                                    <Eye className="h-3.5 w-3.5" />
+                                  </button>
+                                )}
+                                {item.actionPhone && (
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); handleWhatsAppAction(item); }}
+                                    disabled={sendingId === item.id}
+                                    className="px-2 py-1.5 rounded-lg bg-[#25d366]/20 hover:bg-[#25d366]/30 text-[#25d366] border border-[#25d366]/30 transition-colors disabled:opacity-50 flex items-center gap-1.5 text-[10px] font-bold"
+                                  >
+                                    {sendingId === item.id ? <RefreshCw className="h-3 w-3 animate-spin" /> : <MessageCircle className="h-3 w-3" />}
+                                    Cobrar
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
                       )}
                     </div>
                   );

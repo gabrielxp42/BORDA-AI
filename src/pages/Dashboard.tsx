@@ -512,6 +512,12 @@ export const Dashboard: React.FC = () => {
             setSelectedOrderForDetails(null);
             loadData();
           }}
+          onOrderUpdated={(updatedOrder) => {
+            if (updatedOrder) {
+              setSelectedOrderForDetails(updatedOrder);
+            }
+            loadData();
+          }}
         />
       )}
 

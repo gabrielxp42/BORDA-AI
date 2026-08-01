@@ -21,6 +21,7 @@ interface OrderDetailsModalProps {
   onDelete?: (orderId: string) => void;
   onPriceOrder?: (order: any) => void;
   onEditOrder?: (order: any) => void;
+  onOrderUpdated?: (updatedOrder?: any) => void;
 }
 
 export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
@@ -29,7 +30,8 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
   order,
   onDelete,
   onPriceOrder,
-  onEditOrder
+  onEditOrder,
+  onOrderUpdated
 }) => {
   const { settings } = useCompanySettings();
   const { isUnlocked, permissions } = useProfile();
@@ -55,11 +57,12 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
 
   useEffect(() => {
     const fetchMatrixUrls = async () => {
-      if (!order?.order_items) return;
+      const rawItems = order?.order_items || order?.items || [];
+      if (rawItems.length === 0) return;
       const urls: Record<string, string> = {};
       const previews: Record<string, string> = {};
       
-      for (const item of order.order_items) {
+      for (const item of rawItems) {
         try {
           let fileUrl: string | null = null;
           let previewUrl: string | null = null;
@@ -150,6 +153,7 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
       companyDocument: settings.document || undefined,
       pixKey: settings.pixKey || undefined,
       workingHours: settings.workingHours || undefined,
+      canSeeFinancials: permissions?.canSeeFinancials ?? true,
     };
   };
 
@@ -173,7 +177,8 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
 
     const { addTask, updateTask, updateStep } = useBackgroundTasks.getState();
 
-    const itemsSummary = order.order_items?.map((it: any) => `- ${it.description} (${it.quantity}x)`).join('\n') || '';
+    const rawItems = order.order_items || order.items || [];
+    const itemsSummary = rawItems.map((it: any) => `- ${it.description} (${it.quantity}x)`).join('\n') || '';
     const text = `*Ficha do Pedido #${order.id.slice(0, 6)} - ${settings.systemName}* 🧵✨\n\n` +
       `Olá, *${clientName}*! Seguem os detalhes do seu pedido:\n\n` +
       `*Cliente:* ${clientName}\n` +
@@ -257,11 +262,10 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
         .eq('id', order.id);
 
       // 3. Atualizar o estado local do pedido
-      if (order.order_items) {
-        order.order_items.push(insertedItem);
-      } else {
-        order.order_items = [insertedItem];
-      }
+      if (!order.order_items) order.order_items = [];
+      if (!order.items) order.items = [];
+      order.order_items.push(insertedItem);
+      order.items.push(insertedItem);
       order.total_amount = newTotal;
 
       toast.success(`Matriz "${newItemDesc}" adicionada ao pedido!`);
@@ -280,7 +284,7 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
   const handleStartQuickEdit = () => {
     setTempNotes(cleanNotes || '');
     setTempDueDate(order.due_date ? format(new Date(order.due_date), 'yyyy-MM-dd') : '');
-    setTempItems(JSON.parse(JSON.stringify(order.order_items || [])));
+    setTempItems(JSON.parse(JSON.stringify(order.order_items || order.items || [])));
     setIsQuickEditing(true);
   };
 
@@ -326,14 +330,16 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
         // Update order total amount
         await supabase.from('orders').update({ total_amount: newTotal }).eq('id', order.id);
         updates['total_amount'] = newTotal;
-        updates['order_items'] = tempItems.map(i => ({
+        const updatedItemsList = tempItems.map(i => ({
           ...i,
           total_price: (Number(i.quantity) || 1) * (Number(i.unit_price) || 0)
         }));
+        updates['order_items'] = updatedItemsList;
+        updates['items'] = updatedItemsList;
       }
 
-      if (onEditOrder) {
-        onEditOrder({ ...order, ...updates });
+      if (onOrderUpdated) {
+        onOrderUpdated({ ...order, ...updates });
       }
 
       setIsQuickEditing(false);
@@ -467,8 +473,11 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200 dark:divide-white/5 font-medium text-slate-800 dark:text-zinc-200">
-                    {(isQuickEditing && tempItems.length > 0 ? tempItems : order.order_items) && (isQuickEditing && tempItems.length > 0 ? tempItems : order.order_items).length > 0 ? (
-                      (isQuickEditing && tempItems.length > 0 ? tempItems : order.order_items).map((item: any, idx: number) => (
+                    {(() => {
+                      const rawItems = order.order_items || order.items || [];
+                      const itemsToRender = (isQuickEditing && tempItems.length > 0) ? tempItems : rawItems;
+                      return itemsToRender && itemsToRender.length > 0 ? (
+                        itemsToRender.map((item: any, idx: number) => (
                         <tr key={item.id || idx}>
                           <td className="p-3 font-bold">
                             <div className="flex items-center gap-3">
@@ -489,9 +498,25 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                                   <Layers className="h-4 w-4" style={{ color: settings.primaryColor, opacity: 0.5 }} />
                                 </div>
                               )}
-                              <div className="flex-1 min-w-0">
-                                <span className="block truncate">{item.description}</span>
-                              </div>
+                              {(() => {
+                                const descStr = item.description || '';
+                                const specsMatch = descStr.match(/^(.*?)(?:\s*\(([\d.,]+)\s*pts,?\s*(\d+)\s*cores\))?$/i);
+                                const cleanName = specsMatch?.[1]?.trim() || descStr;
+                                const pts = specsMatch?.[2];
+                                const colors = specsMatch?.[3];
+                                
+                                return (
+                                  <div className="flex-1 min-w-0">
+                                    <span className="block font-bold text-slate-900 dark:text-white truncate">{cleanName}</span>
+                                    {(pts || colors) && (
+                                      <div className="flex items-center gap-2 mt-0.5 text-[10px] text-zinc-400 font-medium">
+                                        {pts && <span className="bg-purple-500/10 text-purple-300 px-1.5 py-0.5 rounded border border-purple-500/20">🪡 {pts} pts</span>}
+                                        {colors && <span className="bg-blue-500/10 text-blue-300 px-1.5 py-0.5 rounded border border-blue-500/20">🎨 {colors} cores</span>}
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })()}
                               {matrixUrls[item.id] && permissions?.canDownloadMatrices && (
                                 <button
                                   onClick={() => window.open(matrixUrls[item.id], '_blank')}
@@ -506,7 +531,7 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                           <td className="p-3 text-center font-bold text-white">
                             {isQuickEditing ? (
                               <div className="flex items-center justify-center gap-1">
-                                <Edit2 className="h-3 w-3 text-slate-400" />
+                                <Edit2 className="h-3 w-3 text-purple-400" />
                                 <input
                                   type="number"
                                   min="1"
@@ -516,15 +541,17 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                                     newItems[idx] = { ...newItems[idx], quantity: Number(e.target.value) };
                                     setTempItems(newItems);
                                   }}
-                                  className="w-16 bg-white dark:bg-black/50 border border-slate-300 dark:border-white/10 rounded px-1.5 py-1 text-xs text-slate-900 dark:text-white text-center outline-none focus:border-purple-500"
+                                  className="w-16 bg-white dark:bg-black/50 border border-purple-500/50 rounded px-1.5 py-1 text-xs text-slate-900 dark:text-white text-center outline-none font-bold"
                                 />
                               </div>
                             ) : (
                               <button 
                                 onClick={(e) => { e.stopPropagation(); handleStartQuickEdit(); }}
-                                className="group flex items-center justify-center gap-1.5 w-full hover:text-purple-400 transition-colors"
+                                className="inline-flex items-center justify-center gap-1.5 px-2.5 py-1 rounded-xl bg-purple-500/10 hover:bg-purple-500/20 text-purple-300 border border-purple-500/30 transition-all font-bold group shadow-sm active:scale-95"
+                                title="Clique para editar a quantidade do lote"
                               >
-                                {item.quantity} un <Edit2 className="h-3 w-3 text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                <span>{item.quantity} un</span>
+                                <Edit2 className="h-3 w-3 text-purple-400 opacity-80 group-hover:opacity-100 transition-opacity" />
                               </button>
                             )}
                           </td>
@@ -584,7 +611,8 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                           {order.notes || 'Sem itens individuais descritos'}
                         </td>
                       </tr>
-                    )}
+                    );
+                    })()}
                   </tbody>
                 </table>
               </div>
@@ -679,11 +707,21 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                     {isUnlocked ? 'Valor Total do Pedido' : 'Resumo da Ordem de Produção'}
                   </span>
                   <h3 className="text-lg sm:text-2xl font-black text-slate-900 dark:text-white leading-tight">
-                    {isUnlocked ? (
-                      formatCurrency(order.total_amount || 0, permissions?.canSeeFinancials ?? true)
-                    ) : (
-                      `${order.order_items?.reduce((acc: number, it: any) => acc + (it.quantity || 1), 0) || 1} Peça(s) no Lote`
-                    )}
+                    {(() => {
+                      const currentTotalPieces = isQuickEditing 
+                        ? tempItems.reduce((acc, item) => acc + (Number(item.quantity) || 1), 0)
+                        : ((order.order_items || order.items || [])?.reduce((acc: number, it: any) => acc + (it.quantity || 1), 0) || 1);
+                      
+                      const currentTotalAmount = isQuickEditing
+                        ? tempItems.reduce((acc, item) => acc + (Number(item.quantity) || 1) * (Number(item.unit_price) || 0), 0)
+                        : (order.total_amount || 0);
+
+                      return isUnlocked ? (
+                        formatCurrency(currentTotalAmount, permissions?.canSeeFinancials ?? true)
+                      ) : (
+                        `${currentTotalPieces} Peça(s) no Lote`
+                      );
+                    })()}
                   </h3>
                 </div>
                 <div className="text-right">

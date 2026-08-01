@@ -8,9 +8,10 @@ interface ClientSelectProps {
   value: string;
   onChange: (clientId: string) => void;
   error?: boolean;
+  shake?: boolean;
 }
 
-export const ClientSelect: React.FC<ClientSelectProps> = ({ value, onChange, error }) => {
+export const ClientSelect: React.FC<ClientSelectProps> = ({ value, onChange, error, shake }) => {
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   const [isOpen, setIsOpen] = useState(false);
@@ -76,7 +77,7 @@ export const ClientSelect: React.FC<ClientSelectProps> = ({ value, onChange, err
     <>
       <div className="relative z-50" ref={dropdownRef}>
         <div 
-          className={`w-full bg-slate-50 dark:bg-black/40 border ${error ? 'border-red-500' : 'border-slate-200 dark:border-white/10'} rounded-2xl px-4 py-2.5 text-xs text-slate-900 dark:text-white flex items-center justify-between cursor-pointer hover:border-purple-500/50 transition-colors shadow-sm`}
+          className={`w-full bg-slate-50 dark:bg-black/40 border ${error ? 'border-red-500 ring-2 ring-red-500/20 bg-red-500/10' : 'border-slate-200 dark:border-white/10'} rounded-2xl px-4 py-2.5 text-xs text-slate-900 dark:text-white flex items-center justify-between cursor-pointer hover:border-purple-500/50 transition-colors shadow-sm ${shake ? 'animate-shake' : ''}`}
           onClick={() => setIsOpen(!isOpen)}
         >
           <div className="min-w-0 flex-1 pr-2">

@@ -148,7 +148,8 @@ const PedidoGridCardComponent: React.FC<PedidoGridCardProps> = ({
     companyAddress: settings.address || undefined,
     companyDocument: settings.document || undefined,
     pixKey: settings.pixKey || undefined,
-    workingHours: settings.workingHours || undefined
+    workingHours: settings.workingHours || undefined,
+    canSeeFinancials: permissions?.canSeeFinancials ?? true,
   });
 
   const handlePrintPDF = (e: React.MouseEvent) => {
@@ -178,9 +179,10 @@ const PedidoGridCardComponent: React.FC<PedidoGridCardProps> = ({
   // Handler para Copiar Resumo Limpo
   const handleCopySummary = (e: React.MouseEvent) => {
     e.stopPropagation();
+    const canSee = permissions?.canSeeFinancials ?? true;
     const summary = `*Pedido ${orderCode} - ${clientName}*\n` +
       `📋 *Descrição:* ${itemDesc}\n` +
-      `💵 *Total:* R$ ${order.total_amount.toFixed(2)}\n` +
+      (canSee ? `💵 *Total:* R$ ${order.total_amount.toFixed(2)}\n` : '') +
       `📌 *Status:* ${order.payment_status.toUpperCase()}`;
     navigator.clipboard.writeText(summary);
     toast.success('Resumo do pedido copiado!');

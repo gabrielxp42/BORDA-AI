@@ -115,6 +115,10 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
   const [globalMatrices, setGlobalMatrices] = useState<Matrix[]>([]);
   const [entryMode, setEntryMode] = useState<'budget' | 'quick'>('quick');
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
+  
+  // Validation Animation States
+  const [showValidationErrors, setShowValidationErrors] = useState(false);
+  const [shakeInputs, setShakeInputs] = useState(false);
 
   // Multi-Item / Multi-Matriz Lista do Pedido
   const [orderItemsList, setOrderItemsList] = useState<{
@@ -250,18 +254,20 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
   }, [selectedClientId, entryMode, observations, paymentStatus, paymentMethod, depositAmount, orderItemsList, selectedItemId, initialData]);
 
   useEffect(() => {
-    if (selectedItemId && entryMode === 'budget') {
+    if (selectedItemId) {
       setOrderItemsList(prev => prev.map(item => {
         if (item.id === selectedItemId) {
-          const finalUnitPrice = item.manualUnitPrice !== undefined ? item.manualUnitPrice : calculation.unitPrice;
+          const calcUnitPrice = entryMode === 'budget' ? calculation.unitPrice : 0;
+          const finalUnitPrice = item.manualUnitPrice !== undefined ? item.manualUnitPrice : (item.unitPrice !== undefined ? item.unitPrice : calcUnitPrice);
+          const newQty = Math.max(1, Number(quantity) || 1);
           return {
             ...item,
             matrixName: matrixName,
             stitchCount: Number(stitchCount) || 0,
             colorCount: Number(colorCount) || 1,
-            quantity: Number(quantity) || 1,
+            quantity: newQty,
             unitPrice: finalUnitPrice,
-            totalPrice: finalUnitPrice * (Number(quantity) || 1),
+            totalPrice: finalUnitPrice * newQty,
             matrixId: selectedMatrixId
           };
         }
@@ -281,6 +287,24 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
           manualUnitPrice: newUnitPrice,
           unitPrice: finalUnitPrice,
           totalPrice: finalUnitPrice * item.quantity
+        };
+      }
+      return item;
+    }));
+  };
+
+  const handleItemQuantityChange = (id: string, value: string) => {
+    const newQty = value === '' ? 1 : Math.max(1, parseInt(value, 10) || 1);
+    setOrderItemsList(prev => prev.map(item => {
+      if (item.id === id) {
+        const finalUnitPrice = item.manualUnitPrice !== undefined ? item.manualUnitPrice : item.unitPrice;
+        if (item.id === selectedItemId) {
+          setQuantity(newQty);
+        }
+        return {
+          ...item,
+          quantity: newQty,
+          totalPrice: finalUnitPrice * newQty
         };
       }
       return item;
@@ -1213,7 +1237,7 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
                         <label className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400 mb-1.5 block">
                           Cliente Registrado {!selectedClientId && <span className="text-red-500">*</span>}
                         </label>
-                        <ClientSelect value={selectedClientId} onChange={setSelectedClientId} error={!selectedClientId} />
+                        <ClientSelect value={selectedClientId} onChange={setSelectedClientId} error={showValidationErrors && !selectedClientId} shake={showValidationErrors && !selectedClientId && shakeInputs} />
                       </div>
                       <div>
                         <label className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400 mb-1.5 block">
@@ -1458,7 +1482,20 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
                                     </span>
                                     <span className="text-[9px] text-zinc-500 font-normal">🪡 {it.stitchCount.toLocaleString()} pts • 🎨 {it.colorCount} cores</span>
                                   </td>
-                                  <td className="p-2.5 text-center font-bold">{it.quantity} un</td>
+                                  <td className="p-2.5 text-center font-bold font-mono">
+                                    <div className="flex items-center justify-center gap-1 group" onClick={(e) => e.stopPropagation()}>
+                                      <Edit2 className="h-3 w-3 text-purple-400 opacity-60 group-hover:opacity-100 transition-opacity" />
+                                      <input
+                                        type="number"
+                                        min="1"
+                                        value={it.quantity}
+                                        onChange={(e) => handleItemQuantityChange(it.id, e.target.value)}
+                                        className="w-16 bg-white/5 dark:bg-black/20 px-1 py-0.5 rounded-md border border-slate-300 dark:border-white/20 hover:border-purple-400 dark:hover:border-purple-400 text-center font-bold text-slate-900 dark:text-white focus:outline-none focus:border-purple-500 transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                        title="Editar Quantidade de Peças do Lote"
+                                      />
+                                      <span className="text-[10px] text-zinc-400">un</span>
+                                    </div>
+                                  </td>
                                   <td className="p-2.5 text-right font-black" style={{ color: settings.primaryColor }}>
                                     <div className="flex items-center justify-end gap-1.5 group">
                                       <Edit2 className="h-3 w-3 opacity-30 group-hover:opacity-100 transition-opacity" style={{ color: settings.primaryColor }} />
@@ -1531,8 +1568,8 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
                               value={matrixName}
                               onChange={e => { setMatrixName(e.target.value); setSelectedMatrixId(null); }}
                               className={`w-full bg-slate-50 dark:bg-white/5 border rounded-2xl px-4 py-2.5 text-xs text-slate-900 dark:text-white focus:outline-none transition-all ${
-                                !matrixName.trim() ? 'border-red-500/40 bg-red-500/5' : inputBorderClass
-                              }`}
+                                showValidationErrors && !matrixName.trim() ? 'border-red-500 ring-2 ring-red-500/20 bg-red-500/10' : (!matrixName.trim() ? 'border-red-500/40 bg-red-500/5' : inputBorderClass)
+                              } ${showValidationErrors && !matrixName.trim() && shakeInputs ? 'animate-shake' : ''}`}
                               style={matrixName.trim() ? (inputColorStyle || { borderColor: `${settings.primaryColor}30` }) : undefined}
                               placeholder={entryMode === 'quick' ? "Ex: 100 Camisetas Polo pretas" : "Ex: Logo Peito Esquerdo..."}
                             />
@@ -1549,8 +1586,8 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
                                   value={stitchCount}
                                   onChange={e => setStitchCount(e.target.value === '' ? '' : Number(e.target.value))}
                                   className={`w-full bg-slate-50 dark:bg-white/5 border rounded-2xl px-4 py-2 text-xs font-bold text-slate-900 dark:text-white focus:outline-none transition-all ${
-                                    !stitchCount ? 'border-red-500/40 bg-red-500/5' : inputBorderClass
-                                  }`}
+                                    showValidationErrors && (!stitchCount || Number(stitchCount) <= 0) ? 'border-red-500 ring-2 ring-red-500/20 bg-red-500/10' : (!stitchCount ? 'border-red-500/40 bg-red-500/5' : inputBorderClass)
+                                  } ${showValidationErrors && (!stitchCount || Number(stitchCount) <= 0) && shakeInputs ? 'animate-shake' : ''}`}
                                   style={stitchCount ? (inputColorStyle || { borderColor: `${settings.primaryColor}30` }) : undefined}
                                   placeholder="Ex: 15000"
                                 />
@@ -1579,8 +1616,8 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
                             value={quantity}
                             onChange={e => setQuantity(e.target.value === '' ? '' : Number(e.target.value))}
                             className={`w-full bg-slate-50 dark:bg-white/5 border rounded-2xl px-4 py-2 text-xs font-bold text-slate-900 dark:text-white focus:outline-none transition-all ${
-                              !quantity ? 'border-red-500/40 bg-red-500/5' : 'border-slate-300 dark:border-white/10'
-                            }`}
+                              showValidationErrors && (!quantity || Number(quantity) <= 0) ? 'border-red-500 ring-2 ring-red-500/20 bg-red-500/10' : (!quantity ? 'border-red-500/40 bg-red-500/5' : 'border-slate-300 dark:border-white/10')
+                            } ${showValidationErrors && (!quantity || Number(quantity) <= 0) && shakeInputs ? 'animate-shake' : ''}`}
                             style={quantity ? { borderColor: `${settings.primaryColor}30` } : undefined}
                             placeholder="Ex: 50"
                           />
@@ -1965,35 +2002,76 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
                 </div>
               )}
 
+              {/* Se houver múltiplos itens no carrinho, exibe lista simplificada no resumo */}
+              {isUnlocked && entryMode === 'budget' && orderItemsList.length > 1 && (
+                <div className="pt-3 border-t border-slate-200 dark:border-white/5 space-y-1.5 text-xs">
+                  <p className="text-[10px] font-black uppercase tracking-wider text-purple-500 dark:text-purple-400">
+                    Resumo do Carrinho ({orderItemsList.length} Matrizes):
+                  </p>
+                  {orderItemsList.map((item, idx) => (
+                    <div key={item.id || idx} className="flex justify-between items-center text-[11px]">
+                      <span className="truncate max-w-[150px] text-slate-700 dark:text-zinc-300 font-medium">
+                        {item.matrixName || 'Matriz'} ({item.quantity} un)
+                      </span>
+                      <span className="font-bold text-slate-900 dark:text-white">
+                        {formatPrice(item.totalPrice)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
               {/* Total Card Display */}
-              <div className="p-4 rounded-2xl text-white relative overflow-hidden" style={{ background: `linear-gradient(135deg, ${settings.primaryColor} 0%, ${settings.primaryColor}dd 100%)`, boxShadow: `0 10px 15px -3px ${settings.primaryColor}30` }}>
-                <div className="absolute right-0 bottom-0 opacity-10 translate-x-4 translate-y-4">
-                  {isUnlocked ? <DollarSign className="h-32 w-32" /> : <Package className="h-32 w-32" />}
-                </div>
-                
-                <span className="text-[10px] font-black uppercase tracking-widest opacity-85 block">
-                  {isUnlocked
-                    ? (entryMode === 'quick' ? 'Entrada Registrada' : `Valor Total do Pedido (${quantity || 0} pçs)`)
-                    : `Lote de Produção (${quantity || 0} pçs)`}
-                </span>
-                
-                <div className="flex items-center justify-between mt-1">
-                  <span className="text-xl font-black tracking-tight">
-                    {isUnlocked
-                      ? (entryMode === 'quick' ? 'Aguardando Orçamento' : formatPrice(calculation.totalPrice))
-                      : `${quantity || 0} Peças no Lote`}
-                  </span>
-                  <CheckCircle2 className="h-6 w-6 opacity-90" />
-                </div>
-              </div>
+              {(() => {
+                const totalCartPieces = orderItemsList.length > 0 
+                  ? orderItemsList.reduce((acc, i) => acc + (i.quantity || 1), 0)
+                  : (Number(quantity) || 0);
+
+                const finalOrderTotal = orderItemsList.length > 0
+                  ? totalOrderAmount
+                  : calculation.totalPrice;
+
+                return (
+                  <div className="p-4 rounded-2xl text-white relative overflow-hidden" style={{ background: `linear-gradient(135deg, ${settings.primaryColor} 0%, ${settings.primaryColor}dd 100%)`, boxShadow: `0 10px 15px -3px ${settings.primaryColor}30` }}>
+                    <div className="absolute right-0 bottom-0 opacity-10 translate-x-4 translate-y-4">
+                      {isUnlocked ? <DollarSign className="h-32 w-32" /> : <Package className="h-32 w-32" />}
+                    </div>
+                    
+                    <span className="text-[10px] font-black uppercase tracking-widest opacity-85 block">
+                      {isUnlocked
+                        ? (entryMode === 'quick' ? 'Entrada Registrada' : `Valor Total do Pedido (${totalCartPieces} pçs)`)
+                        : `Lote de Produção (${totalCartPieces} pçs)`}
+                    </span>
+                    
+                    <div className="flex items-center justify-between mt-1">
+                      <span className="text-xl font-black tracking-tight">
+                        {isUnlocked
+                          ? (entryMode === 'quick' ? 'Aguardando Orçamento' : formatPrice(finalOrderTotal))
+                          : `${totalCartPieces} Peças no Lote`}
+                      </span>
+                      <CheckCircle2 className="h-6 w-6 opacity-90" />
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Action Buttons */}
               <div className="space-y-2 pt-2">
                 {entryMode === 'quick' ? (
                   <button
                     type="button"
-                    onClick={handleCreateOrder}
-                    disabled={isSaving || !isFormValid}
+                    onClick={() => {
+                      if (!isFormValid) {
+                        setShowValidationErrors(true);
+                        setShakeInputs(true);
+                        setTimeout(() => setShakeInputs(false), 500);
+                        toast.error("Por favor, preencha os campos destacados em vermelho antes de prosseguir.");
+                        return;
+                      }
+                      setShowValidationErrors(false);
+                      handleCreateOrder();
+                    }}
+                    disabled={isSaving}
                     className="w-full py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:opacity-95 text-white font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 active:scale-[0.98] transition-all disabled:opacity-50"
                   >
                     <Save className="h-4 w-4" />
@@ -2005,9 +2083,13 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
                       type="button"
                       onClick={() => {
                         if (!isFormValid) {
-                          toast.error("Por favor, preencha os dados do cliente, matriz e pontos antes de prosseguir.");
+                          setShowValidationErrors(true);
+                          setShakeInputs(true);
+                          setTimeout(() => setShakeInputs(false), 500);
+                          toast.error("Por favor, preencha os campos destacados em vermelho antes de prosseguir.");
                           return;
                         }
+                        setShowValidationErrors(false);
                         setStep(2);
                       }}
                       className="w-full py-3 rounded-xl hover:opacity-95 text-white font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
