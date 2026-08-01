@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Settings, Save, CheckCircle2, Sliders, MessageSquare, RefreshCw } from 'lucide-react';
 import { PricingRule } from '@/types/borda';
 import { usePricing } from '@/contexts/PricingContext';
@@ -6,8 +7,11 @@ import { WhatsAppConnectionCard } from '@/components/whatsapp/WhatsAppConnection
 import { toast } from 'sonner';
 
 export const Configuracoes: React.FC = () => {
+  const location = useLocation();
   const { rules: globalRules, saveAllRules } = usePricing();
-  const [activeTab, setActiveTab] = useState<'pricing' | 'whatsapp'>('pricing');
+  const [activeTab, setActiveTab] = useState<'pricing' | 'whatsapp'>(
+    location.state?.activeTab === 'whatsapp' ? 'whatsapp' : 'pricing'
+  );
   const [localRules, setLocalRules] = useState<PricingRule[]>([]);
   const [isSaving, setIsSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -17,6 +21,12 @@ export const Configuracoes: React.FC = () => {
       setLocalRules(JSON.parse(JSON.stringify(globalRules)));
     }
   }, [globalRules]);
+
+  useEffect(() => {
+    if (location.state?.activeTab) {
+      setActiveTab(location.state.activeTab);
+    }
+  }, [location.state]);
 
   const handleRuleValueChange = (id: string, val: number) => {
     setLocalRules(prev => prev.map((r) => (r.id === id ? { ...r, value: val } : r)));

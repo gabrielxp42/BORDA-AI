@@ -54,7 +54,6 @@ const SewingMachineIcon: React.FC<{ className?: string }> = ({ className = "h-3 
 
 const navItems: NavItem[] = [
   { label: 'Painel Geral', path: '/', icon: LayoutDashboard },
-  { label: 'GABI Automações', path: '/gabi', icon: Sparkles, badge: <Zap className="h-3 w-3 fill-current text-amber-400" /> },
   { label: 'Pedidos & Produção', path: '/pedidos', icon: ShoppingBag },
   { label: 'Fazer Orçamento', path: '/calculadora', icon: Calculator, badge: <Zap className="h-3 w-3 fill-current" /> },
   { label: 'Biblioteca de Matrizes', path: '/matrizes', icon: Layers, badge: <SewingMachineIcon className="h-3 w-3" /> },
@@ -63,6 +62,7 @@ const navItems: NavItem[] = [
   { label: 'Clientes & Empresas', path: '/clientes', icon: Users },
   { label: 'Bordadeiras & Máquinas', path: '/maquinas', icon: Cpu },
   { label: 'Tabela de Preços', path: '/configuracoes', icon: Settings },
+  { label: 'GABI Automações', path: '/gabi', icon: Sparkles, badge: <Zap className="h-3 w-3 fill-current text-amber-400" /> },
 ];
 
 import { LogOut, ShieldCheck, Crown } from 'lucide-react';
@@ -388,14 +388,27 @@ export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children })
               )}
             </div>
 
-            {/* Status Wilcom Engine — only desktop */}
-            <div
-              className="h-8 px-3 rounded-2xl border hidden md:flex items-center gap-2 text-xs font-bold"
-              style={{ backgroundColor: `${settings.primaryColor}15`, borderColor: `${settings.primaryColor}30`, color: settings.primaryColor }}
+            {/* Status Gabi / WhatsApp Engine — only desktop */}
+            <button
+              onClick={() => navigate('/configuracoes', { state: { activeTab: 'whatsapp' } })}
+              className={`h-8 px-3 rounded-2xl border hidden md:flex items-center gap-2 text-xs font-bold transition-all hover:scale-105 active:scale-95 cursor-pointer shadow-sm ${
+                authProfile?.whatsapp_status === 'connected'
+                  ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-500 hover:bg-emerald-500/20'
+                  : authProfile?.whatsapp_status === 'connecting'
+                  ? 'bg-amber-500/10 border-amber-500/30 text-amber-500 hover:bg-amber-500/20'
+                  : 'bg-rose-500/10 border-rose-500/30 text-rose-500 hover:bg-rose-500/20'
+              }`}
+              title="Configurações da Gabi (WhatsApp)"
             >
-              <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-              <span className="hidden sm:inline">Wilcom Engine OK</span>
-            </div>
+              <span className={`h-2 w-2 rounded-full ${
+                authProfile?.whatsapp_status === 'connected' ? 'bg-emerald-500 animate-pulse' :
+                authProfile?.whatsapp_status === 'connecting' ? 'bg-amber-500 animate-pulse' : 'bg-rose-500'
+              }`} />
+              <span className="hidden sm:inline">
+                {authProfile?.whatsapp_status === 'connected' ? 'Motor Gabi Conectado' : 
+                 authProfile?.whatsapp_status === 'connecting' ? 'Gabi Conectando...' : 'Motor Gabi Offline'}
+              </span>
+            </button>
           </div>
         </header>
 

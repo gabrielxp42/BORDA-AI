@@ -47,7 +47,7 @@ export const Admin: React.FC = () => {
         .from('profiles')
         .select('id, full_name, email, role, created_at, can_view_prices')
         .order('created_at', { ascending: false });
-
+        
       if (error) throw error;
       setUsersList((data as UserProfileData[]) || []);
     } catch (err: any) {
