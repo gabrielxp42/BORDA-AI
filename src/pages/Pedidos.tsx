@@ -704,6 +704,15 @@ export const Pedidos: React.FC = () => {
           setSelectedOrderForDetails(null);
           setIsCreateModalOpen(true);
         }}
+        onEditOrder={(orderToEdit) => {
+          setInitialOrderData({
+            orderId: orderToEdit.id,
+            clientId: orderToEdit.client_id,
+            fullOrder: orderToEdit
+          });
+          setSelectedOrderForDetails(null);
+          setIsCreateModalOpen(true);
+        }}
       />
 
       {/* Modal de Cobrança Inteligente WhatsApp */}

@@ -3,6 +3,7 @@ import { X, Layers, Download, Play, Clock, Hash, Maximize2, Tag, User, CheckCirc
 import { Matrix } from '../../types/borda';
 import { createPortal } from 'react-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { useProfile } from '../../contexts/ProfileContext';
 import { useCompanySettings } from '../../contexts/CompanySettingsContext';
 
 interface MatrixDetailsModalProps {
@@ -15,7 +16,8 @@ export const MatrixDetailsModal: React.FC<MatrixDetailsModalProps> = ({ isOpen, 
   if (!isOpen || !matrix) return null;
   const v = matrix.current_version;
   const { settings } = useCompanySettings();
-  const { profile } = useAuth();
+  const { profile: authProfile } = useAuth();
+  const { permissions } = useProfile();
 
   const modalContent = (
     <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200" onClick={onClose}>
@@ -45,7 +47,7 @@ export const MatrixDetailsModal: React.FC<MatrixDetailsModalProps> = ({ isOpen, 
           </div>
 
           <div className="w-full flex gap-3 mt-6">
-            {profile?.role === 'admin' && (
+            {permissions?.canDownloadMatrices && (
               <button 
                 onClick={() => {
                   if (v?.file_url) window.open(v.file_url, '_blank');

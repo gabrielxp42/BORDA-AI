@@ -12,6 +12,7 @@ import { ptBR } from 'date-fns/locale';
 import { getWhatsAppWebLink, sendEvolutionText, formatWhatsAppNumber } from '@/services/whatsappService';
 import { parsePaymentMetadata } from '@/utils/paymentHelper';
 import { printOrderReceipt } from '@/services/pdfGenerator';
+import { printThermalReceipt } from '@/services/thermalPrinter';
 import { useCompanySettings } from '@/contexts/CompanySettingsContext';
 
 interface OrderItem {
@@ -63,6 +64,7 @@ const PedidoGridCardComponent: React.FC<PedidoGridCardProps> = ({
   const { permissions } = useProfile();
   const [activeLightbox, setActiveLightbox] = useState<string | null>(null);
   const [showFiscalModal, setShowFiscalModal] = useState(false);
+  const [showPrintOptions, setShowPrintOptions] = useState(false);
   const [isIssuingNfe, setIsIssuingNfe] = useState(false);
   const [issuedNfeResult, setIssuedNfeResult] = useState<{ nfeNumber: string; protocol: string; status: string } | null>(null);
 
@@ -119,42 +121,55 @@ const PedidoGridCardComponent: React.FC<PedidoGridCardProps> = ({
   }, [order.payment_status]);
 
   // Gerador Impressão Direta PDF Ordem de Serviço com Identidade Visual Total
+  const getPrintData = () => ({
+    id: order.id,
+    orderNumber: order.order_number || order.id.slice(0, 6),
+    createdAt: order.created_at,
+    dueDate: order.due_date,
+    clientName: clientName,
+    clientPhone: clientPhone,
+    clientCompany: companyName,
+    paymentStatus: order.payment_status || 'pending',
+    paymentMethod: order.payment_method,
+    totalAmount: order.total_amount || 0,
+    notes: cleanNotes || undefined,
+    items: items.map(i => ({
+      description: i.description,
+      quantity: i.quantity || 1,
+      unitPrice: i.unit_price || 0,
+      totalPrice: i.total_price || 0
+    })),
+    companyName: settings.systemName,
+    companySubtitle: settings.systemSubtitle,
+    companyLogo: settings.logoUrl,
+    companyColor: settings.primaryColor,
+    companyPhone: settings.phone || undefined,
+    companyEmail: settings.email || undefined,
+    companyAddress: settings.address || undefined,
+    companyDocument: settings.document || undefined,
+    pixKey: settings.pixKey || undefined,
+    workingHours: settings.workingHours || undefined
+  });
+
   const handlePrintPDF = (e: React.MouseEvent) => {
     e.stopPropagation();
     try {
-      printOrderReceipt({
-        id: order.id,
-        orderNumber: order.order_number || order.id.slice(0, 6),
-        createdAt: order.created_at,
-        dueDate: order.due_date,
-        clientName: clientName,
-        clientPhone: clientPhone,
-        clientCompany: companyName,
-        paymentStatus: order.payment_status || 'pending',
-        paymentMethod: order.payment_method,
-        totalAmount: order.total_amount || 0,
-        notes: cleanNotes || undefined,
-        items: items.map(i => ({
-          description: i.description,
-          quantity: i.quantity || 1,
-          unitPrice: i.unit_price || 0,
-          totalPrice: i.total_price || 0
-        })),
-        companyName: settings.systemName,
-        companySubtitle: settings.systemSubtitle,
-        companyLogo: settings.logoUrl,
-        companyColor: settings.primaryColor,
-        companyPhone: settings.phone || undefined,
-        companyEmail: settings.email || undefined,
-        companyAddress: settings.address || undefined,
-        companyDocument: settings.document || undefined,
-        pixKey: settings.pixKey || undefined,
-        workingHours: settings.workingHours || undefined
-      });
+      printOrderReceipt(getPrintData());
       toast.success(`🖨️ Gerando Nota PDF do Pedido ${orderCode}...`);
     } catch (err) {
       console.error("Erro ao gerar PDF:", err);
       toast.error("Falha ao gerar PDF da Nota.");
+    }
+  };
+
+  const handlePrintThermal = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      printThermalReceipt(getPrintData(), permissions?.canSeeFinancials ?? true);
+      toast.success(`🖨️ Imprimindo Cupom (80mm) ${orderCode}...`);
+    } catch (err) {
+      console.error("Erro ao gerar Cupom:", err);
+      toast.error("Falha ao gerar Cupom Térmico.");
     }
   };
 
@@ -325,14 +340,39 @@ const PedidoGridCardComponent: React.FC<PedidoGridCardProps> = ({
                 <Eye className="h-4 w-4" />
               </button>
 
-              {/* 2. IMPRESSÃO DIRETA NOTA PDF */}
-              <button
-                onClick={handlePrintPDF}
-                className="p-2 rounded-xl text-slate-600 dark:text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-500/10 transition-all"
-                title="Imprimir Recibo de Serviço (PDF)"
-              >
-                <Printer className="h-4 w-4 text-indigo-500" />
-              </button>
+              {/* 2. IMPRESSÃO (A4 ou Térmica) */}
+              {showPrintOptions ? (
+                <div className="flex items-center gap-1 bg-indigo-500/10 rounded-xl p-1 animate-in zoom-in-95 duration-200">
+                  <button
+                    onClick={(e) => { handlePrintPDF(e); setShowPrintOptions(false); }}
+                    className="px-2 py-1 rounded-lg text-indigo-700 dark:text-indigo-300 hover:bg-white dark:hover:bg-indigo-500/20 text-[10px] font-bold flex items-center gap-1 transition-colors"
+                    title="Imprimir A4 (PDF)"
+                  >
+                    <FileText className="h-3 w-3" /> A4
+                  </button>
+                  <button
+                    onClick={(e) => { handlePrintThermal(e); setShowPrintOptions(false); }}
+                    className="px-2 py-1 rounded-lg text-indigo-700 dark:text-indigo-300 hover:bg-white dark:hover:bg-indigo-500/20 text-[10px] font-bold flex items-center gap-1 transition-colors"
+                    title="Imprimir Cupom Térmico (80mm)"
+                  >
+                    <Printer className="h-3 w-3" /> Bobina
+                  </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setShowPrintOptions(false); }}
+                    className="px-1 text-slate-400 hover:text-slate-600 dark:hover:text-zinc-300"
+                  >
+                    ×
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={(e) => { e.stopPropagation(); setShowPrintOptions(true); }}
+                  className="p-2 rounded-xl text-slate-600 dark:text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-500/10 transition-all"
+                  title="Opções de Impressão"
+                >
+                  <Printer className="h-4 w-4 text-indigo-500" />
+                </button>
+              )}
 
               {/* 3. EMISSÃO DE NOTA FISCAL (NFS-e / NF-e) */}
               <button

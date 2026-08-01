@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import ReactDOM from 'react-dom';
-import { X, FileText, Printer, Send, Trash2, Calendar, User, Package, DollarSign, Layers, CheckCircle2, AlertCircle, Download, Plus } from 'lucide-react';
+import { X, FileText, Printer, Send, Trash2, Calendar, User, Package, DollarSign, Layers, CheckCircle2, AlertCircle, Download, Plus, Edit2 } from 'lucide-react';
 import { printOrderReceipt } from '@/services/pdfGenerator';
 import { sendEvolutionText, getWhatsAppWebLink, handleWhatsAppDispatchError } from '@/services/whatsappService';
 import { useBackgroundTasks } from '@/hooks/useBackgroundTasks';
@@ -11,7 +11,8 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
 import { formatCurrency } from '@/utils/currencyFormatter';
-import { parsePaymentMetadata } from '@/utils/paymentHelper';
+import { parsePaymentMetadata, serializePaymentMetadata } from '@/utils/paymentHelper';
+import { printThermalReceipt } from '@/services/thermalPrinter';
 
 interface OrderDetailsModalProps {
   isOpen: boolean;
@@ -19,6 +20,7 @@ interface OrderDetailsModalProps {
   order: any | null;
   onDelete?: (orderId: string) => void;
   onPriceOrder?: (order: any) => void;
+  onEditOrder?: (order: any) => void;
 }
 
 export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
@@ -26,7 +28,8 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
   onClose,
   order,
   onDelete,
-  onPriceOrder
+  onPriceOrder,
+  onEditOrder
 }) => {
   const { settings } = useCompanySettings();
   const { isUnlocked, permissions } = useProfile();
@@ -41,6 +44,14 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
   const [newItemQty, setNewItemQty] = useState<number>(1);
   const [newItemPrice, setNewItemPrice] = useState<number>(0);
   const [isAddingItem, setIsAddingItem] = useState(false);
+
+  // States para Edição Rápida (Híbrida)
+  const [isQuickEditing, setIsQuickEditing] = useState(false);
+  const [tempNotes, setTempNotes] = useState('');
+  const [tempDueDate, setTempDueDate] = useState('');
+  const [tempItems, setTempItems] = useState<any[]>([]);
+  const [isSavingQuickEdit, setIsSavingQuickEdit] = useState(false);
+  const [showPrintOptions, setShowPrintOptions] = useState(false);
 
   useEffect(() => {
     const fetchMatrixUrls = async () => {
@@ -110,8 +121,8 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
 
   const { cleanNotes, metadata } = parsePaymentMetadata(order.notes);
 
-  const handlePrintPDF = () => {
-    printOrderReceipt({
+  const getPrintData = () => {
+    return {
       id: order.id,
       orderNumber: order.order_number || order.id.slice(0, 6),
       createdAt: order.created_at,
@@ -138,8 +149,18 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
       companyAddress: settings.address || undefined,
       companyDocument: settings.document || undefined,
       pixKey: settings.pixKey || undefined,
-      workingHours: settings.workingHours || undefined
-    });
+      workingHours: settings.workingHours || undefined,
+    };
+  };
+
+  const handlePrintPDF = () => {
+    const data = getPrintData();
+    printOrderReceipt(data);
+  };
+
+  const handlePrintThermal = () => {
+    const data = getPrintData();
+    printThermalReceipt(data, permissions?.canSeeFinancials ?? true);
   };
 
   const handleSendWhatsApp = async () => {
@@ -256,6 +277,76 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
     }
   };
 
+  const handleStartQuickEdit = () => {
+    setTempNotes(cleanNotes || '');
+    setTempDueDate(order.due_date ? format(new Date(order.due_date), 'yyyy-MM-dd') : '');
+    setTempItems(JSON.parse(JSON.stringify(order.order_items || [])));
+    setIsQuickEditing(true);
+  };
+
+  const handleSaveQuickEdits = async () => {
+    if (!order) return;
+    setIsSavingQuickEdit(true);
+    try {
+      const finalNotes = serializePaymentMetadata(tempNotes, metadata);
+
+      const updates: any = {
+        notes: finalNotes,
+        due_date: tempDueDate || null,
+        updated_at: new Date().toISOString()
+      };
+
+      // 1. Update order
+      const { error: orderError } = await supabase
+        .from('orders')
+        .update(updates)
+        .eq('id', order.id);
+
+      if (orderError) throw orderError;
+
+      // 2. Update all changed items
+      if (tempItems.length > 0) {
+        let newTotal = 0;
+        for (const item of tempItems) {
+          const qty = Number(item.quantity) || 1;
+          const price = Number(item.unit_price) || 0;
+          const total = qty * price;
+          newTotal += total;
+
+          await supabase
+            .from('order_items')
+            .update({ 
+              quantity: qty, 
+              unit_price: price, 
+              total_price: total 
+            })
+            .eq('id', item.id);
+        }
+        
+        // Update order total amount
+        await supabase.from('orders').update({ total_amount: newTotal }).eq('id', order.id);
+        updates['total_amount'] = newTotal;
+        updates['order_items'] = tempItems.map(i => ({
+          ...i,
+          total_price: (Number(i.quantity) || 1) * (Number(i.unit_price) || 0)
+        }));
+      }
+
+      if (onEditOrder) {
+        onEditOrder({ ...order, ...updates });
+      }
+
+      setIsQuickEditing(false);
+      toast.success('Alterações rápidas salvas com sucesso!');
+    } catch (e: any) {
+      toast.error('Erro ao salvar edições: ' + e.message);
+    } finally {
+      setIsSavingQuickEdit(false);
+    }
+  };
+
+
+
   const paymentLabels: Record<string, string> = {
     pix: 'PIX',
     credit_card: 'Cartão de Crédito',
@@ -294,12 +385,23 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                 </p>
               </div>
             </div>
-            <button 
-              onClick={onClose}
-              className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-white rounded-full hover:bg-slate-200 dark:hover:bg-white/10 transition-colors"
-            >
-              <X className="h-5 w-5" />
-            </button>
+            <div className="flex items-center gap-2">
+              {!isQuickEditing && (
+                <button 
+                  onClick={handleStartQuickEdit}
+                  title="Edição Rápida (Prazo e Anotações)"
+                  className="p-2 text-purple-500 hover:text-purple-600 dark:hover:text-purple-400 rounded-full hover:bg-purple-500/10 transition-colors"
+                >
+                  <Edit2 className="h-4 w-4" />
+                </button>
+              )}
+              <button 
+                onClick={onClose}
+                className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-white rounded-full hover:bg-slate-200 dark:hover:bg-white/10 transition-colors"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
           </div>
 
           {/* Body */}
@@ -319,13 +421,22 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                 </div>
               </div>
 
-              {order.due_date && (
+              {(order.due_date || isQuickEditing) && (
                 <div className="text-right">
                   <p className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400">Prazo de Entrega</p>
-                  <p className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1 justify-end">
-                    <Calendar className="h-3.5 w-3.5 text-purple-400" />
-                    {format(new Date(order.due_date), 'dd/MM/yyyy')}
-                  </p>
+                  {isQuickEditing ? (
+                    <input
+                      type="date"
+                      value={tempDueDate}
+                      onChange={(e) => setTempDueDate(e.target.value)}
+                      className="mt-1 bg-white dark:bg-black/50 border border-slate-300 dark:border-white/10 rounded-lg px-2 py-1 text-xs text-slate-900 dark:text-white outline-none focus:border-purple-500 font-bold"
+                    />
+                  ) : (
+                    <p className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1 justify-end">
+                      <Calendar className="h-3.5 w-3.5 text-purple-400" />
+                      {format(new Date(order.due_date), 'dd/MM/yyyy')}
+                    </p>
+                  )}
                 </div>
               )}
             </div>
@@ -356,8 +467,8 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200 dark:divide-white/5 font-medium text-slate-800 dark:text-zinc-200">
-                    {order.order_items && order.order_items.length > 0 ? (
-                      order.order_items.map((item: any, idx: number) => (
+                    {(isQuickEditing && tempItems.length > 0 ? tempItems : order.order_items) && (isQuickEditing && tempItems.length > 0 ? tempItems : order.order_items).length > 0 ? (
+                      (isQuickEditing && tempItems.length > 0 ? tempItems : order.order_items).map((item: any, idx: number) => (
                         <tr key={item.id || idx}>
                           <td className="p-3 font-bold">
                             <div className="flex items-center gap-3">
@@ -381,7 +492,7 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                               <div className="flex-1 min-w-0">
                                 <span className="block truncate">{item.description}</span>
                               </div>
-                              {matrixUrls[item.id] && (
+                              {matrixUrls[item.id] && permissions?.canDownloadMatrices && (
                                 <button
                                   onClick={() => window.open(matrixUrls[item.id], '_blank')}
                                   title="Baixar Matriz"
@@ -392,14 +503,65 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                               )}
                             </div>
                           </td>
-                          <td className="p-3 text-center font-bold text-white">{item.quantity} un</td>
+                          <td className="p-3 text-center font-bold text-white">
+                            {isQuickEditing ? (
+                              <div className="flex items-center justify-center gap-1">
+                                <Edit2 className="h-3 w-3 text-slate-400" />
+                                <input
+                                  type="number"
+                                  min="1"
+                                  value={item.quantity}
+                                  onChange={(e) => {
+                                    const newItems = [...tempItems];
+                                    newItems[idx] = { ...newItems[idx], quantity: Number(e.target.value) };
+                                    setTempItems(newItems);
+                                  }}
+                                  className="w-16 bg-white dark:bg-black/50 border border-slate-300 dark:border-white/10 rounded px-1.5 py-1 text-xs text-slate-900 dark:text-white text-center outline-none focus:border-purple-500"
+                                />
+                              </div>
+                            ) : (
+                              <button 
+                                onClick={(e) => { e.stopPropagation(); handleStartQuickEdit(); }}
+                                className="group flex items-center justify-center gap-1.5 w-full hover:text-purple-400 transition-colors"
+                              >
+                                {item.quantity} un <Edit2 className="h-3 w-3 text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                              </button>
+                            )}
+                          </td>
                           {isUnlocked ? (
                             <>
                               <td className="p-3 text-right">
-                                {formatCurrency(item.unit_price || 0, permissions?.canSeeFinancials ?? true)}
+                                {isQuickEditing ? (
+                                  <div className="flex items-center justify-end gap-1">
+                                    <Edit2 className="h-3 w-3 text-slate-400" />
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      step="0.01"
+                                      value={item.unit_price}
+                                      onChange={(e) => {
+                                        const newItems = [...tempItems];
+                                        newItems[idx] = { ...newItems[idx], unit_price: Number(e.target.value) };
+                                        setTempItems(newItems);
+                                      }}
+                                      className="w-20 bg-white dark:bg-black/50 border border-slate-300 dark:border-white/10 rounded px-1.5 py-1 text-xs text-slate-900 dark:text-white text-right outline-none focus:border-purple-500"
+                                    />
+                                  </div>
+                                ) : (
+                                  <button 
+                                    onClick={(e) => { e.stopPropagation(); handleStartQuickEdit(); }}
+                                    className="group flex items-center justify-end gap-1.5 w-full hover:text-purple-400 transition-colors"
+                                  >
+                                    {formatCurrency(item.unit_price || 0, permissions?.canSeeFinancials ?? true)}
+                                    <Edit2 className="h-3 w-3 text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                  </button>
+                                )}
                               </td>
                               <td className="p-3 text-right font-black">
-                                {formatCurrency(item.total_price || 0, permissions?.canSeeFinancials ?? true)}
+                                {isQuickEditing
+                                  ? formatCurrency((item.quantity || 1) * (item.unit_price || 0), permissions?.canSeeFinancials ?? true)
+                                  : formatCurrency(item.total_price || 0, permissions?.canSeeFinancials ?? true)
+                                }
                               </td>
                             </>
                           ) : (
@@ -589,10 +751,19 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
             </div>
 
             {/* Observações */}
-            {cleanNotes && (
-              <div className="p-3.5 rounded-2xl bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 space-y-1">
+            {(cleanNotes || isQuickEditing) && (
+              <div className="p-3.5 rounded-2xl bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 space-y-2">
                 <p className="text-[10px] font-black uppercase text-slate-500 dark:text-zinc-400">Observações Gerais</p>
-                <p className="text-xs text-slate-700 dark:text-zinc-300">{cleanNotes}</p>
+                {isQuickEditing ? (
+                  <textarea
+                    value={tempNotes}
+                    onChange={(e) => setTempNotes(e.target.value)}
+                    className="w-full bg-white dark:bg-black/50 border border-slate-300 dark:border-white/10 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white outline-none focus:border-purple-500 min-h-[80px] custom-scrollbar"
+                    placeholder="Adicione anotações aqui..."
+                  />
+                ) : (
+                  <p className="text-xs text-slate-700 dark:text-zinc-300 whitespace-pre-wrap">{cleanNotes}</p>
+                )}
               </div>
             )}
 
@@ -646,40 +817,100 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
             </div>
 
             <div className="flex flex-1 flex-row items-stretch sm:items-center justify-end gap-2 sm:gap-3 flex-wrap sm:flex-nowrap">
-              <button
-                type="button"
-                onClick={handleSendWhatsApp}
-                className="group flex items-center justify-center bg-emerald-600 hover:bg-emerald-500 text-white rounded-full transition-all duration-300 shadow-md h-10 sm:h-12 px-3 sm:px-3.5 hover:px-4 sm:hover:px-5 shrink-0"
-                title="Compartilhar via WhatsApp"
-              >
-                <Send className="h-4 w-4 sm:h-5 sm:w-5 shrink-0" />
-                <span className="max-w-0 overflow-hidden group-hover:max-w-[100px] group-hover:ml-2 text-[10px] sm:text-xs font-bold whitespace-nowrap transition-all duration-300">
-                  WhatsApp
-                </span>
-              </button>
+              {isQuickEditing ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setIsQuickEditing(false)}
+                    className="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-500 hover:text-slate-700 dark:hover:text-white"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSaveQuickEdits}
+                    disabled={isSavingQuickEdit}
+                    className="px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider text-white shadow-lg flex items-center justify-center gap-2 transition-all hover:opacity-90 active:scale-95 disabled:opacity-50"
+                    style={{ backgroundColor: settings.primaryColor }}
+                  >
+                    {isSavingQuickEdit ? 'Salvando...' : 'Salvar Edições'}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={handleSendWhatsApp}
+                    className="group flex items-center justify-center bg-emerald-600 hover:bg-emerald-500 text-white rounded-full transition-all duration-300 shadow-md h-10 sm:h-12 px-3 sm:px-3.5 hover:px-4 sm:hover:px-5 shrink-0"
+                    title="Compartilhar via WhatsApp"
+                  >
+                    <Send className="h-4 w-4 sm:h-5 sm:w-5 shrink-0" />
+                    <span className="max-w-0 overflow-hidden group-hover:max-w-[100px] group-hover:ml-2 text-[10px] sm:text-xs font-bold whitespace-nowrap transition-all duration-300">
+                      WhatsApp
+                    </span>
+                  </button>
 
-              {onPriceOrder && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    onClose();
-                    onPriceOrder(order);
-                  }}
-                  className="flex-1 sm:flex-none px-3 sm:px-6 py-2.5 sm:py-3 rounded-2xl text-[10px] sm:text-xs font-black uppercase tracking-wider text-white shadow-lg flex items-center justify-center gap-1.5 sm:gap-2 transition-all hover:opacity-90 active:scale-95 animate-bounce"
-                  style={{ backgroundColor: settings.primaryColor }}
-                >
-                  <DollarSign className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" /> <span className="truncate">Precificar</span>
-                </button>
+                  {onEditOrder && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onClose();
+                        onEditOrder(order);
+                      }}
+                      className="flex-1 sm:flex-none px-3 sm:px-4 py-2.5 sm:py-3 rounded-2xl text-[10px] sm:text-xs font-black uppercase tracking-wider text-slate-700 dark:text-zinc-300 bg-slate-100 hover:bg-slate-200 dark:bg-white/5 dark:hover:bg-white/10 shadow-sm flex items-center justify-center gap-1.5 sm:gap-2 transition-all hover:opacity-90 active:scale-95 border border-slate-200 dark:border-white/10"
+                    >
+                      <Edit2 className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" /> <span className="truncate">Editar Pedido</span>
+                    </button>
+                  )}
+
+                  {onPriceOrder && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onClose();
+                        onPriceOrder(order);
+                      }}
+                      className="flex-1 sm:flex-none px-3 sm:px-6 py-2.5 sm:py-3 rounded-2xl text-[10px] sm:text-xs font-black uppercase tracking-wider text-white shadow-lg flex items-center justify-center gap-1.5 sm:gap-2 transition-all hover:opacity-90 active:scale-95 animate-bounce"
+                      style={{ backgroundColor: settings.primaryColor }}
+                    >
+                      <DollarSign className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" /> <span className="truncate">Precificar</span>
+                    </button>
+                  )}
+
+                  {showPrintOptions ? (
+                    <div className="flex-1 sm:flex-none flex items-center gap-2 bg-indigo-500/10 rounded-2xl p-1.5 animate-in zoom-in-95 duration-200">
+                      <button
+                        onClick={(e) => { handlePrintPDF(); setShowPrintOptions(false); }}
+                        className="flex-1 px-3 py-2 rounded-xl text-indigo-700 dark:text-indigo-300 hover:bg-white dark:hover:bg-indigo-500/20 text-[11px] font-bold flex items-center justify-center gap-1.5 transition-colors"
+                        title="Imprimir A4 (PDF)"
+                      >
+                        <FileText className="h-4 w-4" /> A4
+                      </button>
+                      <button
+                        onClick={(e) => { handlePrintThermal(); setShowPrintOptions(false); }}
+                        className="flex-1 px-3 py-2 rounded-xl text-indigo-700 dark:text-indigo-300 hover:bg-white dark:hover:bg-indigo-500/20 text-[11px] font-bold flex items-center justify-center gap-1.5 transition-colors"
+                        title="Imprimir Cupom Térmico (80mm)"
+                      >
+                        <Printer className="h-4 w-4" /> Bobina
+                      </button>
+                      <button
+                        onClick={() => setShowPrintOptions(false)}
+                        className="px-2 py-2 text-slate-400 hover:text-slate-600 dark:hover:text-zinc-300 transition-colors"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setShowPrintOptions(true)}
+                      className="flex-1 sm:flex-none px-3 sm:px-4 py-2.5 sm:py-3 rounded-2xl text-[11px] sm:text-xs font-black text-slate-700 dark:text-zinc-300 bg-slate-200 hover:bg-slate-300 dark:bg-white/10 dark:hover:bg-white/20 shadow-lg flex items-center justify-center gap-1.5 sm:gap-2 transition-all hover:opacity-90 active:scale-95"
+                    >
+                      <Printer className="h-4 w-4 sm:h-5 sm:w-5 shrink-0 text-indigo-500" /> <span className="truncate">Imprimir</span>
+                    </button>
+                  )}
+                </>
               )}
-
-              <button
-                type="button"
-                onClick={handlePrintPDF}
-                className="flex-1 sm:flex-none px-3 sm:px-6 py-2.5 sm:py-3 rounded-2xl text-[11px] sm:text-sm font-black text-white shadow-lg flex items-center justify-center gap-1.5 sm:gap-2 transition-all hover:opacity-90 active:scale-95"
-                style={{ backgroundColor: settings.primaryColor }}
-              >
-                <FileText className="h-4 w-4 sm:h-5 sm:w-5 shrink-0" /> <span className="truncate">Recibo</span>
-              </button>
             </div>
           </div>
 

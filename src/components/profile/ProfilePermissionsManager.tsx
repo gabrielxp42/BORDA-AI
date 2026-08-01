@@ -41,6 +41,7 @@ const FEATURE_ITEMS: { key: keyof Omit<ProfilePermissions, 'routes'>; label: str
   { key: 'canExportReports', label: 'Exportar Relatórios', description: 'Gerar PDFs de pedidos, orçamentos e relatórios' },
   { key: 'canSendWhatsApp', label: 'Enviar WhatsApp', description: 'Disparar mensagens via Evolution API' },
   { key: 'canChangeSettings', label: 'Alterar Configurações', description: 'Acesso total às configurações da empresa e logo' },
+  { key: 'canDownloadMatrices', label: 'Baixar Matrizes', description: 'Baixar arquivos físicos de matrizes (.dst, .emb, etc)' },
 ];
 
 export const ProfilePermissionsManager: React.FC = () => {

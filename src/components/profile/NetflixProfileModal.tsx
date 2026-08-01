@@ -5,7 +5,7 @@ import {
   Crown, Scissors, KeyRound, Lock, Unlock, X, Check, ShieldCheck,
   Sparkles, Delete, RotateCcw, Settings, Plus, Trash2, Edit3, Shield,
   Eye, LayoutDashboard, ShoppingBag, Calculator, Layers, Boxes, FileSpreadsheet,
-  Users, Cpu, MessageCircle, ChevronRight, Save, ToggleLeft, ToggleRight, DollarSign
+  Users, Cpu, MessageCircle, ChevronRight, Save, ToggleLeft, ToggleRight, DollarSign, Download
 } from 'lucide-react';
 import { useProfile, CustomProfile, ProfilePermissions, CHEFE_PERMISSIONS, PRODUCAO_PERMISSIONS } from '@/contexts/ProfileContext';
 import { useCompanySettings } from '@/contexts/CompanySettingsContext';
@@ -45,6 +45,7 @@ const FEATURE_LABELS: { key: keyof Omit<ProfilePermissions, 'routes'>; label: st
   { key: 'canExportReports', label: 'Exportar Relatórios', description: 'Gerar PDFs de pedidos, orçamentos e relatórios', icon: <FileSpreadsheet className="h-4 w-4" /> },
   { key: 'canSendWhatsApp', label: 'Enviar WhatsApp', description: 'Disparar mensagens para clientes e equipe via Evolution API', icon: <MessageCircle className="h-4 w-4" /> },
   { key: 'canChangeSettings', label: 'Alterar Configurações', description: 'Acesso total às configurações da empresa e logo', icon: <Settings className="h-4 w-4" /> },
+  { key: 'canDownloadMatrices', label: 'Baixar Matrizes', description: 'Baixar arquivos físicos de matrizes (.dst, .emb, etc)', icon: <Download className="h-4 w-4" /> },
 ];
 
 export const NetflixProfileModal: React.FC = () => {

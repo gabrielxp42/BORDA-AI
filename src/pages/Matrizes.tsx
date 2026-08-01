@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Layers, Plus, Search, FileCode, CheckCircle, Tag, Eye, ChevronDown, ChevronRight, User, FolderOpen, Folder, Download, Hash, Maximize2, Clock, X, HardDrive, AlertCircle, DollarSign, RefreshCw, Save, Edit2 } from 'lucide-react';
+import { Layers, Plus, Search, FileCode, CheckCircle, Tag, Eye, ChevronDown, ChevronRight, User, FolderOpen, Folder, Download, Hash, Maximize2, Clock, X, HardDrive, AlertCircle, DollarSign, RefreshCw, Save, Edit2, Star, Minus } from 'lucide-react';
 import { Matrix } from '@/types/borda';
 import { ClientSelect } from '../components/ui/ClientSelect';
 import { EmbroideryDropzone } from '../components/ui/EmbroideryDropzone';
@@ -30,6 +30,7 @@ export const Matrizes: React.FC = () => {
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const [editingMatrixDataId, setEditingMatrixDataId] = useState<string | null>(null);
   const [editingMatrixVersionId, setEditingMatrixVersionId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'clients' | 'global'>('clients');
 
   // Form State
   const [name, setName] = useState('');
@@ -40,6 +41,7 @@ export const Matrizes: React.FC = () => {
   const [heightMm, setHeightMm] = useState(60);
   const [unit, setUnit] = useState<'cm' | 'mm'>('cm');
   const [format, setFormat] = useState('dst');
+  const [fixedPrice, setFixedPrice] = useState<string>('');
   const [previewUrl, setPreviewUrl] = useState<string | undefined>();
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -96,17 +98,24 @@ export const Matrizes: React.FC = () => {
     }
   };
 
-  // Group matrices by client
-  const filteredMatrices = matrices.filter(
+  // Filter by tab and search
+  const tabFilteredMatrices = matrices.filter((m) => {
+    if (activeTab === 'clients') return !!m.client_id;
+    if (activeTab === 'global') return !m.client_id && m.category === 'Global';
+    return true;
+  });
+
+  const filteredMatrices = tabFilteredMatrices.filter(
     (m) =>
       m.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      m.client?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      m.code?.toLowerCase().includes(searchTerm.toLowerCase())
+      (m.client?.name && m.client.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (m.code && m.code.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
   const groupedByClient = filteredMatrices.reduce((acc, m) => {
-    const key = m.client_id || 'sem-cliente';
-    const label = m.client?.name || 'Sem Cliente Vinculado';
+    // Para a aba Global, não agrupamos por cliente, tudo vai para 'global'
+    const key = activeTab === 'global' ? 'global' : (m.client_id || 'sem-cliente');
+    const label = activeTab === 'global' ? 'Matrizes da Empresa' : (m.client?.name || 'Sem Cliente Vinculado');
     if (!acc[key]) acc[key] = { label, matrices: [] };
     acc[key].matrices.push(m);
     return acc;
@@ -191,7 +200,7 @@ export const Matrizes: React.FC = () => {
       setFormError('Você precisa informar o Nome da Matriz.');
       return;
     }
-    if (!clientId) {
+    if (activeTab === 'clients' && !clientId) {
       setFormError('Você precisa selecionar um Cliente para vincular esta matriz.');
       return;
     }
@@ -203,7 +212,11 @@ export const Matrizes: React.FC = () => {
         toast.info('Atualizando matriz...', { id: 'upload-toast' });
         const { error: matrixError } = await supabase
           .from('matrices')
-          .update({ name, client_id: clientId })
+          .update({ 
+            name, 
+            client_id: activeTab === 'global' ? null : clientId,
+            fixed_price: fixedPrice ? Number(fixedPrice.replace(',', '.')) : null
+          })
           .eq('id', editingMatrixDataId);
         
         if (matrixError) throw matrixError;
@@ -231,10 +244,11 @@ export const Matrizes: React.FC = () => {
           .from('matrices')
           .insert({
             name,
-            client_id: clientId,
+            client_id: activeTab === 'global' ? null : clientId,
             code: `MAT-${Date.now().toString(36).toUpperCase()}-${uniqueSuffix}`,
             status: 'approved',
-            category: 'Geral',
+            category: activeTab === 'global' ? 'Global' : 'Geral',
+            fixed_price: fixedPrice ? Number(fixedPrice.replace(',', '.')) : null
           })
           .select()
           .single();
@@ -303,6 +317,7 @@ export const Matrizes: React.FC = () => {
       setWidthMm(80);
       setHeightMm(60);
       setFormat('dst');
+      setFixedPrice('');
       setSelectedFile(null);
       setPreviewUrl(undefined);
       fetchMatrices();
@@ -310,6 +325,59 @@ export const Matrizes: React.FC = () => {
       toast.error('Erro ao salvar matriz: ' + err.message, { id: 'upload-toast' });
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleMakeGlobal = async (matrix: Matrix, version: any) => {
+    try {
+      toast.info('Tornando matriz global...', { id: 'global-toast' });
+      
+      const uniqueSuffix = Math.random().toString(36).substring(2, 6).toUpperCase();
+      const { data: newMatrix, error: matrixError } = await supabase
+        .from('matrices')
+        .insert({
+          name: matrix.name,
+          client_id: null,
+          code: `MAT-${Date.now().toString(36).toUpperCase()}-${uniqueSuffix}`,
+          status: 'approved',
+          category: 'Global',
+        })
+        .select()
+        .single();
+
+      if (matrixError) throw matrixError;
+
+      if (version) {
+        const { data: newVersion, error: versionError } = await supabase
+          .from('matrix_versions')
+          .insert({
+            matrix_id: newMatrix.id,
+            version_number: 1,
+            file_name: version.file_name,
+            file_url: version.file_url,
+            preview_url: version.preview_url,
+            file_format: version.file_format,
+            stitch_count: version.stitch_count,
+            width_mm: version.width_mm,
+            height_mm: version.height_mm,
+            color_count: version.color_count,
+            estimated_time_minutes: version.estimated_time_minutes,
+          })
+          .select()
+          .single();
+
+        if (versionError) throw versionError;
+
+        await supabase
+          .from('matrices')
+          .update({ current_version_id: newVersion.id })
+          .eq('id', newMatrix.id);
+      }
+
+      toast.success('Matriz copiada para a biblioteca da Empresa!', { id: 'global-toast' });
+      fetchMatrices();
+    } catch (err: any) {
+      toast.error('Erro ao tornar global: ' + err.message, { id: 'global-toast' });
     }
   };
 
@@ -352,6 +420,7 @@ export const Matrizes: React.FC = () => {
               setColorCount(4);
               setWidthMm(80);
               setHeightMm(60);
+              setFixedPrice('');
               setSelectedFile(null);
               setIsModalOpen(true);
             }}
@@ -364,6 +433,31 @@ export const Matrizes: React.FC = () => {
             <Plus className="h-4 w-4" /> Cadastrar Nova Matriz
           </button>
         </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex items-center gap-2 border-b border-slate-200 dark:border-white/10 pb-4">
+        <button
+          onClick={() => setActiveTab('clients')}
+          className={`px-5 py-2.5 rounded-2xl text-xs font-bold transition-all flex items-center gap-2 ${
+            activeTab === 'clients'
+              ? 'bg-brand/10 text-brand shadow-sm'
+              : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-white/5'
+          }`}
+          style={activeTab === 'clients' ? { backgroundColor: `${settings.primaryColor}20`, color: settings.primaryColor } : {}}
+        >
+          <User className="h-4 w-4" /> Matrizes de Clientes
+        </button>
+        <button
+          onClick={() => setActiveTab('global')}
+          className={`px-5 py-2.5 rounded-2xl text-xs font-bold transition-all flex items-center gap-2 ${
+            activeTab === 'global'
+              ? 'bg-gradient-to-r from-amber-500/20 to-yellow-500/10 text-amber-600 dark:text-amber-400 shadow-sm border border-amber-500/20'
+              : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-white/5'
+          }`}
+        >
+          <Star className={`h-4 w-4 ${activeTab === 'global' ? 'fill-amber-500 text-amber-500' : ''}`} /> Matrizes da Empresa
+        </button>
       </div>
 
       {/* Search */}
@@ -410,7 +504,7 @@ export const Matrizes: React.FC = () => {
         <div className="space-y-3">
           {clientKeys.map((clientKey) => {
             const group = groupedByClient[clientKey];
-            const isExpanded = expandedClients.has(clientKey);
+            const isExpanded = activeTab === 'global' ? true : expandedClients.has(clientKey);
             const count = group.matrices.length;
 
             const totalFolderMB = group.matrices.reduce((acc, m) => {
@@ -694,6 +788,7 @@ export const Matrizes: React.FC = () => {
                                     setColorCount(v?.color_count || 1);
                                     setWidthMm(v?.width_mm || 80);
                                     setHeightMm(v?.height_mm || 60);
+                                    setFixedPrice(m.fixed_price !== null ? String(m.fixed_price).replace('.', ',') : '');
                                     setFormat(v?.file_format || 'dst');
                                     setIsModalOpen(true);
                                   }}
@@ -711,7 +806,16 @@ export const Matrizes: React.FC = () => {
                                 >
                                   <Eye className="h-3.5 w-3.5" /> Detalhes
                                 </button>
-                              {v?.file_url && (
+                                {activeTab === 'clients' && (
+                                  <button
+                                    onClick={() => handleMakeGlobal(m, v)}
+                                    title="Tornar Matriz Global (Copiar para Empresa)"
+                                    className="py-2 px-3 rounded-xl text-[11px] font-bold flex items-center justify-center gap-1.5 transition-all bg-amber-500/15 text-amber-600 dark:text-amber-400 hover:bg-amber-500/25"
+                                  >
+                                    <Star className="h-3.5 w-3.5" />
+                                  </button>
+                                )}
+                              {permissions?.canDownloadMatrices && v?.file_url && (
                                 <button
                                   onClick={() => window.open(v.file_url, '_blank')}
                                   className="py-2 px-3 rounded-xl text-[11px] font-bold flex items-center justify-center gap-1.5 transition-all bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/25"
@@ -768,14 +872,16 @@ export const Matrizes: React.FC = () => {
                 />
               </div>
 
-              <div>
-                <label className="text-xs font-bold text-zinc-400 uppercase flex items-center gap-2">
-                  Cliente <span className="text-red-500 text-[10px]">*Obrigatório</span>
-                </label>
-                <div className={`mt-1 rounded-2xl transition-all ${!clientId && formError?.includes('Cliente') ? 'ring-2 ring-red-500/50' : ''}`}>
-                  <ClientSelect value={clientId} onChange={setClientId} />
+              {activeTab === 'clients' && (
+                <div>
+                  <label className="text-xs font-bold text-zinc-400 uppercase flex items-center gap-2">
+                    Cliente <span className="text-red-500 text-[10px]">*Obrigatório</span>
+                  </label>
+                  <div className={`mt-1 rounded-2xl transition-all ${!clientId && formError?.includes('Cliente') ? 'ring-2 ring-red-500/50' : ''}`}>
+                    <ClientSelect value={clientId} onChange={setClientId} />
+                  </div>
                 </div>
-              </div>
+              )}
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -839,6 +945,87 @@ export const Matrizes: React.FC = () => {
                     <option value="pes">PES (Brother)</option>
                     <option value="exp">EXP (Melco)</option>
                   </select>
+                </div>
+              </div>
+
+              <div className="bg-white/5 border border-white/10 rounded-2xl p-4 mt-2 relative overflow-hidden">
+                <div className="absolute inset-0 opacity-10 bg-gradient-to-r from-emerald-500 to-teal-500 pointer-events-none" />
+                <div className="relative flex flex-col sm:flex-row items-center justify-between gap-4">
+                  {(() => {
+                    const isOverridden = fixedPrice.trim() !== '';
+                    const autoPrice = calculateEmbroideryPrice({ stitchCount: stitchCount || 0, colorCount: colorCount || 1, quantity: 1 }, rules).totalPrice;
+                    const displayPrice = isOverridden ? parseFloat(fixedPrice.replace(',', '.') || '0') : autoPrice;
+                    
+                    return (
+                      <div className="flex-1">
+                        <label className="text-xs font-bold text-zinc-400 uppercase">
+                          {isOverridden ? 'Preço Fixado Manualmente' : 'Preço Calculado Automático'}
+                        </label>
+                        <p className={`text-xl font-black mt-1 ${isOverridden ? 'text-amber-400' : 'text-emerald-400'}`}>
+                          {formatCurrency(displayPrice)}
+                        </p>
+                        <p className="text-[10px] text-zinc-500 mt-1 leading-tight">
+                          {isOverridden 
+                            ? 'Este valor será usado em vez da precificação automática.'
+                            : `Baseado em ${stitchCount.toLocaleString()} pts e ${colorCount} cores, de acordo com suas regras.`}
+                        </p>
+                      </div>
+                    );
+                  })()}
+                  <div className="w-full sm:w-1/2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-bold text-zinc-400 uppercase">Sobrescrever Valor</label>
+                      {fixedPrice.trim() !== '' && (
+                        <button
+                          type="button"
+                          onClick={() => setFixedPrice('')}
+                          className="text-[10px] text-amber-500 hover:text-amber-400 flex items-center gap-1 font-bold uppercase transition-colors"
+                        >
+                          <RefreshCw className="h-3 w-3" /> Restaurar Automático
+                        </button>
+                      )}
+                    </div>
+                    <div className="relative flex items-center mt-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const current = parseFloat(fixedPrice.replace(',', '.') || '0');
+                          if (current >= 1) setFixedPrice((current - 1).toFixed(2).replace('.', ','));
+                        }}
+                        className="h-10 w-10 flex-shrink-0 flex items-center justify-center bg-white/5 hover:bg-white/10 active:bg-white/20 text-white rounded-l-xl border border-white/10 transition-colors"
+                      >
+                        <Minus className="h-4 w-4" />
+                      </button>
+                      <div className="relative flex-1">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                          <span className="text-zinc-500 text-xs font-bold">R$</span>
+                        </div>
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          value={fixedPrice}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (val === '') setFixedPrice('');
+                            else if (/^[0-9.,]*$/.test(val)) setFixedPrice(val);
+                          }}
+                          placeholder="Automático"
+                          className="w-full h-10 bg-[#12121a] border-y border-white/10 pl-9 pr-4 text-center text-sm font-bold text-white focus:outline-none focus:border-emerald-500/50 transition-colors"
+                          style={{ WebkitAppearance: 'none', appearance: 'none' }}
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const current = parseFloat(fixedPrice.replace(',', '.') || '0');
+                          setFixedPrice((current + 1).toFixed(2).replace('.', ','));
+                        }}
+                        className="h-10 w-10 flex-shrink-0 flex items-center justify-center bg-white/5 hover:bg-white/10 active:bg-white/20 text-white rounded-r-xl border border-white/10 transition-colors"
+                      >
+                        <Plus className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
 

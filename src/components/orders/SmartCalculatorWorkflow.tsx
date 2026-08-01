@@ -4,7 +4,7 @@ import {
   X, UserPlus, Calendar, Plus, Trash2, Package, Save, Lock, Layers, Sparkles, 
   CheckCircle2, DollarSign, ChevronDown, Check, Upload, FileCheck, ChevronUp, 
   Sliders, Send, Clock, CreditCard, Landmark, Coins, ArrowRight, ArrowLeft, Camera, Paperclip,
-  MessageSquare, Image, FileText, QrCode, User, CheckCircle, Settings, Edit2
+  MessageSquare, Image, FileText, QrCode, User, CheckCircle, Settings, Edit2, Star
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { calculateEmbroideryPrice } from '@/services/pricingEngine';
@@ -19,10 +19,11 @@ import { useAuth } from '@/contexts/AuthContext';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
-import { serializePaymentMetadata, updatePaymentMetadata } from '@/utils/paymentHelper';
+import { serializePaymentMetadata, updatePaymentMetadata, parsePaymentMetadata } from '@/utils/paymentHelper';
 import { sendEvolutionText, getWhatsAppWebLink, formatWhatsAppNumber, handleWhatsAppDispatchError } from '@/services/whatsappService';
 import { getStoredTemplates, formatEmbroideryTemplate } from '@/services/whatsappTemplatesService';
 import { useBackgroundTasks } from '@/hooks/useBackgroundTasks';
+import { Matrix } from '@/types/borda';
 
 interface InitialOrderData {
   clientId?: string;
@@ -31,6 +32,7 @@ interface InitialOrderData {
   unitPrice?: number;
   totalPrice?: number;
   orderId?: string;
+  fullOrder?: any;
 }
 
 interface SmartCalculatorWorkflowProps {
@@ -109,6 +111,8 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
   const [observations, setObservations] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [depositAmount, setDepositAmount] = useState<number>(0);
+  const [activeMatrixTab, setActiveMatrixTab] = useState<'client' | 'global'>('client');
+  const [globalMatrices, setGlobalMatrices] = useState<Matrix[]>([]);
   const [entryMode, setEntryMode] = useState<'budget' | 'quick'>('quick');
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
 
@@ -339,10 +343,46 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
   useEffect(() => {
     if (initialData) {
       if (initialData.clientId) setSelectedClientId(initialData.clientId);
-      if (initialData.matrixName) setMatrixName(initialData.matrixName);
-      if (initialData.quantity) setQuantity(initialData.quantity);
-      if (initialData.orderId) {
-        setEntryMode('budget');
+      if (initialData.orderId) setEntryMode('budget');
+      
+      if (initialData.fullOrder) {
+        const order = initialData.fullOrder;
+        if (order.client_id) setSelectedClientId(order.client_id);
+        if (order.payment_status) setPaymentStatus(order.payment_status);
+        if (order.payment_method) setPaymentMethod(order.payment_method);
+        if (order.due_date) setDueDate(new Date(`${order.due_date}T12:00:00`));
+        
+        // Extract observations from notes
+        if (order.notes) {
+          const parsedNotes = parsePaymentMetadata(order.notes);
+          setObservations(parsedNotes.cleanNotes);
+        }
+
+        // Map items
+        if (order.items && order.items.length > 0) {
+          const mappedItems = order.items.map((item: any) => ({
+            id: `item_${item.id}`,
+            matrixName: item.description,
+            quantity: item.quantity,
+            unitPrice: item.unit_price,
+            totalPrice: item.total_price,
+            stitchCount: 0,
+            colorCount: 1,
+            manualUnitPrice: item.unit_price
+          }));
+          setOrderItemsList(mappedItems);
+          
+          // Select first item
+          if (mappedItems.length > 0) {
+            const first = mappedItems[0];
+            setSelectedItemId(first.id);
+            setMatrixName(first.matrixName);
+            setQuantity(first.quantity);
+          }
+        }
+      } else {
+        if (initialData.matrixName) setMatrixName(initialData.matrixName);
+        if (initialData.quantity) setQuantity(initialData.quantity);
       }
     }
   }, [initialData]);
@@ -356,13 +396,56 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
     }
   }, [paymentStatus, calculation.totalPrice]);
 
-  // Fetch client matrices
+  // Fetch client and global matrices
+  const fetchGlobalMatrices = async () => {
+    try {
+      const { data: matricesData, error: mError } = await supabase
+        .from('matrices')
+        .select('*')
+        .is('client_id', null)
+        .eq('category', 'Global')
+        .order('created_at', { ascending: false });
+
+      if (mError) throw mError;
+      
+      if (!matricesData || matricesData.length === 0) {
+        setGlobalMatrices([]);
+        return;
+      }
+
+      const matrixIds = matricesData.map(m => m.id);
+      const { data: versionsData } = await supabase
+        .from('matrix_versions')
+        .select('*')
+        .in('matrix_id', matrixIds);
+
+      const versionsList = versionsData || [];
+
+      const formatted = matricesData.map((m: any) => {
+        const versions = versionsList.filter((v: any) => v.matrix_id === m.id);
+        return {
+          ...m,
+          matrix_versions: versions,
+          current_version: versions.find((v: any) => v.id === m.current_version_id) || versions[0],
+        };
+      });
+
+      setGlobalMatrices(formatted);
+    } catch (err: any) {
+      console.error('Erro ao buscar matrizes globais', err);
+    }
+  };
+
+  useEffect(() => {
+    fetchGlobalMatrices();
+  }, []);
+
   useEffect(() => {
     if (selectedClientId) {
       fetchClientMatrices(selectedClientId);
+      setActiveMatrixTab('client');
     } else {
       setClientMatrices([]);
-      setShowMatrixSelector(false);
     }
   }, [selectedClientId]);
 
@@ -1141,43 +1224,101 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
                     </div>
                   </div>
 
-                {/* 2. BIBLIOTECA DO CLIENTE */}
-                {entryMode === 'budget' && selectedClientId && (
+                {/* 2. BIBLIOTECA DE MATRIZES */}
+                {entryMode === 'budget' && (showMatrixSelector || selectedClientId) && (
                   <div className="glass-panel p-5 rounded-3xl border shadow-sm relative z-40 animate-in fade-in zoom-in-95 duration-200 mb-4" style={{ borderColor: `${settings.primaryColor}20`, backgroundColor: 'rgba(255,255,255,0.02)' }}>
-                    <div className="flex items-center justify-between mb-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
                       <h3 className="text-xs font-black uppercase tracking-widest flex items-center gap-2" style={{ color: settings.primaryColor }}>
-                        <Layers className="h-4 w-4" /> 2. Matrizes na Biblioteca ({clientMatrices.length})
+                        <Layers className="h-4 w-4" /> 2. Matrizes na Biblioteca
                       </h3>
+                      <div className="flex items-center gap-1 bg-black/10 dark:bg-white/5 p-1 rounded-xl">
+                        <button
+                          type="button"
+                          onClick={() => setActiveMatrixTab('client')}
+                          className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase transition-all ${
+                            activeMatrixTab === 'client'
+                              ? 'bg-white dark:bg-zinc-800 shadow-sm text-slate-900 dark:text-white'
+                              : 'text-slate-500 hover:text-slate-700 dark:hover:text-zinc-300'
+                          }`}
+                        >
+                          Do Cliente ({clientMatrices.length})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setActiveMatrixTab('global')}
+                          className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase transition-all flex items-center gap-1.5 ${
+                            activeMatrixTab === 'global'
+                              ? 'bg-gradient-to-r from-amber-500/20 to-yellow-500/10 text-amber-600 dark:text-amber-400 shadow-sm border border-amber-500/20'
+                              : 'text-slate-500 hover:text-slate-700 dark:hover:text-zinc-300'
+                          }`}
+                        >
+                          <Star className={`h-3 w-3 ${activeMatrixTab === 'global' ? 'fill-amber-500 text-amber-500' : ''}`} /> Da Empresa ({globalMatrices.length})
+                        </button>
+                      </div>
                     </div>
                     
-                    {clientMatrices.length > 0 ? (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 max-h-[220px] overflow-y-auto custom-scrollbar pr-2">
-                        {clientMatrices.map(m => {
-                          const ver = m.current_version;
-                          const isSelected = selectedMatrixId === m.id;
-                          return (
-                            <div
-                              key={m.id}
-                              onClick={() => handleSelectSavedMatrix(m)}
-                              className="p-3 rounded-2xl border transition-all cursor-pointer flex items-center justify-between text-slate-800 dark:text-zinc-200"
-                              style={isSelected ? { backgroundColor: `${settings.primaryColor}20`, borderColor: `${settings.primaryColor}50`, color: settings.primaryColor, boxShadow: `0 0 15px ${settings.primaryColor}20` } : { borderColor: 'rgba(255,255,255,0.05)', backgroundColor: 'rgba(255,255,255,0.02)' }}
-                            >
-                              <div className="min-w-0 flex-1">
-                                <p className="text-sm font-black truncate leading-tight mb-1" style={{ color: isSelected ? settings.primaryColor : 'inherit' }}>
-                                  {m.name}
-                                </p>
-                                <div className="flex items-center gap-3 text-[10px] font-bold text-slate-500 dark:text-zinc-400">
-                                  {ver?.stitch_count && <span>🪡 {ver.stitch_count.toLocaleString()} pts</span>}
-                                  {ver?.color_count && <span>🎨 {ver.color_count} cores</span>}
+                    {activeMatrixTab === 'client' && (
+                      clientMatrices.length > 0 ? (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 max-h-[220px] overflow-y-auto custom-scrollbar pr-2">
+                          {clientMatrices.map(m => {
+                            const ver = m.current_version;
+                            const isSelected = selectedMatrixId === m.id;
+                            return (
+                              <div
+                                key={m.id}
+                                onClick={() => handleSelectSavedMatrix(m)}
+                                className="p-3 rounded-2xl border transition-all cursor-pointer flex items-center justify-between text-slate-800 dark:text-zinc-200"
+                                style={isSelected ? { backgroundColor: `${settings.primaryColor}20`, borderColor: `${settings.primaryColor}50`, color: settings.primaryColor, boxShadow: `0 0 15px ${settings.primaryColor}20` } : { borderColor: 'rgba(255,255,255,0.05)', backgroundColor: 'rgba(255,255,255,0.02)' }}
+                              >
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-sm font-black truncate leading-tight mb-1" style={{ color: isSelected ? settings.primaryColor : 'inherit' }}>
+                                    {m.name}
+                                  </p>
+                                  <div className="flex items-center gap-3 text-[10px] font-bold text-slate-500 dark:text-zinc-400">
+                                    {ver?.stitch_count && <span>🪡 {ver.stitch_count.toLocaleString()} pts</span>}
+                                    {ver?.color_count && <span>🎨 {ver.color_count} cores</span>}
+                                  </div>
                                 </div>
+                                {isSelected && <CheckCircle className="h-5 w-5 shrink-0 ml-2" style={{ color: settings.primaryColor }} />}
                               </div>
-                              {isSelected && <CheckCircle className="h-5 w-5 shrink-0 ml-2" style={{ color: settings.primaryColor }} />}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    ) : (
-                       <p className="text-xs text-slate-500 italic">Nenhuma matriz salva para este cliente ainda.</p>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-slate-500 italic">Nenhuma matriz salva para este cliente ainda.</p>
+                      )
+                    )}
+
+                    {activeMatrixTab === 'global' && (
+                      globalMatrices.length > 0 ? (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 max-h-[220px] overflow-y-auto custom-scrollbar pr-2">
+                          {globalMatrices.map(m => {
+                            const ver = m.current_version;
+                            const isSelected = selectedMatrixId === m.id;
+                            return (
+                              <div
+                                key={m.id}
+                                onClick={() => handleSelectSavedMatrix(m)}
+                                className="p-3 rounded-2xl border transition-all cursor-pointer flex items-center justify-between text-slate-800 dark:text-zinc-200"
+                                style={isSelected ? { backgroundColor: `${settings.primaryColor}20`, borderColor: `${settings.primaryColor}50`, color: settings.primaryColor, boxShadow: `0 0 15px ${settings.primaryColor}20` } : { borderColor: 'rgba(255,255,255,0.05)', backgroundColor: 'rgba(255,255,255,0.02)' }}
+                              >
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-sm font-black truncate leading-tight mb-1" style={{ color: isSelected ? settings.primaryColor : 'inherit' }}>
+                                    {m.name}
+                                  </p>
+                                  <div className="flex items-center gap-3 text-[10px] font-bold text-slate-500 dark:text-zinc-400">
+                                    {ver?.stitch_count && <span>🪡 {ver.stitch_count.toLocaleString()} pts</span>}
+                                    {ver?.color_count && <span>🎨 {ver.color_count} cores</span>}
+                                  </div>
+                                </div>
+                                {isSelected && <CheckCircle className="h-5 w-5 shrink-0 ml-2" style={{ color: settings.primaryColor }} />}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-slate-500 italic">Nenhuma matriz global encontrada na biblioteca da empresa.</p>
+                      )
                     )}
                   </div>
                 )}

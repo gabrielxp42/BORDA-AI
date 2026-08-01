@@ -404,14 +404,16 @@ export const printOrderReceipt = (order: OrderPDFData) => {
             </tr>
           </thead>
           <tbody>
-            ${order.items.map(item => `
+            ${order.items.map(item => {
+              const cleanDesc = item.description.replace(/\s*\([\d.,]+\s*pts,\s*\d+\s*cores\)/i, '').trim();
+              return `
               <tr>
-                <td class="font-bold">${item.description}</td>
+                <td class="font-bold">${cleanDesc}</td>
                 <td class="text-center">${item.quantity} un</td>
                 <td class="text-right">${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.unitPrice || 0)}</td>
                 <td class="text-right font-bold">${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.totalPrice || 0)}</td>
               </tr>
-            `).join('')}
+            `}).join('')}
           </tbody>
         </table>
       </div>

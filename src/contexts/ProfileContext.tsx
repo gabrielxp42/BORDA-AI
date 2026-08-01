@@ -25,6 +25,7 @@ export interface ProfilePermissions {
   canExportReports: boolean;   // Exportar relatórios / PDFs
   canSendWhatsApp: boolean;    // Enviar WhatsApp via Evolution API
   canChangeSettings: boolean;  // Alterar configurações da empresa
+  canDownloadMatrices: boolean;// Baixar arquivos de matriz
 }
 
 export interface CustomProfile {
@@ -57,6 +58,7 @@ export const CHEFE_PERMISSIONS: ProfilePermissions = {
   canExportReports: true,
   canSendWhatsApp: true,
   canChangeSettings: true,
+  canDownloadMatrices: true,
 };
 
 export const PRODUCAO_PERMISSIONS: ProfilePermissions = {
@@ -79,6 +81,7 @@ export const PRODUCAO_PERMISSIONS: ProfilePermissions = {
   canExportReports: false,
   canSendWhatsApp: true,
   canChangeSettings: false,
+  canDownloadMatrices: false,
 };
 
 export const DEFAULT_PROFILES: CustomProfile[] = [
@@ -140,7 +143,13 @@ export const ProfileProvider: React.FC<{ children: React.ReactNode }> = ({ child
       const raw = localStorage.getItem(LOCAL_STORAGE_PROFILES_KEY);
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        return parsed.map((p: any) => ({
+          ...p,
+          permissions: {
+            ...p.permissions,
+            canDownloadMatrices: p.permissions?.canDownloadMatrices ?? (p.id === 'chefe')
+          }
+        }));
       }
     } catch { /* fallback */ }
     return DEFAULT_PROFILES;
