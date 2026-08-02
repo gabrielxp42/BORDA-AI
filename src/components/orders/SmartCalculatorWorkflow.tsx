@@ -4,7 +4,7 @@ import {
   X, UserPlus, Calendar, Plus, Trash2, Package, Save, Lock, Layers, Sparkles, 
   CheckCircle2, DollarSign, ChevronDown, Check, Upload, FileCheck, ChevronUp, 
   Sliders, Send, Clock, CreditCard, Landmark, Coins, ArrowRight, ArrowLeft, Camera, Paperclip,
-  MessageSquare, Image, FileText, QrCode, User, CheckCircle, Settings, Edit2, Star
+  MessageSquare, Image, FileText, QrCode, User, CheckCircle, Settings, Edit2, Star, Printer
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { calculateEmbroideryPrice } from '@/services/pricingEngine';
@@ -23,6 +23,8 @@ import { serializePaymentMetadata, updatePaymentMetadata, parsePaymentMetadata }
 import { sendEvolutionText, getWhatsAppWebLink, formatWhatsAppNumber, handleWhatsAppDispatchError } from '@/services/whatsappService';
 import { getStoredTemplates, formatEmbroideryTemplate } from '@/services/whatsappTemplatesService';
 import { useBackgroundTasks } from '@/hooks/useBackgroundTasks';
+import { printOrderReceipt } from '@/services/pdfGenerator';
+import { printThermalReceipt } from '@/services/thermalPrinter';
 import { Matrix } from '@/types/borda';
 
 interface InitialOrderData {
@@ -1077,9 +1079,76 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
     }
   };
 
-  const isFormValid = entryMode === 'quick'
-    ? selectedClientId && matrixName.trim() && quantity && Number(quantity) > 0
-    : selectedClientId && matrixName.trim() && stitchCount && Number(stitchCount) > 0 && quantity && Number(quantity) > 0;
+  const isFormValid = useMemo(() => {
+    return entryMode === 'quick'
+      ? selectedClientId && matrixName.trim() && quantity && Number(quantity) > 0
+      : selectedClientId && matrixName.trim() && stitchCount && Number(stitchCount) > 0 && quantity && Number(quantity) > 0;
+  }, [entryMode, selectedClientId, matrixName, quantity, stitchCount]);
+
+  const handlePrintReceiptAction = async (printType: 'a4' | 'thermal') => {
+    if (!isFormValid) {
+      setShowValidationErrors(true);
+      setShakeInputs(true);
+      setTimeout(() => setShakeInputs(false), 500);
+      toast.error("Por favor, preencha os campos destacados em vermelho antes de imprimir.");
+      return;
+    }
+
+    let clientName = 'Cliente Geral';
+    let clientPhone: string | undefined;
+    let clientCompany: string | undefined;
+
+    if (selectedClientId) {
+      try {
+        const { data: cData } = await supabase
+          .from('clients')
+          .select('name, phone, company_name')
+          .eq('id', selectedClientId)
+          .single();
+
+        if (cData) {
+          clientName = cData.name || clientName;
+          clientPhone = cData.phone;
+          clientCompany = cData.company_name;
+        }
+      } catch (err) {
+        console.warn('Erro ao buscar dados do cliente para impressão:', err);
+      }
+    }
+
+    const printPayload = {
+      id: Date.now().toString(),
+      createdAt: new Date().toISOString(),
+      dueDate: dueDate ? format(dueDate, 'yyyy-MM-dd') : undefined,
+      clientName,
+      clientPhone,
+      clientCompany,
+      paymentStatus: (entryMode === 'quick' ? 'pending' : paymentStatus) as any,
+      totalAmount: entryMode === 'quick' ? (calculation.totalPrice || 0) : totalOrderAmount,
+      notes: observations,
+      items: orderItemsList.length > 0
+        ? orderItemsList.map(it => ({
+            description: it.matrixName,
+            quantity: it.quantity,
+            unitPrice: it.unitPrice,
+            totalPrice: it.totalPrice
+          }))
+        : [{
+            description: matrixName || 'Peças para Bordado',
+            quantity: Number(quantity) || 1,
+            unitPrice: calculation.unitPrice || 0,
+            totalPrice: calculation.totalPrice || 0
+          }],
+      companyName: settings.systemName,
+      canSeeFinancials: isUnlocked
+    };
+
+    if (printType === 'a4') {
+      printOrderReceipt(printPayload);
+    } else {
+      printThermalReceipt(printPayload, isUnlocked);
+    }
+  };
 
   const renderAttachments = () => (
     <div className="mt-4 border-t border-slate-200 dark:border-white/10 pt-4">
@@ -2082,25 +2151,51 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
               {/* Action Buttons */}
               <div className="space-y-2 pt-2">
                 {entryMode === 'quick' ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (!isFormValid) {
-                        setShowValidationErrors(true);
-                        setShakeInputs(true);
-                        setTimeout(() => setShakeInputs(false), 500);
-                        toast.error("Por favor, preencha os campos destacados em vermelho antes de prosseguir.");
-                        return;
-                      }
-                      setShowValidationErrors(false);
-                      handleCreateOrder();
-                    }}
-                    disabled={isSaving}
-                    className="w-full py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:opacity-95 text-white font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 active:scale-[0.98] transition-all disabled:opacity-50"
-                  >
-                    <Save className="h-4 w-4" />
-                    {isSaving ? 'Registrando Entrada...' : '📥 Confirmar Entrada de Peças'}
-                  </button>
+                  <div className="space-y-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!isFormValid) {
+                          setShowValidationErrors(true);
+                          setShakeInputs(true);
+                          setTimeout(() => setShakeInputs(false), 500);
+                          toast.error("Por favor, preencha os campos destacados em vermelho antes de prosseguir.");
+                          return;
+                        }
+                        setShowValidationErrors(false);
+                        handleCreateOrder();
+                      }}
+                      disabled={isSaving}
+                      className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:opacity-95 text-white font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 active:scale-[0.98] transition-all disabled:opacity-50"
+                    >
+                      <Save className="h-4 w-4" />
+                      {isSaving ? 'Registrando Entrada...' : '📥 Confirmar Entrada de Peças'}
+                    </button>
+
+                    {/* Botões de Impressão de Comprovante */}
+                    <div className="pt-1 border-t border-slate-200 dark:border-white/10 space-y-1.5">
+                      <label className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400 block text-center">
+                        🖨️ Imprimir Comprovante de Recebimento
+                      </label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handlePrintReceiptAction('a4')}
+                          className="py-2 px-3 rounded-xl bg-white/5 hover:bg-white/10 border border-slate-300 dark:border-white/10 text-[11px] font-bold text-slate-700 dark:text-zinc-200 flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                        >
+                          <FileText className="h-3.5 w-3.5 text-purple-400" /> Folha A4
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handlePrintReceiptAction('thermal')}
+                          className="py-2 px-3 rounded-xl bg-white/5 hover:bg-white/10 border border-slate-300 dark:border-white/10 text-[11px] font-bold text-slate-700 dark:text-zinc-200 flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                        >
+                          <Printer className="h-3.5 w-3.5 text-amber-400" /> Cupom (80mm)
+                        </button>
+                      </div>
+                    </div>
+                  </div>
                 ) : (
                   step === 1 ? (
                     <button

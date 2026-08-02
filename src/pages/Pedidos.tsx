@@ -84,8 +84,8 @@ export const Pedidos: React.FC = () => {
   const updateTask = useBackgroundTasks(state => state.updateTask);
   const updateStep = useBackgroundTasks(state => state.updateStep);
 
-  const handleCobrarPedido = async (order: Order, e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleCobrarPedido = async (order: Order, e?: React.MouseEvent) => {
+    e?.stopPropagation();
     setSelectedOrderForCobrar(order);
   };
 
