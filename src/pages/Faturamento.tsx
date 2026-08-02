@@ -77,6 +77,64 @@ export const Faturamento: React.FC = () => {
   const [allTimePendingOrders, setAllTimePendingOrders] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedMonthOffset, setSelectedMonthOffset] = useState<number>(0); // 0 = este mês, -1 = mês passado
+  const [expandedCard, setExpandedCard] = useState<'receita' | 'despesas' | 'areceber' | null>(null);
+
+  // Cálculo Detalhado do Saldo A Receber (Agrupado por Mês Atual, Mês Passado, Histórico e Top Devedores)
+  const pendingBreakdown = useMemo(() => {
+    const now = new Date();
+    const currentMonthStr = format(now, 'MM/yyyy');
+    const lastMonthStr = format(subMonths(now, 1), 'MM/yyyy');
+
+    let currentMonthPending = 0;
+    let currentMonthCount = 0;
+    let lastMonthPending = 0;
+    let lastMonthCount = 0;
+    let olderPending = 0;
+    let olderCount = 0;
+
+    const clientMap: Record<string, { id: string; name: string; phone: string; totalPending: number; count: number; orders: any[] }> = {};
+
+    allTimePendingOrders.forEach(o => {
+      const created = new Date(o.created_at || Date.now());
+      const monthStr = format(created, 'MM/yyyy');
+      const total = Number(o.total_amount || 0);
+      const pendingVal = o.payment_status === 'half_paid' ? total * 0.5 : total;
+
+      if (monthStr === currentMonthStr) {
+        currentMonthPending += pendingVal;
+        currentMonthCount++;
+      } else if (monthStr === lastMonthStr) {
+        lastMonthPending += pendingVal;
+        lastMonthCount++;
+      } else {
+        olderPending += pendingVal;
+        olderCount++;
+      }
+
+      const cId = o.clients?.id || o.id;
+      const cName = o.clients?.name || 'Cliente Geral';
+      const cPhone = o.clients?.phone || '';
+
+      if (!clientMap[cId]) {
+        clientMap[cId] = { id: cId, name: cName, phone: cPhone, totalPending: 0, count: 0, orders: [] };
+      }
+      clientMap[cId].totalPending += pendingVal;
+      clientMap[cId].count += 1;
+      clientMap[cId].orders.push(o);
+    });
+
+    const topDebtors = Object.values(clientMap).sort((a, b) => b.totalPending - a.totalPending).slice(0, 3);
+
+    return {
+      currentMonthPending,
+      currentMonthCount,
+      lastMonthPending,
+      lastMonthCount,
+      olderPending,
+      olderCount,
+      topDebtors
+    };
+  }, [allTimePendingOrders]);
 
   // KPI calculations
   const [grandTotal, setGrandTotal] = useState(0);
@@ -523,17 +581,72 @@ export const Faturamento: React.FC = () => {
         </div>
       </div>
 
-      {/* 3 PILARES FINANCEIROS PRINCIPAIS (DESIGN SOFISTICADO & CALMO) */}
+      {/* 🟢🔴 DOIS BOTÕES NATIVOS DE AÇÃO RÁPIDA DE ENTRADA & SAÍDA */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Botão 1: REGISTRAR RECEITA */}
+        <button
+          onClick={() => openFinModal('income')}
+          className="group relative overflow-hidden p-5 rounded-3xl border border-emerald-500/40 bg-gradient-to-r from-emerald-950/40 via-emerald-900/20 to-black/60 hover:border-emerald-400 transition-all shadow-xl hover:shadow-emerald-950/40 text-left active:scale-[0.99] cursor-pointer flex items-center justify-between"
+        >
+          <div className="space-y-0.5">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[9px] font-black uppercase tracking-wider">
+              🟢 Entrada Direta / PIX
+            </span>
+            <h2 className="text-xl font-black text-white group-hover:text-emerald-300 transition-colors">
+              + REGISTRAR ENTRADA DE CAIXA
+            </h2>
+            <p className="text-xs text-zinc-400">
+              Lançar pagamento no balcão, sinal PIX ou matrizes.
+            </p>
+          </div>
+          <div className="h-11 w-11 rounded-2xl bg-emerald-500 text-black flex items-center justify-center font-black shadow-lg shadow-emerald-500/30 group-hover:scale-110 transition-transform shrink-0 ml-3">
+            <ArrowUpRight className="h-6 w-6 stroke-[3]" />
+          </div>
+        </button>
+
+        {/* Botão 2: REGISTRAR DESPESA */}
+        <button
+          onClick={() => openFinModal('expense')}
+          className="group relative overflow-hidden p-5 rounded-3xl border border-rose-500/40 bg-gradient-to-r from-rose-950/40 via-rose-900/20 to-black/60 hover:border-rose-400 transition-all shadow-xl hover:shadow-rose-950/40 text-left active:scale-[0.99] cursor-pointer flex items-center justify-between"
+        >
+          <div className="space-y-0.5">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-rose-500/20 text-rose-400 border border-rose-500/30 text-[9px] font-black uppercase tracking-wider">
+              🔴 Saída de Caixa / Contas
+            </span>
+            <h2 className="text-xl font-black text-white group-hover:text-rose-300 transition-colors">
+              - NOVA DESPESA DA FÁBRICA
+            </h2>
+            <p className="text-xs text-zinc-400">
+              Lançar linhas, manutenção de máquinas ou contas fixas.
+            </p>
+          </div>
+          <div className="h-11 w-11 rounded-2xl bg-rose-500 text-white flex items-center justify-center font-black shadow-lg shadow-rose-500/30 group-hover:scale-110 transition-transform shrink-0 ml-3">
+            <ArrowDownRight className="h-6 w-6 stroke-[3]" />
+          </div>
+        </button>
+      </div>
+
+      {/* 3 PILARES FINANCEIROS PRINCIPAIS (DESIGN SOFISTICADO, CALMO E CLICÁVEL) */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
         
-        {/* PILAR 1: ENTRADAS / TOTAL FATURADO */}
-        <div className="glass-panel p-6 rounded-3xl border border-emerald-500/30 bg-gradient-to-b from-emerald-950/20 via-black/40 to-black/60 relative overflow-hidden flex flex-col justify-between space-y-4">
+        {/* PILAR 1: ENTRADAS / TOTAL FATURADO (CLICÁVEL) */}
+        <div 
+          onClick={() => setExpandedCard(prev => prev === 'receita' ? null : 'receita')}
+          className={`glass-panel p-6 rounded-3xl border transition-all cursor-pointer relative overflow-hidden flex flex-col justify-between space-y-4 ${
+            expandedCard === 'receita'
+              ? 'border-emerald-400 bg-emerald-950/30 shadow-xl shadow-emerald-950/40 ring-1 ring-emerald-400/50'
+              : 'border-emerald-500/30 bg-gradient-to-b from-emerald-950/20 via-black/40 to-black/60 hover:border-emerald-400/60'
+          }`}
+        >
           <div className="flex items-center justify-between">
             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-black uppercase tracking-wider">
               🟢 Receita & Faturamento
             </span>
             <button
-              onClick={() => openFinModal('income')}
+              onClick={(e) => {
+                e.stopPropagation();
+                openFinModal('income');
+              }}
               className="px-3 py-1.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30 text-xs font-bold flex items-center gap-1 transition-all active:scale-95 cursor-pointer"
             >
               + Entrada
@@ -541,7 +654,10 @@ export const Faturamento: React.FC = () => {
           </div>
 
           <div>
-            <p className="text-xs font-bold text-zinc-400">Total Faturado no Período</p>
+            <p className="text-xs font-bold text-zinc-400 flex items-center justify-between">
+              <span>Total Faturado no Período</span>
+              <span className="text-[10px] text-emerald-400 font-bold">{expandedCard === 'receita' ? '▲ Ocultar' : '▼ Expandir Detalhes'}</span>
+            </p>
             <h2 className="text-3xl font-black text-white tracking-tight mt-1">
               {formatCurrency(totalRevenue, permissions?.canSeeFinancials ?? true)}
             </h2>
@@ -549,17 +665,30 @@ export const Faturamento: React.FC = () => {
               <span>Recebido em caixa:</span>
               <span className="font-bold text-emerald-400">{formatCurrency(paidTotal, permissions?.canSeeFinancials ?? true)}</span>
             </div>
+            <p className="text-[10px] text-emerald-400/70 font-medium pt-1 flex items-center gap-1">
+              ✨ Toque para ver mais detalhes
+            </p>
           </div>
         </div>
 
-        {/* PILAR 2: SAÍDAS & DESPESAS */}
-        <div className="glass-panel p-6 rounded-3xl border border-rose-500/30 bg-gradient-to-b from-rose-950/20 via-black/40 to-black/60 relative overflow-hidden flex flex-col justify-between space-y-4">
+        {/* PILAR 2: SAÍDAS & DESPESAS (CLICÁVEL) */}
+        <div 
+          onClick={() => setExpandedCard(prev => prev === 'despesas' ? null : 'despesas')}
+          className={`glass-panel p-6 rounded-3xl border transition-all cursor-pointer relative overflow-hidden flex flex-col justify-between space-y-4 ${
+            expandedCard === 'despesas'
+              ? 'border-rose-400 bg-rose-950/30 shadow-xl shadow-rose-950/40 ring-1 ring-rose-400/50'
+              : 'border-rose-500/30 bg-gradient-to-b from-rose-950/20 via-black/40 to-black/60 hover:border-rose-400/60'
+          }`}
+        >
           <div className="flex items-center justify-between">
             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/20 text-[10px] font-black uppercase tracking-wider">
               🔴 Despesas & Custos
             </span>
             <button
-              onClick={() => openFinModal('expense')}
+              onClick={(e) => {
+                e.stopPropagation();
+                openFinModal('expense');
+              }}
               className="px-3 py-1.5 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 text-xs font-bold flex items-center gap-1 transition-all active:scale-95 cursor-pointer"
             >
               + Despesa
@@ -567,7 +696,10 @@ export const Faturamento: React.FC = () => {
           </div>
 
           <div>
-            <p className="text-xs font-bold text-zinc-400">Gastos Registrados</p>
+            <p className="text-xs font-bold text-zinc-400 flex items-center justify-between">
+              <span>Gastos Registrados</span>
+              <span className="text-[10px] text-rose-400 font-bold">{expandedCard === 'despesas' ? '▲ Ocultar' : '▼ Expandir Detalhes'}</span>
+            </p>
             <h2 className="text-3xl font-black text-white tracking-tight mt-1">
               {formatCurrency(manualExpenses, permissions?.canSeeFinancials ?? true)}
             </h2>
@@ -575,25 +707,41 @@ export const Faturamento: React.FC = () => {
               <span>Margem Líquida Estimada:</span>
               <span className={`font-bold ${netProfit >= 0 ? 'text-cyan-400' : 'text-rose-400'}`}>{profitMargin}%</span>
             </div>
+            <p className="text-[10px] text-rose-400/70 font-medium pt-1 flex items-center gap-1">
+              ✨ Toque para ver mais detalhes
+            </p>
           </div>
         </div>
 
-        {/* PILAR 3: A RECEBER ACUMULADO (SEM ZERAR NO MÊS) */}
-        <div className="glass-panel p-6 rounded-3xl border border-amber-500/30 bg-gradient-to-b from-amber-950/20 via-black/40 to-black/60 relative overflow-hidden flex flex-col justify-between space-y-4">
+        {/* PILAR 3: A RECEBER ACUMULADO (CLICÁVEL) */}
+        <div 
+          onClick={() => setExpandedCard(prev => prev === 'areceber' ? null : 'areceber')}
+          className={`glass-panel p-6 rounded-3xl border transition-all cursor-pointer relative overflow-hidden flex flex-col justify-between space-y-4 ${
+            expandedCard === 'areceber'
+              ? 'border-amber-400 bg-amber-950/30 shadow-xl shadow-amber-950/40 ring-1 ring-amber-400/50'
+              : 'border-amber-500/30 bg-gradient-to-b from-amber-950/20 via-black/40 to-black/60 hover:border-amber-400/60'
+          }`}
+        >
           <div className="flex items-center justify-between">
             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[10px] font-black uppercase tracking-wider">
               ⏳ A Receber (Acumulado)
             </span>
             <button
-              onClick={() => setActiveTab('areceber')}
+              onClick={(e) => {
+                e.stopPropagation();
+                setActiveTab('areceber');
+              }}
               className="px-3 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 text-xs font-bold flex items-center gap-1 transition-all active:scale-95 cursor-pointer"
             >
-              Ver Faturas
+              Ver Tabela
             </button>
           </div>
 
           <div>
-            <p className="text-xs font-bold text-zinc-400">Saldo a Cobrar dos Clientes</p>
+            <p className="text-xs font-bold text-zinc-400 flex items-center justify-between">
+              <span>Saldo a Cobrar dos Clientes</span>
+              <span className="text-[10px] text-amber-400 font-bold">{expandedCard === 'areceber' ? '▲ Ocultar' : '▼ Expandir Detalhes'}</span>
+            </p>
             <h2 className="text-3xl font-black text-amber-400 tracking-tight mt-1">
               {formatCurrency(
                 allTimePendingOrders.reduce((sum, o) => {
@@ -608,10 +756,167 @@ export const Faturamento: React.FC = () => {
               <span>Pedidos Pendentes:</span>
               <span className="font-bold text-amber-300">{allTimePendingOrders.length} pedido(s)</span>
             </div>
+            <p className="text-[10px] text-amber-400/70 font-medium pt-1 flex items-center gap-1">
+              ✨ Toque para ver mais detalhes
+            </p>
           </div>
         </div>
 
       </div>
+
+      {/* GAVETA EXPANDÍVEL INTERATIVA AO CLICAR NOS CARDS */}
+      {expandedCard === 'areceber' && (
+        <div className="glass-panel p-6 rounded-3xl border border-amber-500/30 bg-gradient-to-br from-amber-950/20 via-black/60 to-black/90 animate-in zoom-in-95 duration-200 space-y-5">
+          <div className="flex items-center justify-between border-b border-white/10 pb-3">
+            <h3 className="text-sm font-black uppercase tracking-wider text-amber-400 flex items-center gap-2">
+              <Clock className="h-4 w-4 text-amber-400" /> Detalhamento do Saldo A Receber por Período & Devedores
+            </h3>
+            <button
+              onClick={() => setExpandedCard(null)}
+              className="text-xs text-zinc-400 hover:text-white transition-colors"
+            >
+              ✕ Fechar Painel
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Bloco 1: Mês Atual */}
+            <div className="p-4 rounded-2xl bg-white/5 border border-white/10 space-y-1">
+              <span className="text-[10px] font-black uppercase text-emerald-400 block">
+                📅 Faturas Deste Mês
+              </span>
+              <p className="text-xl font-black text-white">
+                {formatCurrency(pendingBreakdown.currentMonthPending, permissions?.canSeeFinancials ?? true)}
+              </p>
+              <p className="text-[11px] text-zinc-400">
+                {pendingBreakdown.currentMonthCount} pedido(s) recentes em aberto
+              </p>
+            </div>
+
+            {/* Bloco 2: Mês Passado */}
+            <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 space-y-1">
+              <span className="text-[10px] font-black uppercase text-amber-400 block">
+                ⏳ Pendente do Mês Passado
+              </span>
+              <p className="text-xl font-black text-amber-300">
+                {formatCurrency(pendingBreakdown.lastMonthPending, permissions?.canSeeFinancials ?? true)}
+              </p>
+              <p className="text-[11px] text-amber-400 font-medium">
+                {pendingBreakdown.lastMonthCount} pedido(s) em atraso do mês anterior
+              </p>
+            </div>
+
+            {/* Bloco 3: Antigos */}
+            <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/30 space-y-1">
+              <span className="text-[10px] font-black uppercase text-rose-400 block">
+                🏛️ Histórico Mais Antigo
+              </span>
+              <p className="text-xl font-black text-rose-300">
+                {formatCurrency(pendingBreakdown.olderPending, permissions?.canSeeFinancials ?? true)}
+              </p>
+              <p className="text-[11px] text-rose-400 font-medium">
+                {pendingBreakdown.olderCount} pedido(s) antigos sem quitação
+              </p>
+            </div>
+          </div>
+
+          {/* Maiores Devedores com Ação Rápida no WhatsApp */}
+          {pendingBreakdown.topDebtors.length > 0 && (
+            <div className="pt-2 border-t border-white/10 space-y-3">
+              <h4 className="text-xs font-black text-white uppercase tracking-wider">
+                👥 Clientes com Maior Saldo a Quitar:
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                {pendingBreakdown.topDebtors.map(debtor => (
+                  <div key={debtor.id} className="p-3.5 rounded-2xl bg-black/40 border border-white/10 flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-bold text-white truncate max-w-[140px]">{debtor.name}</p>
+                      <p className="text-[10px] text-amber-400 font-black">{formatCurrency(debtor.totalPending, permissions?.canSeeFinancials ?? true)}</p>
+                      <p className="text-[9px] text-zinc-500">{debtor.count} pedido(s)</p>
+                    </div>
+
+                    <button
+                      onClick={() => setSelectedClient({
+                        id: debtor.id,
+                        name: debtor.name,
+                        phone: debtor.phone,
+                        orderCount: debtor.count,
+                        totalAmount: debtor.totalPending,
+                        paidAmount: 0,
+                        pendingAmount: debtor.totalPending,
+                        orders: debtor.orders
+                      })}
+                      className="px-3 py-1.5 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 text-[10px] font-bold flex items-center gap-1 transition-all active:scale-95 cursor-pointer"
+                    >
+                      <Send className="h-3 w-3" /> Cobrar Zap
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {expandedCard === 'receita' && (
+        <div className="glass-panel p-6 rounded-3xl border border-emerald-500/30 bg-gradient-to-br from-emerald-950/20 via-black/60 to-black/90 animate-in zoom-in-95 duration-200 space-y-4">
+          <div className="flex items-center justify-between border-b border-white/10 pb-3">
+            <h3 className="text-sm font-black uppercase tracking-wider text-emerald-400 flex items-center gap-2">
+              <TrendingUp className="h-4 w-4 text-emerald-400" /> Detalhamento do Faturamento no Período
+            </h3>
+            <button onClick={() => setExpandedCard(null)} className="text-xs text-zinc-400 hover:text-white">✕ Fechar</button>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="p-4 rounded-2xl bg-white/5 border border-white/10">
+              <span className="text-[10px] text-zinc-400 font-bold block">100% Liquidados</span>
+              <p className="text-xl font-black text-emerald-400 mt-1">{formatCurrency(paidTotal, permissions?.canSeeFinancials ?? true)}</p>
+            </div>
+            <div className="p-4 rounded-2xl bg-white/5 border border-white/10">
+              <span className="text-[10px] text-zinc-400 font-bold block">Pendente no Mês</span>
+              <p className="text-xl font-black text-amber-400 mt-1">{formatCurrency(pendingTotal, permissions?.canSeeFinancials ?? true)}</p>
+            </div>
+            <div className="p-4 rounded-2xl bg-white/5 border border-white/10">
+              <span className="text-[10px] text-zinc-400 font-bold block">Ticket Médio</span>
+              <p className="text-xl font-black text-white mt-1">{formatCurrency(avgTicket, permissions?.canSeeFinancials ?? true)}</p>
+            </div>
+            <div className="p-4 rounded-2xl bg-white/5 border border-white/10">
+              <span className="text-[10px] text-zinc-400 font-bold block">Top Cliente</span>
+              <p className="text-sm font-black text-purple-300 truncate mt-1">{topClient ? topClient.name : 'Nenhum'}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {expandedCard === 'despesas' && (
+        <div className="glass-panel p-6 rounded-3xl border border-rose-500/30 bg-gradient-to-br from-rose-950/20 via-black/60 to-black/90 animate-in zoom-in-95 duration-200 space-y-4">
+          <div className="flex items-center justify-between border-b border-white/10 pb-3">
+            <h3 className="text-sm font-black uppercase tracking-wider text-rose-400 flex items-center gap-2">
+              <TrendingDown className="h-4 w-4 text-rose-400" /> Distribuição de Custos & Saídas
+            </h3>
+            <button onClick={() => setExpandedCard(null)} className="text-xs text-zinc-400 hover:text-white">✕ Fechar</button>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="p-4 rounded-2xl bg-white/5 border border-white/10">
+              <span className="text-[10px] text-zinc-400 font-bold block">📌 Gastos Fixos (Contas)</span>
+              <p className="text-xl font-black text-rose-400 mt-1">
+                {formatCurrency(
+                  financialTransactions.filter(t => t.type === 'expense' && (t.expense_type === 'fixed' || t.category?.toLowerCase().includes('fix'))).reduce((s, t) => s + Number(t.amount || 0), 0),
+                  permissions?.canSeeFinancials ?? true
+                )}
+              </p>
+            </div>
+            <div className="p-4 rounded-2xl bg-white/5 border border-white/10">
+              <span className="text-[10px] text-zinc-400 font-bold block">💸 Gastos Variáveis (Insumos/Máquinas)</span>
+              <p className="text-xl font-black text-rose-300 mt-1">
+                {formatCurrency(
+                  financialTransactions.filter(t => t.type === 'expense' && t.expense_type !== 'fixed').reduce((s, t) => s + Number(t.amount || 0), 0),
+                  permissions?.canSeeFinancials ?? true
+                )}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ABAS SOFISTICADAS DE NAVEGAÇÃO */}
       <div className="flex items-center gap-2 p-1.5 bg-white/5 border border-white/10 rounded-2xl overflow-x-auto custom-scrollbar">
