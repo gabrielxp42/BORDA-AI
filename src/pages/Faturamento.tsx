@@ -479,31 +479,21 @@ export const Faturamento: React.FC = () => {
   return (
     <div className="space-y-6 animate-in fade-in duration-300 pb-12">
       
-      {/* Top Bar Header & Seletor de Mês */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      {/* Cabeçalho Elegante & Seletor de Mês */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white/[0.02] p-5 rounded-3xl border border-white/10">
         <div>
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-500/10 border border-purple-500/20 text-purple-400 text-[10px] font-black uppercase tracking-widest mb-1">
-            <Sparkles className="h-3 w-3" /> Gestão Financeira Integrada da Fábrica
-          </div>
-          <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight flex items-center gap-3">
-            <BarChart3 className="h-7 w-7 text-purple-400" />
-            DRE & Faturamento de Bordados
+          <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight flex items-center gap-2.5">
+            <Wallet className="h-6 w-6 text-purple-400" />
+            Gestão Financeira do Ateliê
           </h1>
-          <p className="text-zinc-400 text-xs mt-1">
-            Acompanhe faturamento bruto, custos de insumos, margem líquida e faturas agrupadas por cliente.
+          <p className="text-zinc-400 text-xs mt-0.5">
+            Visão simples e direta de entradas, despesas e faturas pendentes a receber.
           </p>
         </div>
 
-        {/* Controles: Exportar e Filtros */}
-        <div className="flex items-center gap-3 flex-wrap">
-          <button
-            onClick={handleExportCSV}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 text-zinc-200 text-xs font-bold transition-all shadow-md active:scale-95"
-          >
-            <Download className="h-4 w-4 text-purple-400" /> Exportar Balanço (CSV)
-          </button>
-
-          <div className="p-1 rounded-2xl bg-white/5 border border-white/10 flex items-center gap-1">
+        {/* Controles de Período & Exportação */}
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <div className="p-1 rounded-2xl bg-black/40 border border-white/10 flex items-center gap-1">
             {[
               { offset: 0, label: 'Este Mês' },
               { offset: 1, label: 'Mês Passado' },
@@ -512,89 +502,132 @@ export const Faturamento: React.FC = () => {
               <button
                 key={m.offset}
                 onClick={() => setSelectedMonthOffset(m.offset)}
-                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                   selectedMonthOffset === m.offset
                     ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/30'
-                    : 'text-zinc-400 hover:text-white'
+                    : 'text-zinc-400 hover:text-white hover:bg-white/5'
                 }`}
               >
                 {m.label}
               </button>
             ))}
           </div>
+
+          <button
+            onClick={handleExportCSV}
+            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 text-zinc-300 text-xs font-bold transition-all active:scale-95 cursor-pointer"
+            title="Exportar dados para planilha Excel / CSV"
+          >
+            <Download className="h-3.5 w-3.5 text-purple-400" /> Relatório CSV
+          </button>
         </div>
       </div>
 
-      {/* 🟢🔴 DOIS BOTÕES GIGANTES DE ENTRADA E SAÍDA DE CAIXA */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Botão 1: REGISTRAR RECEITA */}
-        <button
-          onClick={() => openFinModal('income')}
-          className="group relative overflow-hidden p-6 rounded-3xl border border-emerald-500/40 bg-gradient-to-br from-emerald-950/40 via-emerald-900/20 to-black/60 hover:border-emerald-400 transition-all shadow-xl hover:shadow-emerald-950/50 text-left active:scale-[0.99]"
-        >
-          <div className="absolute -right-6 -bottom-6 opacity-10 group-hover:opacity-20 transition-opacity">
-            <ArrowUpRight className="h-40 w-40 text-emerald-400" />
+      {/* 3 PILARES FINANCEIROS PRINCIPAIS (DESIGN SOFISTICADO & CALMO) */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+        
+        {/* PILAR 1: ENTRADAS / TOTAL FATURADO */}
+        <div className="glass-panel p-6 rounded-3xl border border-emerald-500/30 bg-gradient-to-b from-emerald-950/20 via-black/40 to-black/60 relative overflow-hidden flex flex-col justify-between space-y-4">
+          <div className="flex items-center justify-between">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-black uppercase tracking-wider">
+              🟢 Receita & Faturamento
+            </span>
+            <button
+              onClick={() => openFinModal('income')}
+              className="px-3 py-1.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30 text-xs font-bold flex items-center gap-1 transition-all active:scale-95 cursor-pointer"
+            >
+              + Entrada
+            </button>
           </div>
-          <div className="relative z-10 flex items-center justify-between">
-            <div className="space-y-1">
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-black uppercase tracking-wider">
-                🟢 Entrada de Caixa / Receita
-              </span>
-              <h2 className="text-2xl font-black text-white group-hover:text-emerald-300 transition-colors">
-                + REGISTRAR ENTRADA DE CAIXA
-              </h2>
-              <p className="text-xs text-zinc-400 max-w-sm">
-                Lançar recebimento no balcão, PIX direto ou serviço de vetorização/matriz.
-              </p>
-            </div>
-            <div className="h-14 w-14 rounded-2xl bg-emerald-500 text-black flex items-center justify-center font-black shadow-lg shadow-emerald-500/30 group-hover:scale-110 transition-transform shrink-0">
-              <ArrowUpRight className="h-8 w-8 stroke-[3]" />
-            </div>
-          </div>
-        </button>
 
-        {/* Botão 2: REGISTRAR DESPESA */}
-        <button
-          onClick={() => openFinModal('expense')}
-          className="group relative overflow-hidden p-6 rounded-3xl border border-rose-500/40 bg-gradient-to-br from-rose-950/40 via-rose-900/20 to-black/60 hover:border-rose-400 transition-all shadow-xl hover:shadow-rose-950/50 text-left active:scale-[0.99]"
-        >
-          <div className="absolute -right-6 -bottom-6 opacity-10 group-hover:opacity-20 transition-opacity">
-            <ArrowDownRight className="h-40 w-40 text-rose-400" />
-          </div>
-          <div className="relative z-10 flex items-center justify-between">
-            <div className="space-y-1">
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-500/20 text-rose-400 border border-rose-500/30 text-[10px] font-black uppercase tracking-wider">
-                🔴 Saída de Caixa / Despesa
-              </span>
-              <h2 className="text-2xl font-black text-white group-hover:text-rose-300 transition-colors">
-                - NOVA DESPESA DA FÁBRICA
-              </h2>
-              <p className="text-xs text-zinc-400 max-w-sm">
-                Lançar compras de linhas, entretelas, manutenção de máquinas ou energia.
-              </p>
-            </div>
-            <div className="h-14 w-14 rounded-2xl bg-rose-500 text-white flex items-center justify-center font-black shadow-lg shadow-rose-500/30 group-hover:scale-110 transition-transform shrink-0">
-              <ArrowDownRight className="h-8 w-8 stroke-[3]" />
+          <div>
+            <p className="text-xs font-bold text-zinc-400">Total Faturado no Período</p>
+            <h2 className="text-3xl font-black text-white tracking-tight mt-1">
+              {formatCurrency(totalRevenue, permissions?.canSeeFinancials ?? true)}
+            </h2>
+            <div className="flex items-center justify-between text-xs mt-2 pt-2 border-t border-white/5 text-zinc-400">
+              <span>Recebido em caixa:</span>
+              <span className="font-bold text-emerald-400">{formatCurrency(paidTotal, permissions?.canSeeFinancials ?? true)}</span>
             </div>
           </div>
-        </button>
+        </div>
+
+        {/* PILAR 2: SAÍDAS & DESPESAS */}
+        <div className="glass-panel p-6 rounded-3xl border border-rose-500/30 bg-gradient-to-b from-rose-950/20 via-black/40 to-black/60 relative overflow-hidden flex flex-col justify-between space-y-4">
+          <div className="flex items-center justify-between">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/20 text-[10px] font-black uppercase tracking-wider">
+              🔴 Despesas & Custos
+            </span>
+            <button
+              onClick={() => openFinModal('expense')}
+              className="px-3 py-1.5 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 text-xs font-bold flex items-center gap-1 transition-all active:scale-95 cursor-pointer"
+            >
+              + Despesa
+            </button>
+          </div>
+
+          <div>
+            <p className="text-xs font-bold text-zinc-400">Gastos Registrados</p>
+            <h2 className="text-3xl font-black text-white tracking-tight mt-1">
+              {formatCurrency(manualExpenses, permissions?.canSeeFinancials ?? true)}
+            </h2>
+            <div className="flex items-center justify-between text-xs mt-2 pt-2 border-t border-white/5 text-zinc-400">
+              <span>Margem Líquida Estimada:</span>
+              <span className={`font-bold ${netProfit >= 0 ? 'text-cyan-400' : 'text-rose-400'}`}>{profitMargin}%</span>
+            </div>
+          </div>
+        </div>
+
+        {/* PILAR 3: A RECEBER ACUMULADO (SEM ZERAR NO MÊS) */}
+        <div className="glass-panel p-6 rounded-3xl border border-amber-500/30 bg-gradient-to-b from-amber-950/20 via-black/40 to-black/60 relative overflow-hidden flex flex-col justify-between space-y-4">
+          <div className="flex items-center justify-between">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[10px] font-black uppercase tracking-wider">
+              ⏳ A Receber (Acumulado)
+            </span>
+            <button
+              onClick={() => setActiveTab('areceber')}
+              className="px-3 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 text-xs font-bold flex items-center gap-1 transition-all active:scale-95 cursor-pointer"
+            >
+              Ver Faturas
+            </button>
+          </div>
+
+          <div>
+            <p className="text-xs font-bold text-zinc-400">Saldo a Cobrar dos Clientes</p>
+            <h2 className="text-3xl font-black text-amber-400 tracking-tight mt-1">
+              {formatCurrency(
+                allTimePendingOrders.reduce((sum, o) => {
+                  const total = Number(o.total_amount || 0);
+                  if (o.payment_status === 'half_paid') return sum + (total * 0.5);
+                  return sum + total;
+                }, 0),
+                permissions?.canSeeFinancials ?? true
+              )}
+            </h2>
+            <div className="flex items-center justify-between text-xs mt-2 pt-2 border-t border-white/5 text-zinc-400">
+              <span>Pedidos Pendentes:</span>
+              <span className="font-bold text-amber-300">{allTimePendingOrders.length} pedido(s)</span>
+            </div>
+          </div>
+        </div>
+
       </div>
 
-      {/* 🧭 NAVEGAÇÃO EM 5 ABAS FINANCEIRAS EXECUTIVAS */}
+      {/* ABAS SOFISTICADAS DE NAVEGAÇÃO */}
       <div className="flex items-center gap-2 p-1.5 bg-white/5 border border-white/10 rounded-2xl overflow-x-auto custom-scrollbar">
         {[
-          { id: 'resumo', label: '📊 Resumo & DRE' },
-          { id: 'entradas', label: '📥 Entradas (Dia a Dia)' },
-          { id: 'fixos', label: '📌 Gastos Fixos / Contas' },
+          { id: 'resumo', label: '📊 Visão Geral & DRE' },
+          { id: 'areceber', label: `⏳ Faturas A Receber (${allTimePendingOrders.length})` },
+          { id: 'fixos', label: '📌 Contas Fixas' },
           { id: 'variaveis', label: '💸 Gastos Variáveis' },
-          { id: 'areceber', label: '⏳ A Receber (Acumulado)' },
+          { id: 'entradas', label: '📥 Extrato de Entradas' },
         ].map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id as any)}
-            className={`px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all whitespace-nowrap flex items-center gap-2 ${
+            className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all whitespace-nowrap flex items-center gap-2 cursor-pointer ${
               activeTab === tab.id
-                ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/30 scale-[1.02]'
+                ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/30 scale-[1.01]'
                 : 'text-zinc-400 hover:text-white hover:bg-white/5'
             }`}
           >
