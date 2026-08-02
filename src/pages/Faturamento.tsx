@@ -48,6 +48,7 @@ import {
 } from 'recharts';
 import { WhatsAppBillingModal } from '@/components/billing/WhatsAppBillingModal';
 import { FinancialTransactionModal } from '@/components/billing/FinancialTransactionModal';
+import { ReceberDetailsModal } from '@/components/billing/ReceberDetailsModal';
 import { FinancialTransaction, FinancialTransactionType } from '@/types/stockTypes';
 import { format, startOfMonth, endOfMonth, subMonths, eachMonthOfInterval, eachDayOfInterval, isSameDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -77,6 +78,7 @@ export const Faturamento: React.FC = () => {
   const [allTimePendingOrders, setAllTimePendingOrders] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedMonthOffset, setSelectedMonthOffset] = useState<number>(0); // 0 = este mês, -1 = mês passado
+  const [isReceberModalOpen, setIsReceberModalOpen] = useState(false);
   const [expandedCard, setExpandedCard] = useState<'receita' | 'despesas' | 'areceber' | null>(null);
 
   // Cálculo Detalhado do Saldo A Receber (Agrupado por Mês Atual, Mês Passado, Histórico e Top Devedores)
@@ -713,14 +715,10 @@ export const Faturamento: React.FC = () => {
           </div>
         </div>
 
-        {/* PILAR 3: A RECEBER ACUMULADO (CLICÁVEL) */}
+        {/* PILAR 3: A RECEBER ACUMULADO (ABRE O MODAL INTELIGENTE) */}
         <div 
-          onClick={() => setExpandedCard(prev => prev === 'areceber' ? null : 'areceber')}
-          className={`glass-panel p-6 rounded-3xl border transition-all cursor-pointer relative overflow-hidden flex flex-col justify-between space-y-4 ${
-            expandedCard === 'areceber'
-              ? 'border-amber-400 bg-amber-950/30 shadow-xl shadow-amber-950/40 ring-1 ring-amber-400/50'
-              : 'border-amber-500/30 bg-gradient-to-b from-amber-950/20 via-black/40 to-black/60 hover:border-amber-400/60'
-          }`}
+          onClick={() => setIsReceberModalOpen(true)}
+          className="glass-panel p-6 rounded-3xl border border-amber-500/30 bg-gradient-to-b from-amber-950/20 via-black/40 to-black/60 hover:border-amber-400/80 hover:scale-[1.01] transition-all cursor-pointer relative overflow-hidden flex flex-col justify-between space-y-4 shadow-xl hover:shadow-amber-950/50"
         >
           <div className="flex items-center justify-between">
             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[10px] font-black uppercase tracking-wider">
@@ -729,18 +727,18 @@ export const Faturamento: React.FC = () => {
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                setActiveTab('areceber');
+                setIsReceberModalOpen(true);
               }}
               className="px-3 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 text-xs font-bold flex items-center gap-1 transition-all active:scale-95 cursor-pointer"
             >
-              Ver Tabela
+              Ver Faturas
             </button>
           </div>
 
           <div>
             <p className="text-xs font-bold text-zinc-400 flex items-center justify-between">
               <span>Saldo a Cobrar dos Clientes</span>
-              <span className="text-[10px] text-amber-400 font-bold">{expandedCard === 'areceber' ? '▲ Ocultar' : '▼ Expandir Detalhes'}</span>
+              <span className="text-[10px] text-amber-400 font-bold">🔍 Abrir Painel</span>
             </p>
             <h2 className="text-3xl font-black text-amber-400 tracking-tight mt-1">
               {formatCurrency(
@@ -756,8 +754,8 @@ export const Faturamento: React.FC = () => {
               <span>Pedidos Pendentes:</span>
               <span className="font-bold text-amber-300">{allTimePendingOrders.length} pedido(s)</span>
             </div>
-            <p className="text-[10px] text-amber-400/70 font-medium pt-1 flex items-center gap-1">
-              ✨ Toque para ver mais detalhes
+            <p className="text-[10px] text-amber-400/80 font-medium pt-1 flex items-center gap-1">
+              ✨ Toque para ver mais detalhes & devedores
             </p>
           </div>
         </div>
@@ -2007,6 +2005,16 @@ export const Faturamento: React.FC = () => {
         onClose={() => setIsFinModalOpen(false)}
         type={finModalType}
         onSubmitTransaction={handleAddFinancialTransaction}
+      />
+
+      {/* Modal Inteligente de Detalhamento A Receber */}
+      <ReceberDetailsModal
+        isOpen={isReceberModalOpen}
+        onClose={() => setIsReceberModalOpen(false)}
+        pendingOrders={allTimePendingOrders}
+        canSeeFinancials={permissions?.canSeeFinancials ?? true}
+        onSelectClientForZap={(client) => setSelectedClient(client)}
+        onRefreshData={fetchBillingData}
       />
     </div>
   );
