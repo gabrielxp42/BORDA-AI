@@ -42,8 +42,26 @@ export const printThermalReceipt = (order: OrderPDFData, canSeeFinancials: boole
     <div class="separator-dashed">- - - - - - - - - - - -</div>
   `}).join('');
 
-  const companyName = order.companyName || 'BORDADOS';
-  const phoneStr = order.companyPhone ? `<div class="line">Tel: ${order.companyPhone}</div>` : '';
+  // Tentar carregar configurações da empresa do localStorage como fallback
+  let companyName = order.companyName;
+  let companyPhone = order.companyPhone;
+  let companyAddress = order.companyAddress;
+  let companyDocument = order.companyDocument;
+  let pixKey = order.pixKey;
+
+  try {
+    const saved = localStorage.getItem('borda_company_settings');
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (!companyName) companyName = parsed.systemName;
+      if (!companyPhone) companyPhone = parsed.phone || parsed.companyPhone;
+      if (!companyAddress) companyAddress = parsed.address || parsed.companyAddress;
+      if (!companyDocument) companyDocument = parsed.document || parsed.cnpj;
+      if (!pixKey) pixKey = parsed.pixKey;
+    }
+  } catch (e) {}
+
+  companyName = companyName || 'BORDA AI';
 
   const htmlContent = `
     <!DOCTYPE html>
@@ -63,46 +81,54 @@ export const printThermalReceipt = (order: OrderPDFData, canSeeFinancials: boole
           padding: 5px 0;
           color: #000;
           background: #fff;
-          font-size: 13px;
-          line-height: 1.3;
+          font-size: 12px;
+          line-height: 1.25;
           font-weight: 500;
         }
         .header {
           text-align: center;
-          margin-bottom: 15px;
-        }
-        .title {
-          font-size: 18px;
-          font-weight: 900;
-          display: block;
-        }
-        .subtitle {
-          font-size: 14px;
-          margin-top: 5px;
-        }
-        .section {
           margin-bottom: 10px;
         }
+        .title {
+          font-size: 16px;
+          font-weight: 900;
+          display: block;
+          letter-spacing: 0.5px;
+        }
+        .subtitle {
+          font-size: 13px;
+          font-weight: bold;
+          margin-top: 3px;
+        }
+        .company-info {
+          font-size: 9.5px;
+          color: #222;
+          margin-top: 3px;
+          line-height: 1.2;
+        }
+        .section {
+          margin-bottom: 8px;
+        }
         .line {
-          margin-bottom: 3px;
+          margin-bottom: 2px;
         }
         .separator {
-          margin: 10px 0;
+          margin: 8px 0;
           border-bottom: 2px solid #000;
         }
         .separator-dashed {
-          margin: 5px 0;
+          margin: 4px 0;
           text-align: center;
           color: #333;
           font-size: 10px;
         }
         .item-block {
-          margin-bottom: 8px;
+          margin-bottom: 6px;
         }
         .compact-row {
           display: flex;
           justify-content: space-between;
-          font-size: 12px;
+          font-size: 11px;
           margin-bottom: 2px;
         }
         .compact-name {
@@ -114,17 +140,17 @@ export const printThermalReceipt = (order: OrderPDFData, canSeeFinancials: boole
           min-width: 60px;
         }
         .total-block {
-          margin-top: 10px;
-          font-size: 18px;
+          margin-top: 8px;
+          font-size: 16px;
           font-weight: 900;
           text-align: right;
           border-top: 2px solid #000;
-          padding-top: 5px;
+          padding-top: 4px;
         }
         .footer {
-          margin-top: 25px;
+          margin-top: 15px;
           text-align: center;
-          font-size: 11px;
+          font-size: 10px;
         }
         ::-webkit-scrollbar {
           display: none;
@@ -134,20 +160,23 @@ export const printThermalReceipt = (order: OrderPDFData, canSeeFinancials: boole
     <body>
       <div class="header">
         <span class="title">${companyName.toUpperCase()}</span>
-        <span class="subtitle">PEDIDO #${order.orderNumber || order.id.slice(0, 6)}</span>
-        <div style="font-size: 11px; margin-top: 3px;">${formatDate(order.createdAt)}</div>
+        ${companyPhone ? `<div class="company-info">📞 ${companyPhone} ${companyDocument ? `| CNPJ/CPF: ${companyDocument}` : ''}</div>` : ''}
+        ${companyAddress ? `<div class="company-info">📍 ${companyAddress}</div>` : ''}
+        
+        <div class="subtitle" style="margin-top: 6px;">ORDEM DE SERVIÇO #${order.orderNumber || order.id.slice(0, 6)}</div>
+        <div style="font-size: 10px; margin-top: 2px; color: #444;">Data Entrada: ${formatDate(order.createdAt)}</div>
       </div>
 
       <div class="separator"></div>
 
       <div class="section">
-        <div class="line" style="font-size: 15px; font-weight: bold;">CLI: ${order.clientName?.toUpperCase() || 'CLIENTE GERAL'}</div>
-        ${order.clientPhone ? `<div class="line">Tel: ${order.clientPhone}</div>` : ''}
+        <div class="line" style="font-size: 13px; font-weight: bold;">CLI: ${order.clientName?.toUpperCase() || 'CLIENTE GERAL'}</div>
+        ${order.clientPhone ? `<div class="line" style="font-size: 11px;">Tel: ${order.clientPhone}</div>` : ''}
       </div>
 
       <div class="separator"></div>
 
-      <div style="font-weight: bold; margin-bottom: 8px; font-size: 12px;">ITENS DO PEDIDO</div>
+      <div style="font-weight: bold; margin-bottom: 6px; font-size: 11px; text-transform: uppercase;">ITENS DO PEDIDO</div>
       ${itemsHtml}
 
       ${canSeeFinancials ? `
@@ -156,10 +185,10 @@ export const printThermalReceipt = (order: OrderPDFData, canSeeFinancials: boole
       </div>
       ` : ''}
       
-      <div style="margin-top: 10px; border-top: 1px dashed #ccc; padding-top: 5px; font-size: 11px;">
+      <div style="margin-top: 8px; border-top: 1px dashed #ccc; padding-top: 5px; font-size: 10.5px;">
         ${order.dueDate ? `
         <div class="line" style="text-align: right;">
-          ENTREGA: <strong>${format(new Date(order.dueDate), 'dd/MM/yyyy')}</strong>
+          PREVISÃO ENTREGA: <strong>${format(new Date(order.dueDate), 'dd/MM/yyyy')}</strong>
         </div>` : ''}
         
         <div class="line" style="text-align: right;">
@@ -179,19 +208,24 @@ export const printThermalReceipt = (order: OrderPDFData, canSeeFinancials: boole
         <div class="line" style="text-align: right;">
           MÉTODO: <strong>${order.paymentMethod.toUpperCase()}</strong>
         </div>` : ''}
+
+        ${pixKey ? `
+        <div class="line" style="text-align: right; margin-top: 3px; font-size: 9.5px;">
+          CHAVE PIX: <strong>${pixKey}</strong>
+        </div>` : ''}
       </div>
 
       ${cleanNotes ? `
       <div class="separator"></div>
-      <div style="font-size: 11px;">
+      <div style="font-size: 10px;">
         <strong>OBSERVAÇÕES:</strong><br/>
         ${cleanNotes.replace(/\n/g, '<br/>')}
       </div>
       ` : ''}
 
       <div class="footer">
-        <p>*** AGRADECEMOS A PREFERÊNCIA ***</p>
-        <p style="font-size: 9px; margin-top: 5px;">${phoneStr}</p>
+        <p style="font-weight: bold; margin-bottom: 2px;">*** AGRADECEMOS A PREFERÊNCIA ***</p>
+        ${companyPhone ? `<p style="font-size: 9px; margin-top: 2px;">Atendimento: ${companyPhone}</p>` : ''}
       </div>
       
       <script>

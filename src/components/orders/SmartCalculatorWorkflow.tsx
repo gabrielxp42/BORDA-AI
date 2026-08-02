@@ -1140,6 +1140,7 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
             totalPrice: calculation.totalPrice || 0
           }],
       companyName: settings.systemName,
+      companyColor: settings.primaryColor,
       canSeeFinancials: isUnlocked
     };
 

@@ -186,6 +186,7 @@ export const PedidosKanban: React.FC<PedidosKanbanProps> = ({
         totalPrice: it.total_price || 0
       })),
       companyName: settings.systemName,
+      companyColor: settings.primaryColor,
       canSeeFinancials: canViewPrices,
     });
   };

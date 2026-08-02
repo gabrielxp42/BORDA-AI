@@ -35,7 +35,16 @@ export const printOrderReceipt = (order: OrderPDFData) => {
   const { cleanNotes } = parsePaymentMetadata(order.notes);
   const canSee = order.canSeeFinancials !== false; // defaults to true if not provided
 
-  const brandColor = order.companyColor || '#9333ea';
+  let fallbackColor = '#8B5CF6';
+  try {
+    const saved = localStorage.getItem('borda_company_settings');
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (parsed.primaryColor) fallbackColor = parsed.primaryColor;
+    }
+  } catch (e) {}
+
+  const brandColor = order.companyColor || fallbackColor;
   const companyName = order.companyName || 'GUAÇU BORDADOS';
   const companySubtitle = order.companySubtitle || 'GESTÃO INTELIGENTE DE BORDADOS';
   const orderCode = order.orderNumber ? `#${order.orderNumber}` : `#${order.id.slice(0, 6)}`;
