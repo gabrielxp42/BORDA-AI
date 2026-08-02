@@ -10,7 +10,7 @@ import { formatCurrency } from '@/utils/currencyFormatter';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { getWhatsAppWebLink, sendEvolutionText, formatWhatsAppNumber } from '@/services/whatsappService';
-import { parsePaymentMetadata } from '@/utils/paymentHelper';
+import { parsePaymentMetadata, formatOrderPaymentBadgeDetails } from '@/utils/paymentHelper';
 import { printOrderReceipt } from '@/services/pdfGenerator';
 import { printThermalReceipt } from '@/services/thermalPrinter';
 import { useCompanySettings } from '@/contexts/CompanySettingsContext';
@@ -97,32 +97,30 @@ const PedidoGridCardComponent: React.FC<PedidoGridCardProps> = ({
 
   const isUnpriced = order.total_amount === 0;
 
-  // Badge de Pagamento
+  // Badge de Pagamento com Detalhes Completos (Sinal via PIX / Pago via Dinheiro)
   const paymentBadge = useMemo(() => {
-    const paidDateStr = metadata?.paidAt 
-      ? format(new Date(metadata.paidAt), "dd/MM 'às' HH:mm", { locale: ptBR }) 
-      : null;
+    const details = formatOrderPaymentBadgeDetails(order.payment_status, order.total_amount, order.notes, order.payment_method);
 
-    if (order.payment_status === 'paid') {
+    if (details.status === 'paid') {
       return {
-        label: paidDateStr ? `✓ Pago (${paidDateStr})` : '✓ Pago 100%',
+        label: details.fullLabel,
         className: 'border-emerald-500/40 bg-emerald-500/10 text-emerald-400 shadow-sm shadow-emerald-500/10',
         icon: CheckCircle2
       };
     }
-    if (order.payment_status === 'half_paid') {
+    if (details.status === 'half_paid') {
       return {
-        label: '⚡ Sinal 50%',
+        label: details.fullLabel,
         className: 'border-blue-500/40 bg-blue-500/10 text-blue-400 shadow-sm shadow-blue-500/10',
         icon: HandCoins
       };
     }
     return {
-      label: '⏳ Aguardando Pagamento',
+      label: details.fullLabel,
       className: 'border-rose-500/40 bg-rose-500/10 text-rose-400 shadow-sm shadow-rose-500/10',
       icon: AlertCircle
     };
-  }, [order.payment_status, metadata?.paidAt]);
+  }, [order.payment_status, order.total_amount, order.notes, order.payment_method]);
 
   // Gerador Impressão Direta PDF Ordem de Serviço com Identidade Visual Total
   const getPrintData = () => ({

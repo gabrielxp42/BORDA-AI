@@ -98,3 +98,75 @@ export function updatePaymentMetadata(
 
   return updated;
 }
+
+/**
+ * Formata nomes amigáveis para os métodos de pagamento.
+ */
+export function formatPaymentMethodName(method?: string): string {
+  if (!method) return '';
+  const m = method.toLowerCase();
+  if (m === 'pix') return 'PIX';
+  if (m === 'credit_card' || m === 'cartao' || m === 'cartão') return 'Cartão';
+  if (m === 'cash' || m === 'dinheiro') return 'Dinheiro';
+  if (m === 'transfer' || m === 'transferencia' || m === 'transferência') return 'Transferência';
+  return method;
+}
+
+/**
+ * Retorna os detalhes formatados de pagamento para os cards de pedidos em toda a aplicação.
+ */
+export function formatOrderPaymentBadgeDetails(
+  paymentStatus: string | undefined,
+  totalAmount: number,
+  notes: string | null | undefined,
+  paymentMethodDb?: string
+): {
+  status: 'pending' | 'half_paid' | 'paid';
+  shortLabel: string;
+  fullLabel: string;
+  methodLabel: string;
+  paidDateStr?: string;
+  depositVal?: number;
+  remainingVal?: number;
+} {
+  const { metadata } = parsePaymentMetadata(notes);
+  const method = paymentMethodDb || metadata.paymentMethod || '';
+  const methodLabel = formatPaymentMethodName(method);
+
+  const paidDateStr = metadata.paidAt
+    ? format(new Date(metadata.paidAt), "dd/MM 'às' HH:mm")
+    : null;
+
+  if (paymentStatus === 'paid') {
+    const methodPart = methodLabel ? ` via ${methodLabel}` : '';
+    const datePart = paidDateStr ? ` em ${paidDateStr}` : '';
+    return {
+      status: 'paid',
+      shortLabel: `✓ Pago 100%${methodPart}`,
+      fullLabel: `✓ Pago 100%: R$ ${totalAmount.toFixed(2)}${methodPart}${datePart}`,
+      methodLabel,
+      paidDateStr: paidDateStr || undefined
+    };
+  }
+
+  if (paymentStatus === 'half_paid') {
+    const depositVal = metadata.depositAmount || totalAmount / 2;
+    const remainingVal = Math.max(0, totalAmount - depositVal);
+    const methodPart = methodLabel ? ` via ${methodLabel}` : '';
+    return {
+      status: 'half_paid',
+      shortLabel: `⚡ Sinal R$ ${depositVal.toFixed(2)}${methodPart}`,
+      fullLabel: `⚡ Sinal: R$ ${depositVal.toFixed(2)}${methodPart} (Restam R$ ${remainingVal.toFixed(2)})`,
+      methodLabel,
+      depositVal,
+      remainingVal
+    };
+  }
+
+  return {
+    status: 'pending',
+    shortLabel: '⏳ Aguardando Pagamento',
+    fullLabel: `⏳ Aguardando Pagamento (R$ ${totalAmount.toFixed(2)})`,
+    methodLabel: ''
+  };
+}

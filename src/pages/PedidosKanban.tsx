@@ -8,7 +8,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useProfile } from '@/contexts/ProfileContext';
 import { useCompanySettings } from '@/contexts/CompanySettingsContext';
 import { useAuth } from '@/contexts/AuthContext';
-import { parsePaymentMetadata } from '@/utils/paymentHelper';
+import { parsePaymentMetadata, formatOrderPaymentBadgeDetails } from '@/utils/paymentHelper';
 import { printOrderReceipt } from '@/services/pdfGenerator';
 import { printThermalReceipt } from '@/services/thermalPrinter';
 import { sendEvolutionText, getWhatsAppWebLink, handleWhatsAppDispatchError } from '@/services/whatsappService';
@@ -425,13 +425,8 @@ export const PedidosKanban: React.FC<PedidosKanbanProps> = ({
                               )
                             ) : null}
 
-                            {/* Badge de Status de Pagamento (CLICÁVEL COM DATA E HORA DE QUITAÇÃO) */}
+                            {/* Badge de Status de Pagamento (CLICÁVEL COM DETALHES DE VALOR E MÉTODO) */}
                             {(() => {
-                              const { metadata } = parsePaymentMetadata(ord.notes);
-                              const paidDateStr = metadata?.paidAt 
-                                ? format(new Date(metadata.paidAt), "dd/MM 'às' HH:mm") 
-                                : null;
-
                               if (isUnpriced) {
                                 return (
                                   <span 
@@ -440,14 +435,16 @@ export const PedidosKanban: React.FC<PedidosKanbanProps> = ({
                                       setSelectedOrderForPaymentModal(ord);
                                     }}
                                     className="inline-block mt-0.5 animate-pulse px-1.5 py-0.5 rounded-md text-[8px] font-black uppercase bg-amber-500/20 text-amber-400 border border-amber-500/30 cursor-pointer hover:scale-105 transition-transform"
-                                    title="Clique para lançar pagamento"
+                                    title="Clique para lançar orçamento/pagamento"
                                   >
                                     ⚠️ Sem Orçamento
                                   </span>
                                 );
                               }
 
-                              if (ord.payment_status === 'paid') {
+                              const details = formatOrderPaymentBadgeDetails(ord.payment_status, ord.total_amount, ord.notes, ord.payment_method);
+
+                              if (details.status === 'paid') {
                                 return (
                                   <span 
                                     onClick={(e) => {
@@ -455,14 +452,14 @@ export const PedidosKanban: React.FC<PedidosKanbanProps> = ({
                                       setSelectedOrderForPaymentModal(ord);
                                     }}
                                     className="inline-block mt-0.5 px-1.5 py-0.5 rounded-md text-[8px] font-bold uppercase bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 cursor-pointer hover:scale-105 transition-transform"
-                                    title={`Pago em ${paidDateStr || '100%'}. Clique para alterar.`}
+                                    title={`${details.fullLabel}. Clique para alterar.`}
                                   >
-                                    ✓ Pago {paidDateStr ? `(${paidDateStr})` : '100%'}
+                                    {details.shortLabel}
                                   </span>
                                 );
                               }
 
-                              if (ord.payment_status === 'half_paid') {
+                              if (details.status === 'half_paid') {
                                 return (
                                   <span 
                                     onClick={(e) => {
@@ -470,9 +467,9 @@ export const PedidosKanban: React.FC<PedidosKanbanProps> = ({
                                       setSelectedOrderForPaymentModal(ord);
                                     }}
                                     className="inline-block mt-0.5 px-1.5 py-0.5 rounded-md text-[8px] font-bold uppercase bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 cursor-pointer hover:scale-105 transition-transform"
-                                    title="Sinal de 50% recebido. Clique para alterar."
+                                    title={`${details.fullLabel}. Clique para alterar.`}
                                   >
-                                    ⚡ Sinal 50%
+                                    {details.shortLabel}
                                   </span>
                                 );
                               }
@@ -484,9 +481,9 @@ export const PedidosKanban: React.FC<PedidosKanbanProps> = ({
                                     setSelectedOrderForPaymentModal(ord);
                                   }}
                                   className="inline-block mt-0.5 px-1.5 py-0.5 rounded-md text-[8px] font-bold uppercase bg-orange-500/20 text-orange-400 border border-orange-500/30 cursor-pointer hover:scale-105 transition-transform"
-                                  title="Aguardando pagamento. Clique para dar baixa."
+                                  title="Aguardando pagamento. Clique para lançar."
                                 >
-                                  ⏳ Aguardando Pagamento
+                                  {details.shortLabel}
                                 </span>
                               );
                             })()}

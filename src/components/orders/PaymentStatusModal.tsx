@@ -4,13 +4,16 @@ import { supabase } from '@/integrations/supabase/client';
 import { useCompanySettings } from '@/contexts/CompanySettingsContext';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
-import { parsePaymentMetadata, serializePaymentMetadata, updatePaymentMetadata } from '@/utils/paymentHelper';
+import { parsePaymentMetadata, serializePaymentMetadata, updatePaymentMetadata, formatPaymentMethodName } from '@/utils/paymentHelper';
+import { sendEvolutionText } from '@/services/whatsappService';
+import { format } from 'date-fns';
 
 interface PaymentStatusModalProps {
   isOpen: boolean;
   onClose: () => void;
   order: {
     id: string;
+    order_number?: number;
     client?: { name: string; phone?: string };
     payment_status: 'pending' | 'paid' | 'half_paid';
     payment_method?: string;
@@ -37,9 +40,14 @@ export const PaymentStatusModal: React.FC<PaymentStatusModalProps> = ({
     if (isOpen && order) {
       const initialStatus = order.payment_status || 'pending';
       setStatus(initialStatus);
-      setMethod(''); // Força desmarcado por padrão ao abrir
 
+      // Lê metadados salvos para persistência entre dispositivos
       const { metadata } = parsePaymentMetadata(order.notes);
+      const savedMethod = order.payment_method || metadata.paymentMethod || '';
+      
+      // Se status for pendente, método começa limpo. Caso já seja pago ou sinal, carrega o método gravado.
+      setMethod(initialStatus === 'pending' ? '' : savedMethod);
+
       if (initialStatus === 'paid') {
         setCustomAmount(order.total_amount || 0);
       } else if (initialStatus === 'half_paid') {
@@ -53,13 +61,15 @@ export const PaymentStatusModal: React.FC<PaymentStatusModalProps> = ({
   const handleStatusChange = (newStatus: 'pending' | 'paid' | 'half_paid') => {
     setStatus(newStatus);
     if (!order) return;
-    if (newStatus === 'paid') {
+
+    if (newStatus === 'pending') {
+      setMethod('');
+      setCustomAmount(0);
+    } else if (newStatus === 'paid') {
       setCustomAmount(order.total_amount || 0);
     } else if (newStatus === 'half_paid') {
       const { metadata } = parsePaymentMetadata(order.notes);
       setCustomAmount(metadata.depositAmount || (order.total_amount || 0) / 2);
-    } else {
-      setCustomAmount(0);
     }
   };
 
@@ -78,6 +88,7 @@ export const PaymentStatusModal: React.FC<PaymentStatusModalProps> = ({
     setSaving(true);
     try {
       const paidVal = Number(customAmount) || 0;
+      const selectedMethod = status === 'pending' ? '' : method;
       
       // Parse existing metadata and update it
       const { cleanNotes, metadata: existingMetadata } = parsePaymentMetadata(order.notes);
@@ -85,7 +96,7 @@ export const PaymentStatusModal: React.FC<PaymentStatusModalProps> = ({
         existingMetadata,
         status,
         order.total_amount,
-        method,
+        selectedMethod,
         status === 'half_paid' ? paidVal : undefined
       );
       
@@ -95,7 +106,7 @@ export const PaymentStatusModal: React.FC<PaymentStatusModalProps> = ({
         .from('orders')
         .update({
           payment_status: status,
-          payment_method: method,
+          payment_method: selectedMethod,
           notes: noteWithMetadata
         })
         .eq('id', order.id);
@@ -104,11 +115,36 @@ export const PaymentStatusModal: React.FC<PaymentStatusModalProps> = ({
 
       toast.success('Status financeiro atualizado com sucesso!');
 
-      // Notificação opcional no WhatsApp
+      // Notificação nativa via WhatsApp Evolution API com Toast em tempo real
       if (notifyWhatsApp && order.client?.phone) {
-        const statusText = status === 'paid' ? 'PAGO (100%)' : status === 'half_paid' ? `ENTRADA / SINAL (R$ ${paidVal.toFixed(2)})` : 'PENDENTE';
-        const msg = `Olá ${order.client.name}!\n\nConfirmamos a atualização do seu pedido *#${order.id.slice(0, 6)}* no *${settings.systemName}*:\n💰 Status: *${statusText}*\n💵 Valor Pago: *R$ ${paidVal.toFixed(2)}*\n💳 Forma: *${method ? method.toUpperCase() : 'N/A'}*\n\nQualquer dúvida, estamos à disposição!`;
-        window.open(`https://wa.me/${order.client.phone.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`, '_blank');
+        const toastId = toast.loading("📲 Enviando recibo de pagamento via WhatsApp...");
+        try {
+          const statusText = status === 'paid' 
+            ? `PAGO 100% (R$ ${order.total_amount.toFixed(2)})` 
+            : status === 'half_paid' 
+            ? `ENTRADA / SINAL (R$ ${paidVal.toFixed(2)})` 
+            : 'PENDENTE';
+          
+          const methodText = formatPaymentMethodName(selectedMethod) || 'N/A';
+
+          const msg = `*${settings.systemName || 'BORDA AI'}* — Confirmamos o recebimento do seu pagamento!\n\n` +
+            `📋 *Pedido:* #${order.order_number || order.id.slice(0, 6)}\n` +
+            `👤 *Cliente:* ${order.client.name}\n` +
+            `💰 *Status:* ${statusText}\n` +
+            `💳 *Forma de Pagamento:* ${methodText}\n` +
+            `⏰ *Data/Hora:* ${format(new Date(), "dd/MM/yyyy 'às' HH:mm")}\n\n` +
+            `Qualquer dúvida, estamos à disposição!`;
+
+          const res = await sendEvolutionText(order.client.phone, msg);
+          if (res && res.success) {
+            toast.success("✅ Recibo de pagamento entregue no WhatsApp do cliente!", { id: toastId });
+          } else {
+            toast.info("WhatsApp Evolution API indisponível. Abrindo link do WhatsApp Web...", { id: toastId });
+            window.open(`https://wa.me/${order.client.phone.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`, '_blank');
+          }
+        } catch (e) {
+          toast.error("Erro no envio do WhatsApp.", { id: toastId });
+        }
       }
 
       if (onStatusUpdated) onStatusUpdated();
@@ -218,38 +254,44 @@ export const PaymentStatusModal: React.FC<PaymentStatusModalProps> = ({
             )}
           </AnimatePresence>
 
-          {/* Forma de Pagamento */}
-          <div className="space-y-2">
-            <label className="text-[11px] font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400 flex items-center justify-between">
-              <span>Forma de Pagamento</span>
-              {status !== 'pending' && !method && (
-                <span className="text-[10px] font-bold text-amber-400 animate-pulse">⚠️ Escolha uma opção</span>
-              )}
-            </label>
-            <div className="grid grid-cols-2 gap-2">
-              {[
-                { id: 'pix', label: '⚡ PIX' },
-                { id: 'credit_card', label: '💳 Cartão' },
-                { id: 'cash', label: '💵 Dinheiro' },
-                { id: 'transfer', label: '🏦 Transferência' },
-              ].map(pm => (
-                <button
-                  key={pm.id}
-                  type="button"
-                  onClick={() => setMethod(pm.id)}
-                  className={`py-2.5 px-3 rounded-xl text-xs font-bold border transition-all text-center cursor-pointer ${
-                    method === pm.id
-                      ? 'bg-purple-500/20 text-purple-400 border-purple-500/60 shadow-md ring-1 ring-purple-500/30'
-                      : status !== 'pending' && !method
-                      ? 'border-amber-500/40 text-zinc-400 hover:bg-white/5'
-                      : 'border-slate-200 dark:border-white/10 text-slate-500 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-white/5'
-                  }`}
-                >
-                  {pm.label}
-                </button>
-              ))}
+          {/* Forma de Pagamento (Exibida Apenas se Sinal 50% ou Pago 100%) */}
+          {status !== 'pending' ? (
+            <div className="space-y-2 animate-in fade-in duration-200">
+              <label className="text-[11px] font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400 flex items-center justify-between">
+                <span>Forma de Pagamento</span>
+                {!method && (
+                  <span className="text-[10px] font-bold text-amber-400 animate-pulse">⚠️ Escolha uma opção</span>
+                )}
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  { id: 'pix', label: '⚡ PIX' },
+                  { id: 'credit_card', label: '💳 Cartão' },
+                  { id: 'cash', label: '💵 Dinheiro' },
+                  { id: 'transfer', label: '🏦 Transferência' },
+                ].map(pm => (
+                  <button
+                    key={pm.id}
+                    type="button"
+                    onClick={() => setMethod(pm.id)}
+                    className={`py-2.5 px-3 rounded-xl text-xs font-bold border transition-all text-center cursor-pointer ${
+                      method === pm.id
+                        ? 'bg-purple-500/20 text-purple-400 border-purple-500/60 shadow-md ring-1 ring-purple-500/30'
+                        : !method
+                        ? 'border-amber-500/40 text-zinc-400 hover:bg-white/5'
+                        : 'border-slate-200 dark:border-white/10 text-slate-500 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-white/5'
+                    }`}
+                  >
+                    {pm.label}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs flex items-center gap-2">
+              <span>📌 Pedido marcado como Pendente. Altere o status acima para <strong>Sinal 50%</strong> ou <strong>Pago 100%</strong> para registrar a forma de pagamento.</span>
+            </div>
+          )}
 
           {/* Card Interativo Notificar via WhatsApp (Estilo Verde WhatsApp Premium) */}
           <div 
