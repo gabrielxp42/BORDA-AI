@@ -29,6 +29,8 @@ import { toast } from 'sonner';
 import { CloudSyncMigrationBanner } from '../components/ui/CloudSyncMigrationBanner';
 
 
+import { seed2YearsData } from '../utils/seed2YearsData';
+
 const COLOR_PRESETS = [
   { name: 'Roxo Imperial', value: '#9333ea' },
   { name: 'Azul Elétrico', value: '#2563eb' },
@@ -43,6 +45,7 @@ export const PerfilConfig: React.FC = () => {
   const { settings, updateSettings } = useCompanySettings();
   const { role, isUnlocked, lockToProducao, customProfiles } = useProfile();
 
+  const [isSeeding, setIsSeeding] = useState(false);
   const [systemName, setSystemName] = useState(settings.systemName);
   const [systemSubtitle, setSystemSubtitle] = useState(settings.systemSubtitle);
   const [primaryColor, setPrimaryColor] = useState(settings.primaryColor);
@@ -783,6 +786,27 @@ export const PerfilConfig: React.FC = () => {
             Salvar Todas as Configurações
           </button>
         </div>
+
+        {/* Simular Dados (Apenas Admin/Chefe) - Texto Discreto Semi-transparente */}
+        {(role === 'chefe' || isUnlocked) && (
+          <div className="pt-8 pb-4 flex items-center justify-center">
+            <button
+              type="button"
+              disabled={isSeeding}
+              onClick={async () => {
+                if (window.confirm("⚠️ ATENÇÃO: Deseja simular 2 anos de histórico de pedidos, clientes e lançamentos para sua conta?\n\nIsso irá popular seu banco de dados com histórico completo de clientes, vendas e gráficos do faturamento.")) {
+                  setIsSeeding(true);
+                  await seed2YearsData();
+                  setIsSeeding(false);
+                }
+              }}
+              className="text-[11px] font-bold text-slate-500/40 dark:text-zinc-600/40 hover:text-purple-400 dark:hover:text-purple-400 hover:opacity-100 transition-all flex items-center gap-1.5 cursor-pointer group"
+            >
+              <Sparkles className="h-3.5 w-3.5 opacity-30 group-hover:opacity-100 group-hover:text-purple-400 transition-opacity" />
+              <span>{isSeeding ? 'Simulando 2 Anos de Histórico...' : '✨ Simular Dados (2 Anos de Histórico)'}</span>
+            </button>
+          </div>
+        )}
       </form>
     </div>
   );
