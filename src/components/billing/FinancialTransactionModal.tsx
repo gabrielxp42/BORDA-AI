@@ -25,6 +25,9 @@ export const FinancialTransactionModal: React.FC<FinancialTransactionModalProps>
   const [amount, setAmount] = useState<number | ''>('');
   const [category, setCategory] = useState<string>(isIncome ? 'Venda Avulsa / Balcão' : 'Compra de Insumo');
   const [paymentMethod, setPaymentMethod] = useState<'pix' | 'cash' | 'credit_card' | 'transfer' | 'other'>('pix');
+  const [expenseType, setExpenseType] = useState<'fixed' | 'variable'>('variable');
+  const [dueDate, setDueDate] = useState<string>('');
+  const [status, setStatus] = useState<'pending' | 'paid'>('paid');
   const [notes, setNotes] = useState('');
 
   if (!isOpen) return null;
@@ -48,6 +51,9 @@ export const FinancialTransactionModal: React.FC<FinancialTransactionModalProps>
       category,
       payment_method: paymentMethod,
       date: new Date().toISOString(),
+      expense_type: isIncome ? undefined : expenseType,
+      due_date: (!isIncome && expenseType === 'fixed' && dueDate) ? dueDate : undefined,
+      status: !isIncome ? status : undefined,
       notes: notes.trim() || undefined,
     });
 
@@ -159,6 +165,65 @@ export const FinancialTransactionModal: React.FC<FinancialTransactionModalProps>
               )}
             </select>
           </div>
+
+          {/* Tipo de Despesa (Fixo vs Variável) */}
+          {!isIncome && (
+            <div className="grid grid-cols-2 gap-3 p-3 rounded-2xl bg-white/5 border border-white/10">
+              <button
+                type="button"
+                onClick={() => setExpenseType('variable')}
+                className={`py-2 px-3 rounded-xl text-xs font-bold transition-all ${
+                  expenseType === 'variable' 
+                    ? 'bg-purple-600 text-white shadow-md' 
+                    : 'text-zinc-400 hover:text-white hover:bg-white/5'
+                }`}
+              >
+                💸 Gasto Variável
+              </button>
+              <button
+                type="button"
+                onClick={() => setExpenseType('fixed')}
+                className={`py-2 px-3 rounded-xl text-xs font-bold transition-all ${
+                  expenseType === 'fixed' 
+                    ? 'bg-amber-600 text-white shadow-md' 
+                    : 'text-zinc-400 hover:text-white hover:bg-white/5'
+                }`}
+              >
+                📌 Gasto Fixo / Conta
+              </button>
+            </div>
+          )}
+
+          {/* Vencimento e Status para Gastos Fixos */}
+          {!isIncome && expenseType === 'fixed' && (
+            <div className="grid grid-cols-2 gap-3 p-3 rounded-2xl bg-amber-500/10 border border-amber-500/20">
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-amber-300 mb-1">
+                  Data de Vencimento *
+                </label>
+                <input
+                  type="date"
+                  value={dueDate}
+                  onChange={(e) => setDueDate(e.target.value)}
+                  className="w-full bg-black/40 border border-amber-500/30 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-400"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-amber-300 mb-1">
+                  Status da Fatura
+                </label>
+                <select
+                  value={status}
+                  onChange={(e) => setStatus(e.target.value as any)}
+                  className="w-full bg-black/40 border border-amber-500/30 rounded-xl px-3 py-2 text-xs text-white focus:outline-none"
+                >
+                  <option value="pending" className="bg-[#111118]">⏳ A Vencer / Pendente</option>
+                  <option value="paid" className="bg-[#111118]">✅ Já Paga</option>
+                </select>
+              </div>
+            </div>
+          )}
 
           {/* Forma de Pagamento */}
           <div>

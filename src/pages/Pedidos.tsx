@@ -392,7 +392,7 @@ export const Pedidos: React.FC = () => {
                     setIsCreateModalOpen(true);
                   }}
                   onDeleteOrder={handleDeleteOrder}
-                  onCobrarOrder={handleCobrarPedido}
+                  onCobrarOrder={(o) => handleCobrarPedido(o)}
                   onPrintReceipt={(o) => {
                     setSelectedOrderForDetails(o);
                     setTimeout(() => window.print(), 300);

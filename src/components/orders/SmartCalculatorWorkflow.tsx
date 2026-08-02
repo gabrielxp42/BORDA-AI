@@ -109,6 +109,7 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
   const [paymentMethod, setPaymentMethod] = useState<'pix' | 'credit_card' | 'cash' | 'transfer'>('pix');
   const [isPaymentMethodOpen, setIsPaymentMethodOpen] = useState(false);
   const [observations, setObservations] = useState('');
+  const [isPrivate, setIsPrivate] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [depositAmount, setDepositAmount] = useState<number>(0);
   const [activeMatrixTab, setActiveMatrixTab] = useState<'client' | 'global'>('client');
@@ -683,6 +684,9 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
       
       if (isQuick) {
         initialMetadata.isQuickEntry = true;
+      }
+      if (isPrivate) {
+        initialMetadata.isPrivate = true;
       }
       if (uploadedUrls.length > 0) {
         initialMetadata.attachmentUrls = uploadedUrls;
@@ -1656,17 +1660,37 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
                                 </div>
                               </div>
                               <div>
-                                <label className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400 mb-1.5 block">
-                                  Observações do Recebimento / Instruções
-                                </label>
+                                <div className="flex items-center justify-between mb-1.5">
+                                  <label className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400 block">
+                                    Observações do Recebimento / Instruções
+                                  </label>
+                                  <button
+                                    type="button"
+                                    onClick={() => setIsPrivate(!isPrivate)}
+                                    className={`flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1 rounded-xl border transition-all ${
+                                      isPrivate 
+                                        ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 shadow-sm' 
+                                        : 'bg-white/5 text-zinc-400 border-white/10 hover:text-white'
+                                    }`}
+                                    title="Restringir visualização do pedido apenas para o Dono/Financeiro"
+                                  >
+                                    <Lock className={`h-3 w-3 ${isPrivate ? 'text-amber-400' : 'text-zinc-500'}`} />
+                                    <span>{isPrivate ? '🔒 Pedido Sigiloso' : 'Público (Equipe)'}</span>
+                                  </button>
+                                </div>
                                 <textarea
                                   rows={3}
                                   value={observations}
                                   onChange={e => setObservations(e.target.value)}
-                                  placeholder="Ex: Peças deixadas na sacola, cliente solicita bordado no peito esquerdo e manga direita. Sem matriz pronta."
+                                  placeholder="Ex: Peças deixadas na sacola, cliente solicita bordado no peito esquerdo e manga direita."
                                   className="w-full bg-slate-50 dark:bg-white/5 border border-slate-300 dark:border-white/10 rounded-2xl px-4 py-2.5 text-xs text-slate-900 dark:text-white outline-none resize-none"
                                   style={observations.trim() ? { borderColor: `${settings.primaryColor}30` } : undefined}
                                 />
+                                {isPrivate && (
+                                  <p className="text-[10px] text-amber-400/90 font-medium mt-1 flex items-center gap-1">
+                                    <span>⚠️ Apenas o Chefe/Financeiro poderá visualizar os detalhes e valores deste pedido.</span>
+                                  </p>
+                                )}
                               </div>
                               {renderAttachments()}
                             </div>

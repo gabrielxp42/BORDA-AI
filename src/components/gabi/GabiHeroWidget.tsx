@@ -248,6 +248,32 @@ export const GabiHeroWidget: React.FC = () => {
           });
         }
       }
+
+      // 6. Contas Fixas a Vencer
+      try {
+        const savedTxs = localStorage.getItem('borda_financial_transactions');
+        if (savedTxs) {
+          const txs: any[] = JSON.parse(savedTxs);
+          const pendingFixed = txs.filter(t => t.type === 'expense' && t.expense_type === 'fixed' && t.status !== 'paid' && t.due_date);
+          if (pendingFixed.length > 0) {
+            newAlerts.push({
+              id: 'group_contas_vencer',
+              type: 'contas_vencer',
+              icon: <Clock className="h-5 w-5" />,
+              title: `${pendingFixed.length} fatura${pendingFixed.length > 1 ? 's' : ''} / conta${pendingFixed.length > 1 ? 's' : ''} a vencer`,
+              description: 'Lembrete da Gabi para não atrasar pagamentos.',
+              severity: 'warning',
+              items: pendingFixed.map((c: any) => ({
+                id: `fixed_${c.id}`,
+                title: c.description,
+                subtitle: `Vencimento: ${c.due_date} - R$ ${c.amount}`,
+              }))
+            });
+          }
+        }
+      } catch (e) {
+        console.error('Erro ao ler contas fixas na Gabi:', e);
+      }
     } catch (err) {
       console.error('[Gabi] Erro ao carregar alertas:', err);
     }

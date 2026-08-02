@@ -73,6 +73,8 @@ export const Faturamento: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [billingData, setBillingData] = useState<ClientBillingData[]>([]);
   const [rawOrders, setRawOrders] = useState<any[]>([]);
+  const [activeTab, setActiveTab] = useState<'entradas' | 'fixos' | 'variaveis' | 'areceber' | 'resumo'>('resumo');
+  const [allTimePendingOrders, setAllTimePendingOrders] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedMonthOffset, setSelectedMonthOffset] = useState<number>(0); // 0 = este mês, -1 = mês passado
 
@@ -155,11 +157,8 @@ export const Faturamento: React.FC = () => {
       const { data: orders, error: ordersError } = await supabase
         .from('orders')
         .select(`
-          id, 
-          total_amount, 
-          payment_status,
-          created_at,
-          clients (id, name, phone)
+          id, order_number, total_amount, payment_status, created_at, notes, due_date,
+          clients (id, name, phone, company_name)
         `)
         .eq('user_id', userId)
         .gte('created_at', start)
@@ -167,6 +166,19 @@ export const Faturamento: React.FC = () => {
 
       if (ordersError) throw ordersError;
       setRawOrders(orders || []);
+
+      // Buscar A Receber Acumulado (histórico completo de pedidos pendentes)
+      const { data: pendingOrders } = await supabase
+        .from('orders')
+        .select(`
+          id, order_number, total_amount, payment_status, created_at, notes, due_date,
+          clients (id, name, phone, company_name)
+        `)
+        .eq('user_id', userId)
+        .neq('payment_status', 'paid')
+        .order('created_at', { ascending: false });
+
+      setAllTimePendingOrders(pendingOrders || []);
 
       let gTotal = 0;
       let pTotal = 0;
@@ -566,6 +578,29 @@ export const Faturamento: React.FC = () => {
             </div>
           </div>
         </button>
+      </div>
+
+      {/* 🧭 NAVEGAÇÃO EM 5 ABAS FINANCEIRAS EXECUTIVAS */}
+      <div className="flex items-center gap-2 p-1.5 bg-white/5 border border-white/10 rounded-2xl overflow-x-auto custom-scrollbar">
+        {[
+          { id: 'resumo', label: '📊 Resumo & DRE' },
+          { id: 'entradas', label: '📥 Entradas (Dia a Dia)' },
+          { id: 'fixos', label: '📌 Gastos Fixos / Contas' },
+          { id: 'variaveis', label: '💸 Gastos Variáveis' },
+          { id: 'areceber', label: '⏳ A Receber (Acumulado)' },
+        ].map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id as any)}
+            className={`px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all whitespace-nowrap flex items-center gap-2 ${
+              activeTab === tab.id
+                ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/30 scale-[1.02]'
+                : 'text-zinc-400 hover:text-white hover:bg-white/5'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
       </div>
 
       {/* Grid de 6 KPIs Financeiros Executivos */}

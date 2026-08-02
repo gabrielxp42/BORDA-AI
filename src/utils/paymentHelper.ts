@@ -10,6 +10,7 @@ export interface PaymentMetadata {
   paymentMethod?: string;
   paidAt?: string;
   isQuickEntry?: boolean;
+  isPrivate?: boolean;
   attachmentUrls?: string[];
   history?: PaymentHistoryEntry[];
 }

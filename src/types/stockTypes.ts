@@ -39,6 +39,9 @@ export interface FinancialTransaction {
   category: string; // e.g., 'Compra de Linha', 'Venda Avulsa', 'Manutenção', 'Conta de Luz', 'Outros'
   payment_method: 'pix' | 'cash' | 'credit_card' | 'transfer' | 'other';
   date: string;
+  expense_type?: 'fixed' | 'variable';
+  due_date?: string;
+  status?: 'pending' | 'paid' | 'overdue';
   order_id?: string;
   notes?: string;
   created_at: string;

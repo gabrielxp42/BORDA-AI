@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   ShoppingBag, Play, Package, Lock, Printer, Send, FileText, 
   Building, Phone, AlertTriangle, Calendar, Zap, Download, 
-  CheckCircle2, Clock, Eye 
+  CheckCircle2, Clock, Eye, Plus 
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useProfile } from '@/contexts/ProfileContext';
@@ -13,6 +13,8 @@ import { printOrderReceipt } from '@/services/pdfGenerator';
 import { printThermalReceipt } from '@/services/thermalPrinter';
 import { sendEvolutionText, getWhatsAppWebLink, handleWhatsAppDispatchError } from '@/services/whatsappService';
 import { useBackgroundTasks } from '@/hooks/useBackgroundTasks';
+import { KanbanAddOrderModal } from '@/components/orders/KanbanAddOrderModal';
+import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 
@@ -293,36 +295,75 @@ export const PedidosKanban: React.FC<PedidosKanbanProps> = ({
     }
   };
 
+  const [addModalColumn, setAddModalColumn] = useState<{ id: string; title: string } | null>(null);
+
+  const assignOrderToColumn = async (orderId: string, columnId: string) => {
+    moveOrder(orderId, columnId);
+  };
+
   return (
-    <DragDropContext onDragEnd={handleDragEnd}>
-      <div className="space-y-4 h-full flex flex-col">
+    <>
+      {addModalColumn && (
+        <KanbanAddOrderModal
+          isOpen={!!addModalColumn}
+          onClose={() => setAddModalColumn(null)}
+          targetColumnId={addModalColumn.id}
+          targetColumnTitle={addModalColumn.title}
+          onOrderAssigned={assignOrderToColumn}
+          onOpenQuickOrder={() => {
+            if (onQuickPrice) {
+              onQuickPrice({ status: addModalColumn.id });
+            }
+          }}
+        />
+      )}
 
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4 flex-1 pb-6">
-          {columns.map((col) => {
-            const colOrders = orders.filter((o) => o.status === col.id);
-            return (
-              <Droppable droppableId={col.id} key={col.id}>
-                {(provided, snapshot) => (
-                  <div 
-                    ref={provided.innerRef}
-                    {...provided.droppableProps}
-                    className={`glass-panel p-3 md:p-4 rounded-3xl space-y-3 flex flex-col min-h-[200px] md:min-h-[520px] transition-colors ${snapshot.isDraggingOver ? 'bg-white/5 border-purple-500/30' : ''}`}
-                  >
-                    <div className={`p-2.5 rounded-2xl border text-xs font-black uppercase tracking-wider flex items-center justify-between transition-colors ${col.color} ${snapshot.isDraggingOver ? 'shadow-lg shadow-purple-500/10' : ''}`}>
-                      <span>{col.title}</span>
-                      <span className="h-5 w-5 rounded-full bg-white/10 flex items-center justify-center text-[10px]">
-                        {colOrders.length}
-                      </span>
-                    </div>
-
-                    <div className="space-y-3 flex-1 overflow-y-auto custom-scrollbar pt-1 pb-4 pr-1">
-                      {loading ? (
-                        <div className="h-32 flex items-center justify-center text-zinc-500 text-xs font-medium">Carregando...</div>
-                      ) : colOrders.length === 0 ? (
-                        <div className="h-32 flex items-center justify-center text-zinc-600 text-xs font-medium italic border border-dashed border-white/5 rounded-2xl">
-                          Vazio
+      <DragDropContext onDragEnd={handleDragEnd}>
+        <div className="space-y-4 h-full flex flex-col">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4 flex-1 pb-6">
+            {columns.map((col) => {
+              const colOrders = orders.filter((o) => o.status === col.id);
+              return (
+                <Droppable droppableId={col.id} key={col.id}>
+                  {(provided: any, snapshot: any) => (
+                    <div 
+                      ref={provided.innerRef}
+                      {...provided.droppableProps}
+                      className={`glass-panel p-3 md:p-4 rounded-3xl space-y-3 flex flex-col min-h-[200px] md:min-h-[520px] transition-colors ${snapshot.isDraggingOver ? 'bg-white/5 border-purple-500/30' : ''}`}
+                    >
+                      {/* Cabeçalho da Coluna com Botão + */}
+                      <div className={`p-2.5 rounded-2xl border text-xs font-black uppercase tracking-wider flex items-center justify-between transition-colors ${col.color} ${snapshot.isDraggingOver ? 'shadow-lg shadow-purple-500/10' : ''}`}>
+                        <div className="flex items-center gap-2">
+                          <span>{col.title}</span>
+                          <span className="h-5 w-5 rounded-full bg-white/10 flex items-center justify-center text-[10px]">
+                            {colOrders.length}
+                          </span>
                         </div>
-                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setAddModalColumn({ id: col.id, title: col.title })}
+                          className="h-6 w-6 rounded-lg bg-white/10 hover:bg-white/20 text-current flex items-center justify-center transition-all active:scale-95 cursor-pointer"
+                          title={`Adicionar pedido em ${col.title}`}
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+
+                      <div className="space-y-3 flex-1 overflow-y-auto custom-scrollbar pt-1 pb-4 pr-1">
+                        {loading ? (
+                          <div className="h-32 flex items-center justify-center text-zinc-500 text-xs font-medium">Carregando...</div>
+                        ) : colOrders.length === 0 ? (
+                          <div className="h-32 flex flex-col items-center justify-center text-center p-3 border border-dashed border-white/10 rounded-2xl space-y-2">
+                            <span className="text-xs text-zinc-500 italic">Nenhum pedido nesta etapa</span>
+                            <button
+                              type="button"
+                              onClick={() => setAddModalColumn({ id: col.id, title: col.title })}
+                              className="px-3 py-1.5 rounded-xl bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 border border-purple-500/30 text-[11px] font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+                            >
+                              <Plus className="h-3.5 w-3.5" /> Adicionar Pedido
+                            </button>
+                          </div>
+                        ) : (
                         (() => {
                           const limit = visibleLimits[col.id] || 10;
                           const visibleOrders = colOrders.slice(0, limit);
@@ -334,7 +375,7 @@ export const PedidosKanban: React.FC<PedidosKanbanProps> = ({
 
                           return (
                             <Draggable key={ord.id} draggableId={ord.id} index={index}>
-                              {(provided, snapshot) => (
+                              {(provided: any, snapshot: any) => (
                                 <div
                                   ref={provided.innerRef}
                                   {...provided.draggableProps}
@@ -542,9 +583,29 @@ export const PedidosKanban: React.FC<PedidosKanbanProps> = ({
                             <Play className="h-3 w-3 fill-purple-300" /> {ord.status === 'completed' ? 'Reiniciar' : 'Avançar'}
                                   </button>
                                 </div>
+
+                              {/* RODAPÉ DO CARD: BADGE INTEGRADO DE STATUS DE PRODUÇÃO EM LARGURA TOTAL */}
+                              <div className={`-mx-4 -mb-4 mt-3 px-3.5 py-2 border-t rounded-b-2xl flex items-center justify-between text-[10px] font-black uppercase tracking-wide ${col.color}`}>
+                                <span className="flex items-center gap-1.5 truncate">
+                                  <span className="h-2 w-2 rounded-full bg-current animate-pulse shrink-0" />
+                                  <span className="truncate">Etapa: {col.title}</span>
+                                </span>
+                                <div className="flex items-center gap-2 shrink-0 text-[9px] font-bold opacity-90">
+                                  {ord.created_at && (
+                                    <span title="Data de Entrada na oficina">
+                                      Entrada: {format(new Date(ord.created_at), 'dd/MM')}
+                                    </span>
+                                  )}
+                                  {ord.due_date && (
+                                    <span className="text-amber-400 font-extrabold" title="Data de Entrega / Prazo">
+                                      Entrega: {format(new Date(ord.due_date), 'dd/MM')}
+                                    </span>
+                                  )}
+                                </div>
                               </div>
-                            )}
-                            </Draggable>
+                            </div>
+                          )}
+                        </Draggable>
                           );
                         })}
                         {colOrders.length > (visibleLimits[col.id] || 10) && (
@@ -569,6 +630,7 @@ export const PedidosKanban: React.FC<PedidosKanbanProps> = ({
           })}
         </div>
       </div>
-    </DragDropContext>
+      </DragDropContext>
+    </>
   );
 };
