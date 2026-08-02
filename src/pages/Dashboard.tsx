@@ -1,78 +1,79 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   Layers, Calculator, ShoppingBag, Users, ArrowUpRight,
   Sparkles, Package, CheckCircle2, Clock, Plus,
-  UserPlus, FileText, ChevronRight, RefreshCw, Kanban, Boxes, Wrench,
-  ChevronDown, ChevronUp, Layers3
+  UserPlus, FileText, ChevronRight, RefreshCw, Kanban, Boxes,
+  DollarSign, TrendingUp, Award, Phone, MessageCircle, AlertCircle, HandCoins
 } from 'lucide-react';
+import {
+  ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid
+} from 'recharts';
 import { supabase } from '@/integrations/supabase/client';
 import { useCompanySettings } from '../contexts/CompanySettingsContext';
+import { useProfile } from '../contexts/ProfileContext';
 import { CreateOrderModal } from '@/components/orders/CreateOrderModal';
 import { CreateClientModal } from '@/components/clients/CreateClientModal';
 import { OrderDetailsModal } from '@/components/orders/OrderDetailsModal';
+import { PaymentStatusModal } from '@/components/orders/PaymentStatusModal';
 import { toast } from 'sonner';
 import { GabiHeroWidget } from '@/components/gabi/GabiHeroWidget';
+import { formatCurrency } from '@/utils/currencyFormatter';
+import { parsePaymentMetadata, formatOrderPaymentBadgeDetails } from '@/utils/paymentHelper';
+import { format, subMonths, startOfMonth, endOfMonth, isSameMonth } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 
-interface RecentOrder {
+interface OrderRecord {
   id: string;
   order_number?: number;
   client_id: string;
   status: string;
   payment_status: 'pending' | 'paid' | 'half_paid';
+  payment_method?: string;
   total_amount: number;
+  notes?: string;
   created_at: string;
-  clients?: { name: string; phone?: string; company_name?: string };
+  due_date?: string;
+  clients?: { id: string; name: string; phone?: string; company_name?: string };
 }
 
 export const Dashboard: React.FC = () => {
   const { settings } = useCompanySettings();
+  const { permissions } = useProfile();
   const pc = settings.primaryColor;
-  const navigate = useNavigate();
 
-  const [counts, setCounts] = useState({
-    matrices: 0,
-    clients: 0,
-    pendingOrders: 0,
-    doneOrders: 0,
-  });
-  const [recentOrders, setRecentOrders] = useState<RecentOrder[]>([]);
+  const [orders, setOrders] = useState<OrderRecord[]>([]);
+  const [matricesCount, setMatricesCount] = useState<number>(0);
+  const [clientsCount, setClientsCount] = useState<number>(0);
   const [loading, setLoading] = useState(true);
 
-  // Modals state
+  // Modais State
   const [isCreateOrderOpen, setIsCreateOrderOpen] = useState(false);
   const [isCreateClientOpen, setIsCreateClientOpen] = useState(false);
-  const [selectedOrderForDetails, setSelectedOrderForDetails] = useState<RecentOrder | null>(null);
+  const [selectedOrderForDetails, setSelectedOrderForDetails] = useState<OrderRecord | null>(null);
+  const [selectedOrderForPayment, setSelectedOrderForPayment] = useState<OrderRecord | null>(null);
 
-  // Mobile accordions state (by default open 'vendas' on mobile)
-  const [openSection, setOpenSection] = useState<string | null>('vendas');
-
-  const toggleSection = (section: string) => {
-    setOpenSection(prev => (prev === section ? null : section));
-  };
-
-  const loadData = async () => {
+  const loadDashboardData = async () => {
     setLoading(true);
     try {
-      const [matricesRes, clientsRes, pendingRes, doneRes, recentOrdersRes] = await Promise.all([
+      const { data: authData } = await supabase.auth.getUser();
+      const userId = authData?.user?.id;
+
+      const [matricesRes, clientsRes, ordersRes] = await Promise.all([
         supabase.from('matrices').select('id', { count: 'exact', head: true }),
         supabase.from('clients').select('id', { count: 'exact', head: true }),
-        supabase.from('orders').select('id', { count: 'exact', head: true }).neq('payment_status', 'paid'),
-        supabase.from('orders').select('id', { count: 'exact', head: true }).eq('payment_status', 'paid'),
-        supabase.from('orders')
-          .select('id, order_number, client_id, status, payment_status, total_amount, created_at, clients(name, phone, company_name)')
+        supabase
+          .from('orders')
+          .select(`
+            id, order_number, client_id, status, payment_status, payment_method, total_amount, notes, created_at, due_date,
+            clients (id, name, phone, company_name)
+          `)
           .order('created_at', { ascending: false })
-          .limit(5)
       ]);
 
-      setCounts({
-        matrices: matricesRes.count || 0,
-        clients: clientsRes.count || 0,
-        pendingOrders: pendingRes.count || 0,
-        doneOrders: doneRes.count || 0,
-      });
-
-      setRecentOrders((recentOrdersRes.data as unknown as RecentOrder[]) || []);
+      setMatricesCount(matricesRes.count || 0);
+      setClientsCount(clientsRes.count || 0);
+      setOrders((ordersRes.data as unknown as OrderRecord[]) || []);
     } catch (err) {
       console.error('Erro ao carregar dados do Dashboard:', err);
     } finally {
@@ -81,12 +82,12 @@ export const Dashboard: React.FC = () => {
   };
 
   useEffect(() => {
-    loadData();
+    loadDashboardData();
 
     const channel = supabase
-      .channel('realtime-dashboard-orders')
+      .channel('realtime-dashboard-orders-v2')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
-        loadData();
+        loadDashboardData();
       })
       .subscribe();
 
@@ -95,70 +96,127 @@ export const Dashboard: React.FC = () => {
     };
   }, []);
 
-  const stats = [
-    {
-      title: 'Matrizes na Biblioteca',
-      value: loading ? '—' : counts.matrices.toString(),
-      sub: 'Arquivos cadastrados',
-      icon: Layers,
-      color: pc,
-      to: '/matrizes',
-    },
-    {
-      title: 'Clientes Cadastrados',
-      value: loading ? '—' : counts.clients.toString(),
-      sub: 'Na base de dados',
-      icon: Users,
-      color: '#06b6d4',
-      to: '/clientes',
-    },
-    {
-      title: 'Pedidos em Aberto',
-      value: loading ? '—' : counts.pendingOrders.toString(),
-      sub: 'Aguardando pagamento / entrega',
-      icon: Clock,
-      color: '#f59e0b',
-      to: '/pedidos',
-    },
-    {
-      title: 'Pedidos Concluídos',
-      value: loading ? '—' : counts.doneOrders.toString(),
-      sub: 'Pagos e finalizados',
-      icon: CheckCircle2,
-      color: '#10b981',
-      to: '/pedidos',
-    },
-  ];
+  // 1. CÁLCULO DE MÉTRICAS EXECUTIVAS (2 ANOS DE HISTÓRICO)
+  const metrics = useMemo(() => {
+    let totalBilledAllTime = 0;
+    let paidOrdersCount = 0;
+    let totalPendingReceivables = 0;
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'paid':
-        return <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">Pago</span>;
-      case 'half_paid':
-        return <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">Sinal / 50%</span>;
-      default:
-        return <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20">Pendente</span>;
+    let inProductionCount = 0;
+    let pendingQuoteCount = 0;
+    let readyCount = 0;
+
+    orders.forEach(ord => {
+      const val = Number(ord.total_amount || 0);
+      const { metadata } = parsePaymentMetadata(ord.notes);
+
+      if (ord.payment_status === 'paid') {
+        totalBilledAllTime += val;
+        paidOrdersCount += 1;
+      } else if (ord.payment_status === 'half_paid') {
+        const deposit = metadata.depositAmount || val / 2;
+        totalBilledAllTime += deposit;
+        totalPendingReceivables += Math.max(0, val - deposit);
+        paidOrdersCount += 0.5;
+      } else {
+        totalPendingReceivables += val;
+      }
+
+      // Kanban status
+      if (ord.status === 'producao') inProductionCount++;
+      else if (ord.status === 'orcamento') pendingQuoteCount++;
+      else if (ord.status === 'pronto') readyCount++;
+    });
+
+    const averageTicket = paidOrdersCount > 0 ? totalBilledAllTime / Math.max(1, paidOrdersCount) : 0;
+    const totalOrdersCount = orders.length;
+
+    return {
+      totalBilledAllTime,
+      totalOrdersCount,
+      paidOrdersCount: Math.floor(paidOrdersCount),
+      averageTicket,
+      totalPendingReceivables,
+      inProductionCount,
+      pendingQuoteCount,
+      readyCount
+    };
+  }, [orders]);
+
+  // 2. DADOS DO GRÁFICO MENSAL (ÚLTIMOS 12 MESES)
+  const monthlyChartData = useMemo(() => {
+    const monthsData: Record<string, { monthLabel: string; faturamento: number; pedidos: number }> = {};
+
+    // Inicializar os últimos 12 meses em ordem cronológica
+    for (let i = 11; i >= 0; i--) {
+      const d = subMonths(new Date(), i);
+      const key = format(d, 'yyyy-MM');
+      const monthLabel = format(d, 'MMM/yy', { locale: ptBR }).toUpperCase();
+      monthsData[key] = { monthLabel, faturamento: 0, pedidos: 0 };
     }
-  };
+
+    orders.forEach(ord => {
+      if (!ord.created_at) return;
+      const key = format(new Date(ord.created_at), 'yyyy-MM');
+      if (monthsData[key]) {
+        const val = Number(ord.total_amount || 0);
+        const { metadata } = parsePaymentMetadata(ord.notes);
+
+        monthsData[key].pedidos += 1;
+        if (ord.payment_status === 'paid') {
+          monthsData[key].faturamento += val;
+        } else if (ord.payment_status === 'half_paid') {
+          monthsData[key].faturamento += (metadata.depositAmount || val / 2);
+        }
+      }
+    });
+
+    return Object.values(monthsData);
+  }, [orders]);
+
+  // 3. TOP 5 CLIENTES VIPs (MAIORES COMPRADORES HISTÓRICOS)
+  const topClients = useMemo(() => {
+    const map: Record<string, { id: string; name: string; phone?: string; company?: string; totalSpent: number; orderCount: number }> = {};
+
+    orders.forEach(ord => {
+      if (!ord.clients?.id) return;
+      const cId = ord.clients.id;
+      const val = Number(ord.total_amount || 0);
+
+      if (!map[cId]) {
+        map[cId] = {
+          id: cId,
+          name: ord.clients.name || 'Cliente sem nome',
+          phone: ord.clients.phone,
+          company: ord.clients.company_name,
+          totalSpent: 0,
+          orderCount: 0
+        };
+      }
+
+      map[cId].orderCount += 1;
+      if (ord.payment_status === 'paid') {
+        map[cId].totalSpent += val;
+      } else if (ord.payment_status === 'half_paid') {
+        const { metadata } = parsePaymentMetadata(ord.notes);
+        map[cId].totalSpent += (metadata.depositAmount || val / 2);
+      }
+    });
+
+    return Object.values(map)
+      .sort((a, b) => b.totalSpent - a.totalSpent)
+      .slice(0, 5);
+  }, [orders]);
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-300">
+    <div className="space-y-6 animate-in fade-in duration-300 pb-12">
 
-      {/* Banner de Boas-Vindas + Ações de Acesso Rápido */}
+      {/* Banner Executivo de Boas-Vindas + Botões Principais */}
       <div className="relative overflow-hidden rounded-3xl p-6 sm:p-8 border border-slate-200 dark:border-white/10 shadow-xl bg-white dark:bg-[#0d0d14]">
-        {/* Degradê dinâmico da cor primária que transiciona suavemente para o fundo (branco no claro, escuro no escuro) */}
         <div
           className="absolute inset-0 pointer-events-none"
           style={{
             background: `linear-gradient(135deg, ${pc}35 0%, ${pc}10 40%, transparent 100%)`,
-          }}
-        />
-
-        <div
-          className="absolute inset-0 opacity-[0.05] dark:opacity-[0.04] pointer-events-none"
-          style={{
-            backgroundImage: `repeating-linear-gradient(45deg, ${pc} 0, ${pc} 1px, transparent 0, transparent 50%)`,
-            backgroundSize: '20px 20px'
           }}
         />
 
@@ -168,33 +226,33 @@ export const Dashboard: React.FC = () => {
               className="inline-flex items-center gap-2 px-3 py-1 rounded-full border text-xs font-bold uppercase tracking-widest shadow-xs"
               style={{ backgroundColor: `${pc}15`, borderColor: `${pc}30`, color: pc }}
             >
-              <Sparkles className="h-3.5 w-3.5" /> Painel Operacional
+              <Sparkles className="h-3.5 w-3.5" /> Centro de Comando & Operação
             </div>
             <h2 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900 dark:text-white">
-              Bem-vindo ao <span style={{ color: pc }}>{settings.systemName}</span>
+              Painel Geral do <span style={{ color: pc }}>{settings.systemName}</span>
             </h2>
-            <p className="text-sm text-slate-600 dark:text-zinc-300 max-w-xl">
-              Crie pedidos rapidamente, cadastre clientes e gerencie sua produção de bordados sem complicação.
+            <p className="text-xs sm:text-sm text-slate-600 dark:text-zinc-300 max-w-xl">
+              Visão consolidada de produção, faturamento acumulado, fluxo de pedidos e acervo Wilcom.
             </p>
           </div>
 
-          {/* Botões Principais do Dia a Dia */}
+          {/* Botões de Ação Rápida */}
           <div className="flex flex-wrap gap-3 items-center">
             <button
               onClick={() => setIsCreateOrderOpen(true)}
-              className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-5 py-3.5 rounded-2xl font-bold text-white shadow-lg transition-all hover:scale-105 active:scale-95 cursor-pointer text-sm"
+              className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-5 py-3.5 rounded-2xl font-bold text-white shadow-lg transition-all hover:scale-105 active:scale-95 cursor-pointer text-xs uppercase tracking-wider"
               style={{
                 backgroundColor: pc,
                 boxShadow: `0 8px 20px -4px ${pc}60`
               }}
             >
-              <Plus className="h-5 w-5" />
+              <Plus className="h-4 w-4" />
               <span>Criar Novo Pedido</span>
             </button>
 
             <button
               onClick={() => setIsCreateClientOpen(true)}
-              className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-4 py-3.5 rounded-2xl font-semibold text-slate-800 dark:text-white bg-slate-100 hover:bg-slate-200 dark:bg-white/10 dark:hover:bg-white/15 border border-slate-200 dark:border-white/20 backdrop-blur-md transition-all hover:scale-105 active:scale-95 cursor-pointer text-sm shadow-xs"
+              className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-4 py-3.5 rounded-2xl font-bold text-slate-800 dark:text-white bg-slate-100 hover:bg-slate-200 dark:bg-white/10 dark:hover:bg-white/15 border border-slate-200 dark:border-white/20 transition-all hover:scale-105 active:scale-95 cursor-pointer text-xs uppercase tracking-wider shadow-xs"
             >
               <UserPlus className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
               <span>Novo Cliente</span>
@@ -203,53 +261,200 @@ export const Dashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* 🤖 GABI AI Hero Widget */}
+      {/* 🤖 Assistente Virtual GABI IA */}
       <GabiHeroWidget />
 
-      {/* KPIs operacionais */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {stats.map((s, i) => {
-          const Icon = s.icon;
-          return (
-            <Link
-              key={i}
-              to={s.to}
-              className="glass-panel p-4 rounded-3xl border border-slate-200 dark:border-white/10 hover:border-slate-300 dark:hover:border-white/25 transition-all group block"
-            >
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400 leading-tight">{s.title}</span>
-                <div
-                  className="h-8 w-8 rounded-xl flex items-center justify-center shrink-0 transition-transform group-hover:scale-110"
-                  style={{ backgroundColor: `${s.color}15` }}
-                >
-                  <Icon className="h-4 w-4" style={{ color: s.color }} />
-                </div>
-              </div>
-              <p className="text-2xl font-black text-slate-900 dark:text-white leading-none">{s.value}</p>
-              <div className="flex items-center justify-between mt-2">
-                <p className="text-[10px] text-slate-500 dark:text-zinc-400 font-medium">{s.sub}</p>
-                <ArrowUpRight className="h-3.5 w-3.5 text-slate-400 dark:text-zinc-500 group-hover:text-slate-900 dark:group-hover:text-white transition-colors" />
-              </div>
-            </Link>
-          );
-        })}
+      {/* CARDS EXECUTIVOS (KPIs DE DESEMPENHO DE 2 ANOS) */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        
+        {/* Card 1: Faturamento Acumulado */}
+        <div className="glass-panel p-5 rounded-3xl border border-slate-200 dark:border-white/10 hover:border-emerald-500/40 transition-all relative overflow-hidden group">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400">Faturamento Acumulado</span>
+            <div className="h-9 w-9 rounded-2xl bg-emerald-500/15 text-emerald-500 flex items-center justify-center shrink-0">
+              <DollarSign className="h-5 w-5" />
+            </div>
+          </div>
+          <p className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white leading-none">
+            {loading ? '—' : formatCurrency(metrics.totalBilledAllTime, permissions?.canSeeFinancials ?? true)}
+          </p>
+          <p className="text-[11px] text-emerald-500 font-bold mt-2.5 flex items-center gap-1">
+            <TrendingUp className="h-3.5 w-3.5" /> Total histórico recebido
+          </p>
+        </div>
+
+        {/* Card 2: Ticket Médio por Pedido */}
+        <div className="glass-panel p-5 rounded-3xl border border-slate-200 dark:border-white/10 hover:border-purple-500/40 transition-all relative overflow-hidden group">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400">Ticket Médio p/ Pedido</span>
+            <div className="h-9 w-9 rounded-2xl bg-purple-500/15 text-purple-400 flex items-center justify-center shrink-0">
+              <Calculator className="h-5 w-5" />
+            </div>
+          </div>
+          <p className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white leading-none">
+            {loading ? '—' : formatCurrency(metrics.averageTicket, permissions?.canSeeFinancials ?? true)}
+          </p>
+          <p className="text-[11px] text-slate-500 dark:text-zinc-400 font-medium mt-2.5">
+            Média por pedido finalizado
+          </p>
+        </div>
+
+        {/* Card 3: Total de Pedidos Produzidos */}
+        <div className="glass-panel p-5 rounded-3xl border border-slate-200 dark:border-white/10 hover:border-blue-500/40 transition-all relative overflow-hidden group">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400">Total de Pedidos</span>
+            <div className="h-9 w-9 rounded-2xl bg-blue-500/15 text-blue-400 flex items-center justify-center shrink-0">
+              <ShoppingBag className="h-5 w-5" />
+            </div>
+          </div>
+          <p className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white leading-none">
+            {loading ? '—' : `${metrics.totalOrdersCount} pedidos`}
+          </p>
+          <p className="text-[11px] text-blue-400 font-bold mt-2.5 flex items-center gap-1">
+            <CheckCircle2 className="h-3.5 w-3.5" /> {metrics.paidOrdersCount} totalmente quitados
+          </p>
+        </div>
+
+        {/* Card 4: Matrizes & Acervo Wilcom */}
+        <Link 
+          to="/matrizes"
+          className="glass-panel p-5 rounded-3xl border border-slate-200 dark:border-white/10 hover:border-cyan-500/40 transition-all relative overflow-hidden group block"
+        >
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400">Acervo de Matrizes</span>
+            <div className="h-9 w-9 rounded-2xl bg-cyan-500/15 text-cyan-400 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+              <Layers className="h-5 w-5" />
+            </div>
+          </div>
+          <p className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white leading-none">
+            {loading ? '—' : `${matricesCount} arquivos`}
+          </p>
+          <p className="text-[11px] text-cyan-400 font-bold mt-2.5 flex items-center justify-between">
+            <span>Ver Biblioteca Wilcom</span>
+            <ArrowUpRight className="h-3.5 w-3.5" />
+          </p>
+        </Link>
+
       </div>
 
-      {/* Grade com Fila de Pedidos Recentes + Ações Rápidas por Área */}
+      {/* PAINEL CENTRAL: GRÁFICO DE EVOLUÇÃO MENSAL + TOP CLIENTES VIPS */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-        {/* Lista de Pedidos Recentes (Fila de Trabalho) */}
+        {/* GRÁFICO RECHARTS DE EVOLUÇÃO DO FATURAMENTO (12 MESES) */}
+        <div className="lg:col-span-2 glass-panel p-6 rounded-3xl border border-slate-200 dark:border-white/10 space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                <TrendingUp className="h-4 w-4 text-emerald-500" />
+                Desempenho Mensal de Vendas (Últimos 12 Meses)
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-zinc-400">Evolução cronológica do faturamento da oficina</p>
+            </div>
+            <Link to="/faturamento" className="text-xs font-bold text-purple-400 hover:underline flex items-center gap-1">
+              Faturamento Completo <ChevronRight className="h-3.5 w-3.5" />
+            </Link>
+          </div>
+
+          <div className="h-64 w-full pt-2">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={monthlyChartData} margin={{ top: 10, right: 10, left: -15, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="dashboardRevenueGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor={pc} stopOpacity={0.4} />
+                    <stop offset="95%" stopColor={pc} stopOpacity={0.0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#ffffff10" vertical={false} />
+                <XAxis dataKey="monthLabel" tick={{ fill: '#888', fontSize: 10, fontWeight: 700 }} tickLine={false} axisLine={false} />
+                <YAxis tick={{ fill: '#888', fontSize: 10 }} tickLine={false} axisLine={false} tickFormatter={(v) => `R$${v >= 1000 ? `${(v/1000).toFixed(0)}k` : v}`} />
+                <Tooltip
+                  contentStyle={{ backgroundColor: '#12121a', borderColor: '#ffffff20', borderRadius: '16px', fontSize: '12px', fontWeight: 'bold' }}
+                  formatter={(value: any) => [`R$ ${Number(value).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, 'Faturamento']}
+                />
+                <Area type="monotone" dataKey="faturamento" stroke={pc} strokeWidth={3} fillOpacity={1} fill="url(#dashboardRevenueGrad)" />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* RANKING TOP CLIENTES VIPS */}
+        <div className="glass-panel p-6 rounded-3xl border border-slate-200 dark:border-white/10 space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+              <Award className="h-4 w-4 text-amber-400" />
+              Maiores Clientes Históricos
+            </h3>
+            <Link to="/clientes" className="text-xs font-bold text-cyan-400 hover:underline">
+              Ver Todos
+            </Link>
+          </div>
+
+          <div className="space-y-2.5">
+            {topClients.length === 0 ? (
+              <p className="text-xs text-slate-500 dark:text-zinc-500 py-6 text-center">Nenhum cliente com pedidos registrado.</p>
+            ) : (
+              topClients.map((client, idx) => (
+                <div 
+                  key={client.id}
+                  className="p-3.5 rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 flex items-center justify-between gap-3 hover:border-amber-500/30 transition-all"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className={`h-8 w-8 rounded-xl flex items-center justify-center font-black text-xs shrink-0 ${
+                      idx === 0 ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40' :
+                      idx === 1 ? 'bg-slate-300/20 text-slate-300 border border-slate-400/30' :
+                      idx === 2 ? 'bg-amber-700/20 text-amber-600 border border-amber-700/30' :
+                      'bg-white/10 text-zinc-400'
+                    }`}>
+                      #{idx + 1}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                        {client.name}
+                      </p>
+                      <p className="text-[10px] text-slate-500 dark:text-zinc-400">
+                        {client.orderCount} {client.orderCount === 1 ? 'pedido' : 'pedidos'} salvos
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="text-right shrink-0">
+                    <p className="text-xs font-black text-slate-900 dark:text-white">
+                      {formatCurrency(client.totalSpent, permissions?.canSeeFinancials ?? true)}
+                    </p>
+                    {client.phone && (
+                      <a
+                        href={`https://wa.me/${client.phone.replace(/\D/g, '')}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-400 hover:underline mt-0.5"
+                      >
+                        <MessageCircle className="h-3 w-3" /> Contatar
+                      </a>
+                    )}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+      </div>
+
+      {/* FILA DE TRABALHO DA OFICINA + ATALHOS FLUXO DE TRABALHO */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+        {/* Fila dos Últimos Pedidos */}
         <div className="lg:col-span-2 space-y-3">
           <div className="flex items-center justify-between px-1">
             <h3 className="text-xs font-black uppercase tracking-widest text-slate-600 dark:text-zinc-400 flex items-center gap-2">
               <ShoppingBag className="h-4 w-4 text-amber-500 dark:text-amber-400" />
-              Últimos Pedidos Cadastrados
+              Fila Recente de Pedidos da Oficina
             </h3>
             <Link
               to="/pedidos"
               className="text-xs font-bold text-cyan-600 dark:text-cyan-400 hover:underline flex items-center gap-1 transition-colors"
             >
-              Ver Todos <ChevronRight className="h-3.5 w-3.5" />
+              Ver Kanban Completo <ChevronRight className="h-3.5 w-3.5" />
             </Link>
           </div>
 
@@ -258,7 +463,7 @@ export const Dashboard: React.FC = () => {
               <div className="p-8 text-center text-slate-500 dark:text-zinc-500 text-sm flex items-center justify-center gap-2">
                 <RefreshCw className="h-4 w-4 animate-spin" /> Carregando pedidos...
               </div>
-            ) : recentOrders.length === 0 ? (
+            ) : orders.length === 0 ? (
               <div className="p-8 text-center space-y-2">
                 <p className="text-slate-600 dark:text-zinc-400 text-sm font-medium">Nenhum pedido cadastrado ainda.</p>
                 <button
@@ -269,7 +474,7 @@ export const Dashboard: React.FC = () => {
                 </button>
               </div>
             ) : (
-              recentOrders.map((ord) => {
+              orders.slice(0, 6).map((ord) => {
                 const clientName = ord.clients?.name || ord.clients?.company_name || 'Cliente não identificado';
                 const formattedDate = new Date(ord.created_at).toLocaleDateString('pt-BR', {
                   day: '2-digit',
@@ -278,6 +483,8 @@ export const Dashboard: React.FC = () => {
                   minute: '2-digit'
                 });
 
+                const badgeDetails = formatOrderPaymentBadgeDetails(ord.payment_status, ord.total_amount, ord.notes, ord.payment_method);
+
                 return (
                   <div
                     key={ord.id}
@@ -285,15 +492,15 @@ export const Dashboard: React.FC = () => {
                     className="p-4 hover:bg-slate-50/80 dark:hover:bg-white/5 transition-colors flex items-center justify-between gap-4 cursor-pointer group"
                   >
                     <div className="flex items-center gap-3 min-w-0">
-                      <div className="h-10 w-10 rounded-2xl bg-slate-100 dark:bg-zinc-800 border border-slate-200 dark:border-white/10 flex items-center justify-center shrink-0 font-bold text-xs text-slate-800 dark:text-white">
+                      <div className="h-10 w-10 rounded-2xl bg-slate-100 dark:bg-zinc-800 border border-slate-200 dark:border-white/10 flex items-center justify-center shrink-0 font-black text-xs text-slate-800 dark:text-white">
                         #{ord.order_number || ord.id.slice(0, 4)}
                       </div>
                       <div className="min-w-0">
-                        <p className="text-sm font-bold text-slate-900 dark:text-white truncate group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors">
+                        <p className="text-sm font-bold text-slate-900 dark:text-white truncate group-hover:text-purple-400 transition-colors">
                           {clientName}
                         </p>
-                        <p className="text-[11px] text-slate-500 dark:text-zinc-400 flex items-center gap-2">
-                          <span>{formattedDate}</span>
+                        <p className="text-[11px] text-slate-500 dark:text-zinc-400">
+                          {formattedDate}
                         </p>
                       </div>
                     </div>
@@ -301,10 +508,26 @@ export const Dashboard: React.FC = () => {
                     <div className="flex items-center gap-3 shrink-0">
                       <div className="text-right hidden sm:block">
                         <p className="text-sm font-extrabold text-slate-900 dark:text-white">
-                          R$ {Number(ord.total_amount || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          {formatCurrency(ord.total_amount || 0, permissions?.canSeeFinancials ?? true)}
                         </p>
                       </div>
-                      {getStatusBadge(ord.payment_status)}
+                      
+                      {/* Badge de Pagamento Interativo */}
+                      <span 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedOrderForPayment(ord);
+                        }}
+                        className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border cursor-pointer hover:scale-105 transition-transform ${
+                          badgeDetails.status === 'paid' ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' :
+                          badgeDetails.status === 'half_paid' ? 'bg-blue-500/20 text-blue-400 border-blue-500/30' :
+                          'bg-amber-500/20 text-amber-400 border-amber-500/30'
+                        }`}
+                        title="Clique para lançar pagamento"
+                      >
+                        {badgeDetails.shortLabel}
+                      </span>
+
                       <ChevronRight className="h-4 w-4 text-slate-400 dark:text-zinc-600 group-hover:text-slate-900 dark:group-hover:text-white transition-colors" />
                     </div>
                   </div>
@@ -314,171 +537,68 @@ export const Dashboard: React.FC = () => {
           </div>
         </div>
 
-        {/* Ferramentas por Fluxo de Trabalho (com Accordion em Mobile) */}
+        {/* Ferramentas de Trabalho da Oficina */}
         <div className="space-y-3">
           <div className="flex items-center justify-between px-1">
             <h3 className="text-xs font-black uppercase tracking-widest text-slate-600 dark:text-zinc-400">
-              Ferramentas do Dia a Dia
+              Ferramentas de Produção
             </h3>
-            <span className="text-[10px] text-slate-400 dark:text-zinc-500 font-medium sm:hidden">
-              (Toque para expandir)
-            </span>
           </div>
 
           <div className="space-y-2.5">
-            {/* Bloco 1: Vendas & Orçamentos */}
-            <div className="glass-panel rounded-3xl border border-slate-200 dark:border-white/10 overflow-hidden transition-all">
-              <button
-                onClick={() => toggleSection('vendas')}
-                className="w-full p-4 flex items-center justify-between text-left cursor-pointer sm:cursor-default"
-              >
-                <div className="flex items-center gap-2 text-xs font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider">
-                  <Calculator className="h-4 w-4" /> Orçamentos & Vendas
+            <Link
+              to="/pedidos"
+              className="p-4 rounded-3xl glass-panel border border-slate-200 dark:border-white/10 hover:border-emerald-500/40 transition-all flex items-center justify-between group block"
+            >
+              <div className="flex items-center gap-3">
+                <div className="h-9 w-9 rounded-2xl bg-emerald-500/15 text-emerald-400 flex items-center justify-center shrink-0">
+                  <Kanban className="h-5 w-5" />
                 </div>
-                <div className="sm:hidden text-slate-400 dark:text-zinc-500">
-                  {openSection === 'vendas' ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                <div>
+                  <p className="text-xs font-bold text-slate-900 dark:text-white">Kanban da Oficina</p>
+                  <p className="text-[10px] text-slate-500 dark:text-zinc-400">Gerenciar esteira de bordado</p>
                 </div>
-              </button>
-
-              <div className={`p-4 pt-0 space-y-2 ${openSection === 'vendas' ? 'block' : 'hidden sm:block'}`}>
-                <button
-                  onClick={() => setIsCreateOrderOpen(true)}
-                  className="w-full p-3 rounded-2xl bg-slate-50 hover:bg-slate-100 dark:bg-white/5 dark:hover:bg-white/10 border border-slate-200 dark:border-white/10 transition-all flex items-center justify-between text-left cursor-pointer group"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="h-8 w-8 rounded-xl bg-amber-500/15 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
-                      <Plus className="h-4 w-4" />
-                    </div>
-                    <div>
-                      <p className="text-xs font-bold text-slate-900 dark:text-white">Orçamentador & Novo Pedido</p>
-                      <p className="text-[10px] text-slate-500 dark:text-zinc-400">Calcular preço por pontos e fechar pedido</p>
-                    </div>
-                  </div>
-                  <ChevronRight className="h-4 w-4 text-slate-400 dark:text-zinc-600 group-hover:text-slate-900 dark:group-hover:text-white" />
-                </button>
-
-                <Link
-                  to="/calculadora"
-                  className="p-3 rounded-2xl bg-slate-50 hover:bg-slate-100 dark:bg-white/5 dark:hover:bg-white/10 border border-slate-200 dark:border-white/10 transition-all flex items-center justify-between text-left group block"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="h-8 w-8 rounded-xl bg-cyan-500/15 text-cyan-600 dark:text-cyan-400 flex items-center justify-center shrink-0">
-                      <Calculator className="h-4 w-4" />
-                    </div>
-                    <div>
-                      <p className="text-xs font-bold text-slate-900 dark:text-white">Simulador de Calculadora</p>
-                      <p className="text-[10px] text-slate-500 dark:text-zinc-400">Simule valores rápidos por pontuação</p>
-                    </div>
-                  </div>
-                  <ChevronRight className="h-4 w-4 text-slate-400 dark:text-zinc-600 group-hover:text-slate-900 dark:group-hover:text-white" />
-                </Link>
               </div>
-            </div>
+              <ChevronRight className="h-4 w-4 text-slate-400 dark:text-zinc-600 group-hover:text-white" />
+            </Link>
 
-            {/* Bloco 2: Oficina & Produção */}
-            <div className="glass-panel rounded-3xl border border-slate-200 dark:border-white/10 overflow-hidden transition-all">
-              <button
-                onClick={() => toggleSection('producao')}
-                className="w-full p-4 flex items-center justify-between text-left cursor-pointer sm:cursor-default"
-              >
-                <div className="flex items-center gap-2 text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">
-                  <Kanban className="h-4 w-4" /> Produção & Oficina
+            <Link
+              to="/calculadora"
+              className="p-4 rounded-3xl glass-panel border border-slate-200 dark:border-white/10 hover:border-cyan-500/40 transition-all flex items-center justify-between group block"
+            >
+              <div className="flex items-center gap-3">
+                <div className="h-9 w-9 rounded-2xl bg-cyan-500/15 text-cyan-400 flex items-center justify-center shrink-0">
+                  <Calculator className="h-5 w-5" />
                 </div>
-                <div className="sm:hidden text-slate-400 dark:text-zinc-500">
-                  {openSection === 'producao' ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                <div>
+                  <p className="text-xs font-bold text-slate-900 dark:text-white">Simulador por Pontos</p>
+                  <p className="text-[10px] text-slate-500 dark:text-zinc-400">Calcular valores rápidos</p>
                 </div>
-              </button>
-
-              <div className={`p-4 pt-0 space-y-2 ${openSection === 'producao' ? 'block' : 'hidden sm:block'}`}>
-                <Link
-                  to="/pedidos"
-                  className="p-3 rounded-2xl bg-slate-50 hover:bg-slate-100 dark:bg-white/5 dark:hover:bg-white/10 border border-slate-200 dark:border-white/10 transition-all flex items-center justify-between text-left group block"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="h-8 w-8 rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
-                      <Kanban className="h-4 w-4" />
-                    </div>
-                    <div>
-                      <p className="text-xs font-bold text-slate-900 dark:text-white">Kanban de Produção</p>
-                      <p className="text-[10px] text-slate-500 dark:text-zinc-400">Acompanhar status da fila de bordado</p>
-                    </div>
-                  </div>
-                  <ChevronRight className="h-4 w-4 text-slate-400 dark:text-zinc-600 group-hover:text-slate-900 dark:group-hover:text-white" />
-                </Link>
-
-                <Link
-                  to="/matrizes"
-                  className="p-3 rounded-2xl bg-slate-50 hover:bg-slate-100 dark:bg-white/5 dark:hover:bg-white/10 border border-slate-200 dark:border-white/10 transition-all flex items-center justify-between text-left group block"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="h-8 w-8 rounded-xl bg-violet-500/15 text-violet-600 dark:text-violet-400 flex items-center justify-center shrink-0">
-                      <Layers className="h-4 w-4" />
-                    </div>
-                    <div>
-                      <p className="text-xs font-bold text-slate-900 dark:text-white">Acervo de Matrizes Wilcom</p>
-                      <p className="text-[10px] text-slate-500 dark:text-zinc-400">Buscar, importar e visualizar arquivos</p>
-                    </div>
-                  </div>
-                  <ChevronRight className="h-4 w-4 text-slate-400 dark:text-zinc-600 group-hover:text-slate-900 dark:group-hover:text-white" />
-                </Link>
               </div>
-            </div>
+              <ChevronRight className="h-4 w-4 text-slate-400 dark:text-zinc-600 group-hover:text-white" />
+            </Link>
 
-            {/* Bloco 3: Cadastros Rápidos */}
-            <div className="glass-panel rounded-3xl border border-slate-200 dark:border-white/10 overflow-hidden transition-all">
-              <button
-                onClick={() => toggleSection('cadastros')}
-                className="w-full p-4 flex items-center justify-between text-left cursor-pointer sm:cursor-default"
-              >
-                <div className="flex items-center gap-2 text-xs font-bold text-cyan-600 dark:text-cyan-400 uppercase tracking-wider">
-                  <Users className="h-4 w-4" /> Clientes & Insumos
+            <Link
+              to="/estoque"
+              className="p-4 rounded-3xl glass-panel border border-slate-200 dark:border-white/10 hover:border-rose-500/40 transition-all flex items-center justify-between group block"
+            >
+              <div className="flex items-center gap-3">
+                <div className="h-9 w-9 rounded-2xl bg-rose-500/15 text-rose-400 flex items-center justify-center shrink-0">
+                  <Boxes className="h-5 w-5" />
                 </div>
-                <div className="sm:hidden text-slate-400 dark:text-zinc-500">
-                  {openSection === 'cadastros' ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                <div>
+                  <p className="text-xs font-bold text-slate-900 dark:text-white">Estoque de Linhas & Agulhas</p>
+                  <p className="text-[10px] text-slate-500 dark:text-zinc-400">Gerenciar insumos e agulhas</p>
                 </div>
-              </button>
-
-              <div className={`p-4 pt-0 space-y-2 ${openSection === 'cadastros' ? 'block' : 'hidden sm:block'}`}>
-                <button
-                  onClick={() => setIsCreateClientOpen(true)}
-                  className="w-full p-3 rounded-2xl bg-slate-50 hover:bg-slate-100 dark:bg-white/5 dark:hover:bg-white/10 border border-slate-200 dark:border-white/10 transition-all flex items-center justify-between text-left cursor-pointer group"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="h-8 w-8 rounded-xl bg-cyan-500/15 text-cyan-600 dark:text-cyan-400 flex items-center justify-center shrink-0">
-                      <UserPlus className="h-4 w-4" />
-                    </div>
-                    <div>
-                      <p className="text-xs font-bold text-slate-900 dark:text-white">Cadastrar Cliente</p>
-                      <p className="text-[10px] text-slate-500 dark:text-zinc-400">Adicionar novo cliente à base</p>
-                    </div>
-                  </div>
-                  <ChevronRight className="h-4 w-4 text-slate-400 dark:text-zinc-600 group-hover:text-slate-900 dark:group-hover:text-white" />
-                </button>
-
-                <Link
-                  to="/estoque"
-                  className="p-3 rounded-2xl bg-slate-50 hover:bg-slate-100 dark:bg-white/5 dark:hover:bg-white/10 border border-slate-200 dark:border-white/10 transition-all flex items-center justify-between text-left group block"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="h-8 w-8 rounded-xl bg-rose-500/15 text-rose-600 dark:text-rose-400 flex items-center justify-center shrink-0">
-                      <Boxes className="h-4 w-4" />
-                    </div>
-                    <div>
-                      <p className="text-xs font-bold text-slate-900 dark:text-white">Controle de Estoque & Linhas</p>
-                      <p className="text-[10px] text-slate-500 dark:text-zinc-400">Gerenciar insumos e agulhas</p>
-                    </div>
-                  </div>
-                  <ChevronRight className="h-4 w-4 text-slate-400 dark:text-zinc-600 group-hover:text-slate-900 dark:group-hover:text-white" />
-                </Link>
               </div>
-            </div>
-
+              <ChevronRight className="h-4 w-4 text-slate-400 dark:text-zinc-600 group-hover:text-white" />
+            </Link>
           </div>
         </div>
 
       </div>
 
-      {/* Modais Integrados no Dashboard */}
+      {/* MODAIS INTEGRADOS */}
       {isCreateOrderOpen && (
         <CreateOrderModal
           isOpen={isCreateOrderOpen}
@@ -486,7 +606,7 @@ export const Dashboard: React.FC = () => {
           onOrderCreated={() => {
             setIsCreateOrderOpen(false);
             toast.success('Pedido criado com sucesso!');
-            loadData();
+            loadDashboardData();
           }}
         />
       )}
@@ -498,7 +618,7 @@ export const Dashboard: React.FC = () => {
           onClientCreated={() => {
             setIsCreateClientOpen(false);
             toast.success('Cliente cadastrado com sucesso!');
-            loadData();
+            loadDashboardData();
           }}
         />
       )}
@@ -510,13 +630,25 @@ export const Dashboard: React.FC = () => {
           order={selectedOrderForDetails}
           onDelete={() => {
             setSelectedOrderForDetails(null);
-            loadData();
+            loadDashboardData();
           }}
           onOrderUpdated={(updatedOrder) => {
             if (updatedOrder) {
               setSelectedOrderForDetails(updatedOrder);
             }
-            loadData();
+            loadDashboardData();
+          }}
+        />
+      )}
+
+      {selectedOrderForPayment && (
+        <PaymentStatusModal
+          isOpen={!!selectedOrderForPayment}
+          onClose={() => setSelectedOrderForPayment(null)}
+          order={selectedOrderForPayment}
+          onStatusUpdated={() => {
+            setSelectedOrderForPayment(null);
+            loadDashboardData();
           }}
         />
       )}
@@ -524,5 +656,3 @@ export const Dashboard: React.FC = () => {
     </div>
   );
 };
-
-
