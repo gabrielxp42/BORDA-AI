@@ -63,11 +63,15 @@ export const PaymentStatusModal: React.FC<PaymentStatusModalProps> = ({
     }
   };
 
+  const isMethodRequired = status === 'paid' || status === 'half_paid';
+  const isMethodSelected = Boolean(method && method.trim().length > 0);
+  const isSaveDisabled = saving || (isMethodRequired && !isMethodSelected);
+
   if (!isOpen || !order) return null;
 
   const handleSave = async () => {
-    if (status !== 'pending' && !method) {
-      toast.error('Por favor, selecione a Forma de Pagamento (PIX, Dinheiro, Cartão ou Transferência) antes de salvar!');
+    if (isMethodRequired && !isMethodSelected) {
+      toast.error('⚠️ Seleção Obrigatória: Escolha a Forma de Pagamento (PIX, Dinheiro, Cartão ou Transferência) para salvar!');
       return;
     }
 
@@ -289,12 +293,27 @@ export const PaymentStatusModal: React.FC<PaymentStatusModalProps> = ({
           <button
             type="button"
             onClick={handleSave}
-            disabled={saving}
-            className="px-5 py-2 rounded-xl text-xs font-bold text-white shadow-lg flex items-center gap-1.5 hover:opacity-90 transition-all disabled:opacity-50"
-            style={{ backgroundColor: settings.primaryColor }}
+            disabled={isSaveDisabled}
+            className={`px-5 py-2.5 rounded-xl text-xs font-bold shadow-lg flex items-center gap-1.5 transition-all ${
+              isSaveDisabled
+                ? 'bg-zinc-800 text-zinc-400 border border-zinc-700 cursor-not-allowed opacity-70'
+                : 'text-white hover:opacity-90 active:scale-95 cursor-pointer'
+            }`}
+            style={{ backgroundColor: isSaveDisabled ? undefined : settings.primaryColor }}
           >
-            {saving ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-            Salvar Pagamento
+            {saving ? (
+              <>
+                <RefreshCw className="h-4 w-4 animate-spin" /> Salvando...
+              </>
+            ) : isMethodRequired && !isMethodSelected ? (
+              <>
+                ⚠️ Selecione a Forma de Pagamento
+              </>
+            ) : (
+              <>
+                <Save className="h-4 w-4" /> Salvar Pagamento
+              </>
+            )}
           </button>
         </div>
 
