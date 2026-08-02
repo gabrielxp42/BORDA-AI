@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, DollarSign, Send, Save, RefreshCw, Check, MessageCircle } from 'lucide-react';
+import { X, DollarSign, Send, Save, RefreshCw, Check, MessageCircle, FileText } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useCompanySettings } from '@/contexts/CompanySettingsContext';
 import { toast } from 'sonner';
@@ -33,6 +33,7 @@ export const PaymentStatusModal: React.FC<PaymentStatusModalProps> = ({
   const [status, setStatus] = useState<'pending' | 'paid' | 'half_paid'>('pending');
   const [method, setMethod] = useState<string>('');
   const [customAmount, setCustomAmount] = useState<number | ''>(0);
+  const [paymentNote, setPaymentNote] = useState<string>('');
   const [notifyWhatsApp, setNotifyWhatsApp] = useState<boolean>(true);
   const [saving, setSaving] = useState<boolean>(false);
 
@@ -45,8 +46,8 @@ export const PaymentStatusModal: React.FC<PaymentStatusModalProps> = ({
       const { metadata } = parsePaymentMetadata(order.notes);
       const savedMethod = order.payment_method || metadata.paymentMethod || '';
       
-      // Se status for pendente, método começa limpo. Caso já seja pago ou sinal, carrega o método gravado.
       setMethod(initialStatus === 'pending' ? '' : savedMethod);
+      setPaymentNote(metadata.paymentNote || '');
 
       if (initialStatus === 'paid') {
         setCustomAmount(order.total_amount || 0);
@@ -97,7 +98,8 @@ export const PaymentStatusModal: React.FC<PaymentStatusModalProps> = ({
         status,
         order.total_amount,
         selectedMethod,
-        status === 'half_paid' ? paidVal : undefined
+        status === 'half_paid' ? paidVal : undefined,
+        paymentNote
       );
       
       const noteWithMetadata = serializePaymentMetadata(cleanNotes, updatedMetadata);
@@ -126,12 +128,13 @@ export const PaymentStatusModal: React.FC<PaymentStatusModalProps> = ({
             : 'PENDENTE';
           
           const methodText = formatPaymentMethodName(selectedMethod) || 'N/A';
+          const noteText = paymentNote ? `\n📝 *Obs:* ${paymentNote}` : '';
 
           const msg = `*${settings.systemName || 'BORDA AI'}* — Confirmamos o recebimento do seu pagamento!\n\n` +
             `📋 *Pedido:* #${order.order_number || order.id.slice(0, 6)}\n` +
             `👤 *Cliente:* ${order.client.name}\n` +
             `💰 *Status:* ${statusText}\n` +
-            `💳 *Forma de Pagamento:* ${methodText}\n` +
+            `💳 *Forma de Pagamento:* ${methodText}${noteText}\n` +
             `⏰ *Data/Hora:* ${format(new Date(), "dd/MM/yyyy 'às' HH:mm")}\n\n` +
             `Qualquer dúvida, estamos à disposição!`;
 
@@ -292,6 +295,21 @@ export const PaymentStatusModal: React.FC<PaymentStatusModalProps> = ({
               <span>📌 Pedido marcado como Pendente. Altere o status acima para <strong>Sinal 50%</strong> ou <strong>Pago 100%</strong> para registrar a forma de pagamento.</span>
             </div>
           )}
+
+          {/* Observação do Pagamento (Persistida no Banco de Dados) */}
+          <div className="space-y-1.5 pt-1">
+            <label className="text-[11px] font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400 flex items-center gap-1.5">
+              <FileText className="h-3.5 w-3.5 text-purple-400" />
+              <span>Observação do Pagamento (Opcional)</span>
+            </label>
+            <input
+              type="text"
+              value={paymentNote}
+              onChange={e => setPaymentNote(e.target.value)}
+              placeholder="Ex: Pago com desconto, enviado comprovante no WhatsApp..."
+              className="w-full bg-slate-50 dark:bg-white/5 border border-slate-300 dark:border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-zinc-500 focus:outline-none focus:border-purple-500/50 transition-all"
+            />
+          </div>
 
           {/* Card Interativo Notificar via WhatsApp (Estilo Verde WhatsApp Premium) */}
           <div 

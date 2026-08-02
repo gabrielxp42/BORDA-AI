@@ -4,12 +4,14 @@ export interface PaymentHistoryEntry {
   status: 'pending' | 'half_paid' | 'paid';
   amount: number;
   method: string;
+  note?: string;
   timestamp: string;
 }
 
 export interface PaymentMetadata {
   depositAmount?: number;
   paymentMethod?: string;
+  paymentNote?: string;
   paidAt?: string;
   isQuickEntry?: boolean;
   isPrivate?: boolean;
@@ -45,7 +47,7 @@ export function parsePaymentMetadata(notes: string | null | undefined): {
 }
 
 /**
- * Serializes payment metadata and appends/updates it in the notes string.
+ * Serializes metadata back into the notes string using an HTML comment.
  */
 export function serializePaymentMetadata(
   cleanNotes: string | null | undefined,
@@ -64,7 +66,8 @@ export function updatePaymentMetadata(
   newStatus: 'pending' | 'half_paid' | 'paid',
   totalAmount: number,
   method: string,
-  customDeposit?: number
+  customDeposit?: number,
+  paymentNote?: string
 ): PaymentMetadata {
   const history = [...(existingMetadata.history || [])];
   
@@ -80,12 +83,14 @@ export function updatePaymentMetadata(
     status: newStatus,
     amount,
     method,
+    note: paymentNote,
     timestamp: new Date().toISOString()
   });
 
   const updated: PaymentMetadata = {
     ...existingMetadata,
     paymentMethod: method,
+    paymentNote: paymentNote !== undefined ? paymentNote : existingMetadata.paymentNote,
     history
   };
 
@@ -96,6 +101,7 @@ export function updatePaymentMetadata(
   } else if (newStatus === 'pending') {
     updated.depositAmount = 0;
     updated.paidAt = undefined;
+    updated.paymentNote = undefined;
   }
 
   return updated;
@@ -128,6 +134,7 @@ export function formatOrderPaymentBadgeDetails(
   badgeSubtext: string;
   fullLabel: string;
   methodLabel: string;
+  paymentNote?: string;
   paidDateStr?: string;
   depositVal?: number;
   remainingVal?: number;
@@ -135,6 +142,7 @@ export function formatOrderPaymentBadgeDetails(
   const { metadata } = parsePaymentMetadata(notes);
   const method = paymentMethodDb || metadata.paymentMethod || '';
   const methodLabel = formatPaymentMethodName(method);
+  const paymentNote = metadata.paymentNote || '';
 
   const paidDateStr = metadata.paidAt
     ? format(new Date(metadata.paidAt), "dd/MM 'às' HH:mm")
@@ -142,12 +150,14 @@ export function formatOrderPaymentBadgeDetails(
 
   if (paymentStatus === 'paid') {
     const methodSuffix = methodLabel ? ` • ${methodLabel}` : '';
+    const noteSuffix = paymentNote ? ` ("${paymentNote}")` : '';
     return {
       status: 'paid',
       shortLabel: `✓ Pago 100%${methodSuffix}`,
-      badgeSubtext: paidDateStr ? `Pago em ${paidDateStr}` : '',
-      fullLabel: `✓ Pago 100%${methodSuffix}${paidDateStr ? ` (${paidDateStr})` : ''}`,
+      badgeSubtext: paidDateStr ? `Pago em ${paidDateStr}${noteSuffix}` : noteSuffix,
+      fullLabel: `✓ Pago 100%${methodSuffix}${paidDateStr ? ` (${paidDateStr})` : ''}${noteSuffix}`,
       methodLabel,
+      paymentNote,
       paidDateStr: paidDateStr || undefined
     };
   }
@@ -156,12 +166,14 @@ export function formatOrderPaymentBadgeDetails(
     const depositVal = metadata.depositAmount || totalAmount / 2;
     const remainingVal = Math.max(0, totalAmount - depositVal);
     const methodSuffix = methodLabel ? ` • ${methodLabel}` : '';
+    const noteSuffix = paymentNote ? ` ("${paymentNote}")` : '';
     return {
       status: 'half_paid',
       shortLabel: `⚡ Sinal 50%${methodSuffix}`,
-      badgeSubtext: `Sinal R$ ${depositVal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-      fullLabel: `⚡ Sinal 50%${methodSuffix} (Restam R$ ${remainingVal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`,
+      badgeSubtext: `Sinal R$ ${depositVal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${noteSuffix}`,
+      fullLabel: `⚡ Sinal 50%${methodSuffix} (Restam R$ ${remainingVal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})${noteSuffix}`,
       methodLabel,
+      paymentNote,
       depositVal,
       remainingVal
     };
@@ -172,6 +184,7 @@ export function formatOrderPaymentBadgeDetails(
     shortLabel: '⏳ Aguardando',
     badgeSubtext: 'Pendente de pagamento',
     fullLabel: '⏳ Aguardando Pagamento',
-    methodLabel: ''
+    methodLabel: '',
+    paymentNote: ''
   };
 }
