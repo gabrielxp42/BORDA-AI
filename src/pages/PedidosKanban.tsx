@@ -14,6 +14,7 @@ import { printThermalReceipt } from '@/services/thermalPrinter';
 import { sendEvolutionText, getWhatsAppWebLink, handleWhatsAppDispatchError } from '@/services/whatsappService';
 import { useBackgroundTasks } from '@/hooks/useBackgroundTasks';
 import { KanbanAddOrderModal } from '@/components/orders/KanbanAddOrderModal';
+import { PaymentStatusModal } from '@/components/orders/PaymentStatusModal';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
@@ -66,6 +67,7 @@ export const PedidosKanban: React.FC<PedidosKanbanProps> = ({
   const [orders, setOrders] = useState<KanbanOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [activePrintOption, setActivePrintOption] = useState<string | null>(null);
+  const [selectedOrderForPaymentModal, setSelectedOrderForPaymentModal] = useState<any | null>(null);
   const [visibleLimits, setVisibleLimits] = useState<Record<string, number>>({});
   const { isUnlocked } = useProfile();
   const { settings } = useCompanySettings();
@@ -423,24 +425,71 @@ export const PedidosKanban: React.FC<PedidosKanbanProps> = ({
                               )
                             ) : null}
 
-                            {/* Badge de Status de Pagamento */}
-                            {isUnpriced ? (
-                              <span className="inline-block mt-0.5 animate-pulse px-1.5 py-0.5 rounded-md text-[8px] font-black uppercase bg-amber-500/20 text-amber-400 border border-amber-500/30">
-                                ⚠️ Sem Orçamento
-                              </span>
-                            ) : ord.payment_status === 'paid' ? (
-                              <span className="inline-block mt-0.5 px-1.5 py-0.5 rounded-md text-[8px] font-bold uppercase bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                                ✓ Pago 100%
-                              </span>
-                            ) : ord.payment_status === 'half_paid' ? (
-                              <span className="inline-block mt-0.5 px-1.5 py-0.5 rounded-md text-[8px] font-bold uppercase bg-cyan-500/20 text-cyan-400 border border-cyan-500/30">
-                                ⚡ Sinal 50%
-                              </span>
-                            ) : (
-                              <span className="inline-block mt-0.5 px-1.5 py-0.5 rounded-md text-[8px] font-bold uppercase bg-orange-500/20 text-orange-400 border border-orange-500/30">
-                                ⏳ Pendente
-                              </span>
-                            )}
+                            {/* Badge de Status de Pagamento (CLICÁVEL COM DATA E HORA DE QUITAÇÃO) */}
+                            {(() => {
+                              const { metadata } = parsePaymentMetadata(ord.notes);
+                              const paidDateStr = metadata?.paidAt 
+                                ? format(new Date(metadata.paidAt), "dd/MM 'às' HH:mm") 
+                                : null;
+
+                              if (isUnpriced) {
+                                return (
+                                  <span 
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setSelectedOrderForPaymentModal(ord);
+                                    }}
+                                    className="inline-block mt-0.5 animate-pulse px-1.5 py-0.5 rounded-md text-[8px] font-black uppercase bg-amber-500/20 text-amber-400 border border-amber-500/30 cursor-pointer hover:scale-105 transition-transform"
+                                    title="Clique para lançar pagamento"
+                                  >
+                                    ⚠️ Sem Orçamento
+                                  </span>
+                                );
+                              }
+
+                              if (ord.payment_status === 'paid') {
+                                return (
+                                  <span 
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setSelectedOrderForPaymentModal(ord);
+                                    }}
+                                    className="inline-block mt-0.5 px-1.5 py-0.5 rounded-md text-[8px] font-bold uppercase bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 cursor-pointer hover:scale-105 transition-transform"
+                                    title={`Pago em ${paidDateStr || '100%'}. Clique para alterar.`}
+                                  >
+                                    ✓ Pago {paidDateStr ? `(${paidDateStr})` : '100%'}
+                                  </span>
+                                );
+                              }
+
+                              if (ord.payment_status === 'half_paid') {
+                                return (
+                                  <span 
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setSelectedOrderForPaymentModal(ord);
+                                    }}
+                                    className="inline-block mt-0.5 px-1.5 py-0.5 rounded-md text-[8px] font-bold uppercase bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 cursor-pointer hover:scale-105 transition-transform"
+                                    title="Sinal de 50% recebido. Clique para alterar."
+                                  >
+                                    ⚡ Sinal 50%
+                                  </span>
+                                );
+                              }
+
+                              return (
+                                <span 
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedOrderForPaymentModal(ord);
+                                  }}
+                                  className="inline-block mt-0.5 px-1.5 py-0.5 rounded-md text-[8px] font-bold uppercase bg-orange-500/20 text-orange-400 border border-orange-500/30 cursor-pointer hover:scale-105 transition-transform"
+                                  title="Aguardando pagamento. Clique para dar baixa."
+                                >
+                                  ⏳ Aguardando Pagamento
+                                </span>
+                              );
+                            })()}
                           </div>
                         </div>
 
@@ -632,6 +681,14 @@ export const PedidosKanban: React.FC<PedidosKanbanProps> = ({
         </div>
       </div>
       </DragDropContext>
+
+      {/* Modal Reutilizável de Status de Pagamento (PIX, Dinheiro, Cartão + Notificação Zap) */}
+      <PaymentStatusModal
+        isOpen={!!selectedOrderForPaymentModal}
+        onClose={() => setSelectedOrderForPaymentModal(null)}
+        order={selectedOrderForPaymentModal}
+        onStatusUpdated={fetchOrders}
+      />
     </>
   );
 };

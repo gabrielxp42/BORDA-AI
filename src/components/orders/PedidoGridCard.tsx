@@ -99,9 +99,13 @@ const PedidoGridCardComponent: React.FC<PedidoGridCardProps> = ({
 
   // Badge de Pagamento
   const paymentBadge = useMemo(() => {
+    const paidDateStr = metadata?.paidAt 
+      ? format(new Date(metadata.paidAt), "dd/MM 'às' HH:mm", { locale: ptBR }) 
+      : null;
+
     if (order.payment_status === 'paid') {
       return {
-        label: '✓ Pago 100%',
+        label: paidDateStr ? `✓ Pago (${paidDateStr})` : '✓ Pago 100%',
         className: 'border-emerald-500/40 bg-emerald-500/10 text-emerald-400 shadow-sm shadow-emerald-500/10',
         icon: CheckCircle2
       };
@@ -114,11 +118,11 @@ const PedidoGridCardComponent: React.FC<PedidoGridCardProps> = ({
       };
     }
     return {
-      label: '⏳ Pendente',
+      label: '⏳ Aguardando Pagamento',
       className: 'border-rose-500/40 bg-rose-500/10 text-rose-400 shadow-sm shadow-rose-500/10',
       icon: AlertCircle
     };
-  }, [order.payment_status]);
+  }, [order.payment_status, metadata?.paidAt]);
 
   // Gerador Impressão Direta PDF Ordem de Serviço com Identidade Visual Total
   const getPrintData = () => ({
