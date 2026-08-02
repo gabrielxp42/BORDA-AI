@@ -1,3 +1,5 @@
+import { format } from 'date-fns';
+
 export interface PaymentHistoryEntry {
   status: 'pending' | 'half_paid' | 'paid';
   amount: number;
