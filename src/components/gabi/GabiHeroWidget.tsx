@@ -134,7 +134,7 @@ export const GabiHeroWidget: React.FC = () => {
       const { data: productionDelays } = await supabase
         .from('orders')
         .select('id, order_number, client_id, status, created_at, clients(name, phone)')
-        .in('status', ['design', 'embroidering', 'finishing'])
+        .in('status', ['producao', 'aprovado'])
         .lt('created_at', fiveDaysAgo)
         .limit(20);
 
@@ -149,7 +149,7 @@ export const GabiHeroWidget: React.FC = () => {
           items: productionDelays.map((o: any) => ({
             id: `prod_${o.id}`,
             title: `Pedido #${o.order_number || o.id.slice(0,4)}`,
-            subtitle: `Status: ${o.status} (${daysAgo(o.created_at)} dias)`,
+            subtitle: `${o.clients?.name || 'Cliente'} (${daysAgo(o.created_at)} dias na produção)`,
             orderUuid: o.id,
           }))
         });
@@ -160,7 +160,7 @@ export const GabiHeroWidget: React.FC = () => {
       const { data: readyForgotten } = await supabase
         .from('orders')
         .select('id, order_number, client_id, status, created_at, clients(name, phone)')
-        .eq('status', 'completed')
+        .eq('status', 'pronto')
         .lt('created_at', threeDaysAgo)
         .limit(20);
 
@@ -184,11 +184,10 @@ export const GabiHeroWidget: React.FC = () => {
       }
 
       // 5. Entregues Não Quitados (Furo Financeiro)
-      // We will look for orders that are 'completed' but still 'pending' or 'half_paid' payment.
       const { data: unpaidCompleted } = await supabase
         .from('orders')
         .select('id, order_number, client_id, total_amount, payment_status, created_at, clients(name, phone)')
-        .eq('status', 'completed')
+        .in('status', ['pronto', 'concluido'])
         .in('payment_status', ['pending', 'half_paid'])
         .limit(20);
 
@@ -206,6 +205,35 @@ export const GabiHeroWidget: React.FC = () => {
             subtitle: `${o.clients?.name || 'Cliente'} - Pago: ${o.payment_status === 'half_paid' ? '50%' : '0%'}`,
             actionPhone: o.clients?.phone,
             actionMessage: `Olá ${o.clients?.name || ''}! Aqui é da ${settings.systemName}. Vimos que o pedido #${o.order_number || o.id.slice(0,4)} já está finalizado, mas consta um valor em aberto. Poderia verificar, por favor? 💳`,
+            orderUuid: o.id,
+          }))
+        });
+      }
+
+      // 6. Pedidos com Prazo de Entrega Vencido
+      const todayStr = format(new Date(), 'yyyy-MM-dd');
+      const { data: overdueDueDate } = await supabase
+        .from('orders')
+        .select('id, order_number, client_id, status, due_date, created_at, clients(name, phone)')
+        .lt('due_date', todayStr)
+        .neq('status', 'concluido')
+        .neq('status', 'cancelado')
+        .limit(20);
+
+      if (overdueDueDate && overdueDueDate.length > 0) {
+        newAlerts.push({
+          id: 'group_prazo_vencido',
+          type: 'prazo_vencido',
+          icon: <ShieldAlert className="h-5 w-5" />,
+          title: `${overdueDueDate.length} pedido${overdueDueDate.length > 1 ? 's' : ''} com PRAZO DE ENTREGA VENCIDO`,
+          description: 'Pedidos travados que ultrapassaram a data de entrega combinada.',
+          severity: 'danger',
+          items: overdueDueDate.map((o: any) => ({
+            id: `overdue_${o.id}`,
+            title: `Pedido #${o.order_number || o.id.slice(0,4)}`,
+            subtitle: `${o.clients?.name || 'Cliente'} - Venceu em ${format(new Date(o.due_date), 'dd/MM/yyyy')}`,
+            actionPhone: o.clients?.phone,
+            actionMessage: `Olá ${o.clients?.name || ''}! Atualização sobre o seu pedido #${o.order_number || o.id.slice(0,4)} na ${settings.systemName}. Estamos finalizando com prioridade total! 🧵`,
             orderUuid: o.id,
           }))
         });

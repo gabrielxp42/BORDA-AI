@@ -74,7 +74,7 @@ export async function seed2YearsData(): Promise<boolean> {
         ? Math.floor(Math.random() * 15) 
         : Math.floor(Math.random() * 700) + 15;
 
-      const orderDate = subDays(new Date(), daysAgo);
+      let orderDate = subDays(new Date(), daysAgo);
       const randomClient = insertedClients[Math.floor(Math.random() * insertedClients.length)];
       const randomItemType = ITEM_TYPES[Math.floor(Math.random() * ITEM_TYPES.length)];
       const randomQty = Math.floor(Math.random() * 80) + 10;
@@ -85,7 +85,31 @@ export async function seed2YearsData(): Promise<boolean> {
       let paymentStatus: 'pending' | 'half_paid' | 'paid';
       let method = PAYMENT_METHODS[Math.floor(Math.random() * PAYMENT_METHODS.length)];
 
-      if (daysAgo > 30) {
+      // Garantir alertas operacionais ricos para a Gabi IA nos 20 primeiros pedidos
+      let dueDateVal = format(subDays(orderDate, -5), 'yyyy-MM-dd');
+
+      if (i === 1 || i === 2 || i === 3) {
+        // Pedidos travados na produção há mais de 5 dias
+        status = 'producao';
+        paymentStatus = 'half_paid';
+        orderDate = subDays(new Date(), 7 + i);
+      } else if (i === 4 || i === 5) {
+        // Pedidos prontos e esquecidos há 4 dias
+        status = 'pronto';
+        paymentStatus = 'paid';
+        orderDate = subDays(new Date(), 4 + i);
+      } else if (i === 6 || i === 7) {
+        // Pedidos com prazo de entrega VENCIDO
+        status = 'producao';
+        paymentStatus = 'half_paid';
+        orderDate = subDays(new Date(), 8);
+        dueDateVal = format(subDays(new Date(), 2 + i), 'yyyy-MM-dd');
+      } else if (i === 8 || i === 9 || i === 10) {
+        // Pedidos concluídos com pendência financeira (A Receber)
+        status = 'concluido';
+        paymentStatus = 'half_paid';
+        orderDate = subDays(new Date(), 10 + i);
+      } else if (daysAgo > 30) {
         // Pedidos antigos: 90% concluídos e pagos, 10% cancelados
         if (Math.random() > 0.1) {
           status = 'concluido';
@@ -140,7 +164,7 @@ export async function seed2YearsData(): Promise<boolean> {
         payment_status: paymentStatus,
         payment_method: paymentStatus === 'pending' ? null : method,
         total_amount: totalAmount,
-        due_date: format(subDays(orderDate, -5), 'yyyy-MM-dd'),
+        due_date: dueDateVal,
         notes: notesWithMeta,
         created_at: orderDate.toISOString()
       });
