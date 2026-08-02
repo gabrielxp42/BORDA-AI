@@ -28,7 +28,7 @@ export const PaymentStatusModal: React.FC<PaymentStatusModalProps> = ({
 }) => {
   const { settings } = useCompanySettings();
   const [status, setStatus] = useState<'pending' | 'paid' | 'half_paid'>('pending');
-  const [method, setMethod] = useState<string>('pix');
+  const [method, setMethod] = useState<string>('');
   const [customAmount, setCustomAmount] = useState<number | ''>(0);
   const [notifyWhatsApp, setNotifyWhatsApp] = useState<boolean>(true);
   const [saving, setSaving] = useState<boolean>(false);
@@ -37,7 +37,7 @@ export const PaymentStatusModal: React.FC<PaymentStatusModalProps> = ({
     if (order) {
       const initialStatus = order.payment_status || 'pending';
       setStatus(initialStatus);
-      setMethod(order.payment_method || 'pix');
+      setMethod(order.payment_method || '');
 
       const { metadata } = parsePaymentMetadata(order.notes);
       if (initialStatus === 'paid') {
@@ -66,6 +66,11 @@ export const PaymentStatusModal: React.FC<PaymentStatusModalProps> = ({
   if (!isOpen || !order) return null;
 
   const handleSave = async () => {
+    if (status !== 'pending' && !method) {
+      toast.error('Por favor, selecione a Forma de Pagamento (PIX, Dinheiro, Cartão ou Transferência) antes de salvar!');
+      return;
+    }
+
     setSaving(true);
     try {
       const paidVal = Number(customAmount) || 0;
@@ -98,7 +103,7 @@ export const PaymentStatusModal: React.FC<PaymentStatusModalProps> = ({
       // Notificação opcional no WhatsApp
       if (notifyWhatsApp && order.client?.phone) {
         const statusText = status === 'paid' ? 'PAGO (100%)' : status === 'half_paid' ? `ENTRADA / SINAL (R$ ${paidVal.toFixed(2)})` : 'PENDENTE';
-        const msg = `Olá ${order.client.name}!\n\nConfirmamos a atualização do seu pedido *#${order.id.slice(0, 6)}* no *${settings.systemName}*:\n💰 Status: *${statusText}*\n💵 Valor Pago: *R$ ${paidVal.toFixed(2)}*\n💳 Forma: *${method.toUpperCase()}*\n\nQualquer dúvida, estamos à disposição!`;
+        const msg = `Olá ${order.client.name}!\n\nConfirmamos a atualização do seu pedido *#${order.id.slice(0, 6)}* no *${settings.systemName}*:\n💰 Status: *${statusText}*\n💵 Valor Pago: *R$ ${paidVal.toFixed(2)}*\n💳 Forma: *${method ? method.toUpperCase() : 'N/A'}*\n\nQualquer dúvida, estamos à disposição!`;
         window.open(`https://wa.me/${order.client.phone.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`, '_blank');
       }
 
@@ -211,8 +216,11 @@ export const PaymentStatusModal: React.FC<PaymentStatusModalProps> = ({
 
           {/* Forma de Pagamento */}
           <div className="space-y-2">
-            <label className="text-[11px] font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400 block">
-              Forma de Pagamento
+            <label className="text-[11px] font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400 flex items-center justify-between">
+              <span>Forma de Pagamento</span>
+              {status !== 'pending' && !method && (
+                <span className="text-[10px] font-bold text-amber-400 animate-pulse">⚠️ Escolha uma opção</span>
+              )}
             </label>
             <div className="grid grid-cols-2 gap-2">
               {[
@@ -225,9 +233,11 @@ export const PaymentStatusModal: React.FC<PaymentStatusModalProps> = ({
                   key={pm.id}
                   type="button"
                   onClick={() => setMethod(pm.id)}
-                  className={`py-2 px-3 rounded-xl text-xs font-bold border transition-all text-center ${
+                  className={`py-2.5 px-3 rounded-xl text-xs font-bold border transition-all text-center cursor-pointer ${
                     method === pm.id
-                      ? 'bg-purple-500/20 text-purple-400 border-purple-500/50 shadow-sm'
+                      ? 'bg-purple-500/20 text-purple-400 border-purple-500/60 shadow-md ring-1 ring-purple-500/30'
+                      : status !== 'pending' && !method
+                      ? 'border-amber-500/40 text-zinc-400 hover:bg-white/5'
                       : 'border-slate-200 dark:border-white/10 text-slate-500 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-white/5'
                   }`}
                 >
