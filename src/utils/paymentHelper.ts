@@ -125,6 +125,7 @@ export function formatOrderPaymentBadgeDetails(
 ): {
   status: 'pending' | 'half_paid' | 'paid';
   shortLabel: string;
+  badgeSubtext: string;
   fullLabel: string;
   methodLabel: string;
   paidDateStr?: string;
@@ -140,12 +141,12 @@ export function formatOrderPaymentBadgeDetails(
     : null;
 
   if (paymentStatus === 'paid') {
-    const methodPart = methodLabel ? ` via ${methodLabel}` : '';
-    const datePart = paidDateStr ? ` em ${paidDateStr}` : '';
+    const methodSuffix = methodLabel ? ` • ${methodLabel}` : '';
     return {
       status: 'paid',
-      shortLabel: `✓ Pago 100%${methodPart}`,
-      fullLabel: `✓ Pago 100%: R$ ${totalAmount.toFixed(2)}${methodPart}${datePart}`,
+      shortLabel: `✓ Pago 100%${methodSuffix}`,
+      badgeSubtext: paidDateStr ? `Pago em ${paidDateStr}` : '',
+      fullLabel: `✓ Pago 100%${methodSuffix}${paidDateStr ? ` (${paidDateStr})` : ''}`,
       methodLabel,
       paidDateStr: paidDateStr || undefined
     };
@@ -154,11 +155,12 @@ export function formatOrderPaymentBadgeDetails(
   if (paymentStatus === 'half_paid') {
     const depositVal = metadata.depositAmount || totalAmount / 2;
     const remainingVal = Math.max(0, totalAmount - depositVal);
-    const methodPart = methodLabel ? ` via ${methodLabel}` : '';
+    const methodSuffix = methodLabel ? ` • ${methodLabel}` : '';
     return {
       status: 'half_paid',
-      shortLabel: `⚡ Sinal R$ ${depositVal.toFixed(2)}${methodPart}`,
-      fullLabel: `⚡ Sinal: R$ ${depositVal.toFixed(2)}${methodPart} (Restam R$ ${remainingVal.toFixed(2)})`,
+      shortLabel: `⚡ Sinal 50%${methodSuffix}`,
+      badgeSubtext: `Sinal R$ ${depositVal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+      fullLabel: `⚡ Sinal 50%${methodSuffix} (Restam R$ ${remainingVal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`,
       methodLabel,
       depositVal,
       remainingVal
@@ -167,8 +169,9 @@ export function formatOrderPaymentBadgeDetails(
 
   return {
     status: 'pending',
-    shortLabel: '⏳ Aguardando Pagamento',
-    fullLabel: `⏳ Aguardando Pagamento (R$ ${totalAmount.toFixed(2)})`,
+    shortLabel: '⏳ Aguardando',
+    badgeSubtext: 'Pendente de pagamento',
+    fullLabel: '⏳ Aguardando Pagamento',
     methodLabel: ''
   };
 }

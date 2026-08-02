@@ -217,12 +217,13 @@ const PedidoGridCardComponent: React.FC<PedidoGridCardProps> = ({
               </p>
             </div>
 
-            {/* Badge de Status Financeiro */}
+            {/* Badge de Status Financeiro (Pill de 1 Linha Limpa) */}
             <div 
               onClick={(e) => { e.stopPropagation(); onOpenStatusModal(order); }}
-              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border transition-transform hover:scale-105 cursor-pointer ${paymentBadge.className}`}
+              title={paymentBadge.subtext ? `${paymentBadge.label} (${paymentBadge.subtext})` : paymentBadge.label}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider border transition-transform hover:scale-105 cursor-pointer whitespace-nowrap shrink-0 ${paymentBadge.className}`}
             >
-              <paymentBadge.icon className="h-3 w-3" />
+              <paymentBadge.icon className="h-3 w-3 shrink-0" />
               <span>{paymentBadge.label}</span>
             </div>
           </div>
@@ -315,9 +316,20 @@ const PedidoGridCardComponent: React.FC<PedidoGridCardProps> = ({
                   ⚠️ Sem Orçamento
                 </span>
               ) : (
-                <span className="text-lg font-black text-slate-900 dark:text-white tracking-tight">
-                  {formatCurrency(order.total_amount || 0, permissions?.canSeeFinancials ?? true)}
-                </span>
+                <>
+                  <span className="text-lg font-black text-slate-900 dark:text-white tracking-tight">
+                    {formatCurrency(order.total_amount || 0, permissions?.canSeeFinancials ?? true)}
+                  </span>
+                  {paymentBadge.subtext && (
+                    <p className={`text-[10px] font-bold mt-0.5 ${
+                      order.payment_status === 'paid' ? 'text-emerald-500/90' :
+                      order.payment_status === 'half_paid' ? 'text-blue-400' :
+                      'text-slate-400'
+                    }`}>
+                      {paymentBadge.subtext}
+                    </p>
+                  )}
+                </>
               )}
             </div>
 
