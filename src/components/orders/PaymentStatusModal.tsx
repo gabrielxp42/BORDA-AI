@@ -34,10 +34,10 @@ export const PaymentStatusModal: React.FC<PaymentStatusModalProps> = ({
   const [saving, setSaving] = useState<boolean>(false);
 
   useEffect(() => {
-    if (order) {
+    if (isOpen && order) {
       const initialStatus = order.payment_status || 'pending';
       setStatus(initialStatus);
-      setMethod(order.payment_method || '');
+      setMethod(''); // Força desmarcado por padrão ao abrir
 
       const { metadata } = parsePaymentMetadata(order.notes);
       if (initialStatus === 'paid') {
