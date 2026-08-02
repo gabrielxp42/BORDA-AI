@@ -603,8 +603,389 @@ export const Faturamento: React.FC = () => {
         ))}
       </div>
 
-      {/* Grid de 6 KPIs Financeiros Executivos */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+      {/* CONTEÚDO DAS 5 ABAS DO FATURAMENTO */}
+
+      {/* ABA 1: ⏳ A RECEBER (ACUMULADO DE TODOS OS TEMPOS) */}
+      {activeTab === 'areceber' && (
+        <div className="space-y-6 animate-in fade-in duration-200">
+          {/* Card Banner do Saldo Acumulado */}
+          <div className="glass-panel p-6 rounded-3xl border border-amber-500/30 bg-gradient-to-r from-amber-950/30 via-black/40 to-amber-950/20 relative overflow-hidden flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="space-y-1 z-10">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30 text-[10px] font-black uppercase tracking-wider">
+                <Clock className="h-3 w-3" /> Saldo Pendente Acumulado Sem Zerar no Mês
+              </span>
+              <h2 className="text-3xl font-black text-white tracking-tight">
+                {formatCurrency(
+                  allTimePendingOrders.reduce((sum, o) => {
+                    const total = Number(o.total_amount || 0);
+                    if (o.payment_status === 'half_paid') return sum + (total * 0.5);
+                    return sum + total;
+                  }, 0),
+                  permissions?.canSeeFinancials ?? true
+                )}
+              </h2>
+              <p className="text-xs text-zinc-400">
+                Total acumulado de faturas pendentes de cobrança em todo o histórico da oficina ({allTimePendingOrders.length} pedido(s) a receber).
+              </p>
+            </div>
+
+            <div className="relative z-10 flex items-center gap-2">
+              <div className="relative w-full sm:w-64">
+                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-500" />
+                <input 
+                  type="text" 
+                  placeholder="Buscar por cliente ou pedido..."
+                  value={searchTerm}
+                  onChange={e => setSearchTerm(e.target.value)}
+                  className="w-full bg-black/60 border border-white/10 rounded-2xl pl-9 pr-4 py-2.5 text-xs text-zinc-200 outline-none focus:border-amber-500"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Tabela de Pedidos Pendentes (A Receber) */}
+          <div className="glass-panel rounded-3xl border border-white/10 overflow-hidden">
+            <div className="p-4 border-b border-white/10 bg-white/5 flex items-center justify-between">
+              <h3 className="text-xs font-black uppercase tracking-wider text-white flex items-center gap-2">
+                <Receipt className="h-4 w-4 text-amber-400" /> Relação Completa de Pedidos A Receber
+              </h3>
+              <span className="text-[10px] font-bold text-zinc-400">
+                {allTimePendingOrders.length} fatura(s) pendente(s)
+              </span>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="border-b border-white/10 bg-white/5 font-bold uppercase text-[10px] text-zinc-400">
+                    <th className="px-6 py-4">Pedido / Cliente</th>
+                    <th className="px-6 py-4">Data Entrada</th>
+                    <th className="px-6 py-4">Previsão Entrega</th>
+                    <th className="px-6 py-4 text-center">Status Pagamento</th>
+                    <th className="px-6 py-4 text-right">Valor Total</th>
+                    <th className="px-6 py-4 text-right">A Receber</th>
+                    <th className="px-6 py-4 text-center">Ações Rápidas</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5 font-medium text-zinc-200">
+                  {allTimePendingOrders.filter(o => 
+                    (o.clients?.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                    String(o.order_number || o.id).includes(searchTerm)
+                  ).length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="px-6 py-12 text-center text-zinc-500">
+                        🎉 Nenhum pedido pendente a receber encontrado!
+                      </td>
+                    </tr>
+                  ) : (
+                    allTimePendingOrders
+                      .filter(o => 
+                        (o.clients?.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                        String(o.order_number || o.id).includes(searchTerm)
+                      )
+                      .map((o) => {
+                        const totalVal = Number(o.total_amount || 0);
+                        const isHalf = o.payment_status === 'half_paid';
+                        const pendingVal = isHalf ? totalVal * 0.5 : totalVal;
+
+                        return (
+                          <tr key={o.id} className="hover:bg-white/5 transition-colors">
+                            <td className="px-6 py-4">
+                              <p className="font-bold text-white">#{o.order_number || o.id.slice(0, 6)} - {o.clients?.name || 'Cliente Geral'}</p>
+                              <p className="text-[11px] text-zinc-400">{o.clients?.phone || 'Sem telefone'}</p>
+                            </td>
+                            <td className="px-6 py-4 text-zinc-400">
+                              {o.created_at ? format(new Date(o.created_at), 'dd/MM/yyyy') : '-'}
+                            </td>
+                            <td className="px-6 py-4 text-amber-400 font-bold">
+                              {o.due_date ? format(new Date(o.due_date), 'dd/MM/yyyy') : 'A combinar'}
+                            </td>
+                            <td className="px-6 py-4 text-center">
+                              <span className={`inline-block px-2.5 py-1 rounded-full text-[9px] font-black uppercase ${
+                                isHalf 
+                                  ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30' 
+                                  : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                              }`}>
+                                {isHalf ? '⚡ Sinal 50% Recebido' : '⏳ 100% Pendente'}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 text-right font-bold text-zinc-300">
+                              {formatCurrency(totalVal, permissions?.canSeeFinancials ?? true)}
+                            </td>
+                            <td className="px-6 py-4 text-right font-black text-amber-400 text-sm">
+                              {formatCurrency(pendingVal, permissions?.canSeeFinancials ?? true)}
+                            </td>
+                            <td className="px-6 py-4">
+                              <div className="flex items-center justify-center gap-2">
+                                <button
+                                  onClick={() => setSelectedClient({
+                                    id: o.clients?.id || o.id,
+                                    name: o.clients?.name || 'Cliente Geral',
+                                    phone: o.clients?.phone || '',
+                                    orderCount: 1,
+                                    totalAmount: totalVal,
+                                    paidAmount: isHalf ? totalVal * 0.5 : 0,
+                                    pendingAmount: pendingVal,
+                                    orders: [o]
+                                  })}
+                                  className="px-3 py-1.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[11px] font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+                                  title="Disparar Fatura via WhatsApp"
+                                >
+                                  <Send className="h-3 w-3" /> Cobrar Zap
+                                </button>
+
+                                <button
+                                  onClick={async () => {
+                                    try {
+                                      const { error } = await supabase
+                                        .from('orders')
+                                        .update({ payment_status: 'paid' })
+                                        .eq('id', o.id);
+                                      if (error) throw error;
+                                      toast.success("Fatura quitada com sucesso!");
+                                      fetchBillingData();
+                                    } catch (err) {
+                                      toast.error("Erro ao registrar quitação.");
+                                    }
+                                  }}
+                                  className="px-3 py-1.5 rounded-xl bg-purple-500/10 hover:bg-purple-500/20 text-purple-300 border border-purple-500/30 text-[11px] font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+                                  title="Marcar como Pago"
+                                >
+                                  <CheckCircle2 className="h-3 w-3" /> Dar Baixa
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ABA 2: 📌 GASTOS FIXOS */}
+      {activeTab === 'fixos' && (
+        <div className="space-y-6 animate-in fade-in duration-200">
+          <div className="flex items-center justify-between bg-white/5 p-5 rounded-3xl border border-white/10">
+            <div>
+              <h2 className="text-lg font-black text-white flex items-center gap-2">
+                📌 Gestão de Gastos Fixos (Contas da Oficina)
+              </h2>
+              <p className="text-xs text-zinc-400 mt-0.5">
+                Aluguel, contas de luz, internet, sistemas ERP e salários dos colaboradores.
+              </p>
+            </div>
+            <button
+              onClick={() => openFinModal('expense')}
+              className="px-4 py-2.5 rounded-2xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-black uppercase tracking-wider flex items-center gap-2 transition-all shadow-lg shadow-purple-600/30"
+            >
+              + Lançar Gasto Fixo
+            </button>
+          </div>
+
+          <div className="glass-panel rounded-3xl border border-white/10 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="border-b border-white/10 bg-white/5 font-bold uppercase text-[10px] text-zinc-400">
+                    <th className="px-6 py-3.5">Vencimento</th>
+                    <th className="px-6 py-3.5">Descrição</th>
+                    <th className="px-6 py-3.5">Categoria</th>
+                    <th className="px-6 py-3.5 text-center">Status Fatura</th>
+                    <th className="px-6 py-3.5 text-right">Valor</th>
+                    <th className="px-6 py-3.5 text-center">Ação</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5 font-medium text-zinc-200">
+                  {financialTransactions.filter(t => t.type === 'expense' && (t.expense_type === 'fixed' || t.category?.toLowerCase().includes('fix'))).length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="px-6 py-8 text-center text-zinc-500">
+                        Nenhum gasto fixo cadastrado ainda. Clique em "+ Lançar Gasto Fixo" acima para registrar suas contas.
+                      </td>
+                    </tr>
+                  ) : (
+                    financialTransactions
+                      .filter(t => t.type === 'expense' && (t.expense_type === 'fixed' || t.category?.toLowerCase().includes('fix')))
+                      .map((tx) => (
+                        <tr key={tx.id} className="hover:bg-white/5 transition-colors">
+                          <td className="px-6 py-3.5 font-bold text-amber-400">
+                            {tx.due_date ? format(new Date(tx.due_date), 'dd/MM/yyyy') : 'Dia 10 (Mensal)'}
+                          </td>
+                          <td className="px-6 py-3.5 font-bold text-white">{tx.description}</td>
+                          <td className="px-6 py-3.5 text-zinc-400">{tx.category || 'Gasto Fixo'}</td>
+                          <td className="px-6 py-3.5 text-center">
+                            <span className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase ${
+                              tx.status === 'paid' 
+                                ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                                : 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
+                            }`}>
+                              {tx.status === 'paid' ? '✓ Pago' : '⏳ A Vencer'}
+                            </span>
+                          </td>
+                          <td className="px-6 py-3.5 text-right font-black text-rose-400">
+                            - {formatCurrency(tx.amount, permissions?.canSeeFinancials ?? true)}
+                          </td>
+                          <td className="px-6 py-3.5 text-center">
+                            <button
+                              onClick={() => handleDeleteTransaction(tx.id)}
+                              className="p-1.5 rounded-xl bg-white/5 hover:bg-rose-500/20 text-zinc-400 hover:text-rose-400 transition-all"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ABA 3: 💸 GASTOS VARIÁVEIS */}
+      {activeTab === 'variaveis' && (
+        <div className="space-y-6 animate-in fade-in duration-200">
+          <div className="flex items-center justify-between bg-white/5 p-5 rounded-3xl border border-white/10">
+            <div>
+              <h2 className="text-lg font-black text-white flex items-center gap-2">
+                💸 Gastos Variáveis (Insumos & Operacional)
+              </h2>
+              <p className="text-xs text-zinc-400 mt-0.5">
+                Linhas de bordado, manutenção pontual de máquinas Tajima/Brother, entretela e frete.
+              </p>
+            </div>
+            <button
+              onClick={() => openFinModal('expense')}
+              className="px-4 py-2.5 rounded-2xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-black uppercase tracking-wider flex items-center gap-2 transition-all shadow-lg shadow-purple-600/30"
+            >
+              + Lançar Gasto Variável
+            </button>
+          </div>
+
+          <div className="glass-panel rounded-3xl border border-white/10 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="border-b border-white/10 bg-white/5 font-bold uppercase text-[10px] text-zinc-400">
+                    <th className="px-6 py-3.5">Data Lançamento</th>
+                    <th className="px-6 py-3.5">Descrição</th>
+                    <th className="px-6 py-3.5">Categoria</th>
+                    <th className="px-6 py-3.5 text-right">Valor Total</th>
+                    <th className="px-6 py-3.5 text-center">Ação</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5 font-medium text-zinc-200">
+                  {financialTransactions.filter(t => t.type === 'expense' && t.expense_type !== 'fixed').length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="px-6 py-8 text-center text-zinc-500">
+                        Nenhum gasto variável registrado ainda.
+                      </td>
+                    </tr>
+                  ) : (
+                    financialTransactions
+                      .filter(t => t.type === 'expense' && t.expense_type !== 'fixed')
+                      .map((tx) => (
+                        <tr key={tx.id} className="hover:bg-white/5 transition-colors">
+                          <td className="px-6 py-3.5 text-zinc-400">
+                            {format(new Date(tx.created_at), 'dd/MM/yyyy')}
+                          </td>
+                          <td className="px-6 py-3.5 font-bold text-white">{tx.description}</td>
+                          <td className="px-6 py-3.5 text-zinc-400">{tx.category || 'Variáveis'}</td>
+                          <td className="px-6 py-3.5 text-right font-black text-rose-400">
+                            - {formatCurrency(tx.amount, permissions?.canSeeFinancials ?? true)}
+                          </td>
+                          <td className="px-6 py-3.5 text-center">
+                            <button
+                              onClick={() => handleDeleteTransaction(tx.id)}
+                              className="p-1.5 rounded-xl bg-white/5 hover:bg-rose-500/20 text-zinc-400 hover:text-rose-400 transition-all"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ABA 4: 📥 ENTRADAS (DIA A DIA) */}
+      {activeTab === 'entradas' && (
+        <div className="space-y-6 animate-in fade-in duration-200">
+          <div className="glass-panel p-5 rounded-3xl border border-white/10 flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-black text-white flex items-center gap-2">
+                📥 Entradas & Recebimentos Diários
+              </h2>
+              <p className="text-xs text-zinc-400 mt-0.5">
+                Histórico diário de pagamentos 100% liquidados no caixa do ateliê.
+              </p>
+            </div>
+            <button
+              onClick={() => openFinModal('income')}
+              className="px-4 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black uppercase tracking-wider flex items-center gap-2 transition-all shadow-lg shadow-emerald-600/30"
+            >
+              + Registrar Entrada de Caixa
+            </button>
+          </div>
+
+          <div className="glass-panel rounded-3xl border border-white/10 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="border-b border-white/10 bg-white/5 font-bold uppercase text-[10px] text-zinc-400">
+                    <th className="px-6 py-3.5">Data / Hora</th>
+                    <th className="px-6 py-3.5">Origem / Descrição</th>
+                    <th className="px-6 py-3.5">Categoria</th>
+                    <th className="px-6 py-3.5 text-right">Valor Recebido</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5 font-medium text-zinc-200">
+                  {rawOrders.filter(o => o.payment_status === 'paid').map(o => (
+                    <tr key={o.id} className="hover:bg-white/5 transition-colors">
+                      <td className="px-6 py-3.5 text-zinc-400">
+                        {format(new Date(o.created_at), 'dd/MM/yyyy HH:mm')}
+                      </td>
+                      <td className="px-6 py-3.5 font-bold text-white">
+                        Pedido #{o.order_number || o.id.slice(0, 6)} - {o.clients?.name || 'Cliente'}
+                      </td>
+                      <td className="px-6 py-3.5 text-emerald-400 font-bold">Serviço de Bordado</td>
+                      <td className="px-6 py-3.5 text-right font-black text-emerald-400">
+                        + {formatCurrency(o.total_amount, permissions?.canSeeFinancials ?? true)}
+                      </td>
+                    </tr>
+                  ))}
+                  {financialTransactions.filter(t => t.type === 'income').map(tx => (
+                    <tr key={tx.id} className="hover:bg-white/5 transition-colors">
+                      <td className="px-6 py-3.5 text-zinc-400">
+                        {format(new Date(tx.created_at), 'dd/MM/yyyy HH:mm')}
+                      </td>
+                      <td className="px-6 py-3.5 font-bold text-white">{tx.description}</td>
+                      <td className="px-6 py-3.5 text-emerald-400 font-bold">{tx.category || 'Receita Direta'}</td>
+                      <td className="px-6 py-3.5 text-right font-black text-emerald-400">
+                        + {formatCurrency(tx.amount, permissions?.canSeeFinancials ?? true)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ABA 5: 📊 RESUMO & DRE (DEFAULT) */}
+      {activeTab === 'resumo' && (
+        <>
+          {/* Grid de 6 KPIs Financeiros Executivos */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
         {/* KPI 1: Faturamento Bruto */}
         <div className="glass-panel p-5 rounded-3xl border border-white/10 relative overflow-hidden group hover:border-purple-500/50 transition-all shadow-md">
           <div className="flex items-center justify-between mb-2">
@@ -1272,6 +1653,8 @@ export const Faturamento: React.FC = () => {
           </table>
         </div>
       </div>
+      </>
+      )}
 
       {/* Modal de Envio da Fatura WhatsApp */}
       <WhatsAppBillingModal 
