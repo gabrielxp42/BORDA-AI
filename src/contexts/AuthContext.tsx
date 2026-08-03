@@ -40,7 +40,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           id: userId,
           full_name: authUser?.user_metadata?.full_name || authUser?.email?.split('@')[0] || 'Usuário',
           email: authUser?.email || '',
-          role: 'admin',
+          role: authUser?.email?.toLowerCase() === 'gabrielxp45@gmail.com' ? 'admin' : 'seller',
           is_active: true,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
@@ -87,6 +87,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setLoading(false);
     });
 
+    // Realtime Listener para atualizações na tabela profiles (ex: whatsapp_status)
+    let profileChannel: any = null;
+
     // Busca a sessão inicial
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (!mounted) return;
@@ -94,9 +97,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setSession(session);
         setUser(session.user);
         await fetchProfile(session.user.id, session.user);
+
+        // Inscreve no canal realtime do perfil do usuário logado
+        profileChannel = supabase
+          .channel(`profile_realtime_${session.user.id}`)
+          .on(
+            'postgres_changes',
+            {
+              event: 'UPDATE',
+              schema: 'public',
+              table: 'profiles',
+              filter: `id=eq.${session.user.id}`
+            },
+            (payload) => {
+              if (mounted && payload.new) {
+                setProfile(payload.new as Profile);
+              }
+            }
+          )
+          .subscribe();
+
         setLoading(false);
       } else if (!hasAuthParams && !hasAuthError) {
-        // Apenas encerra o carregamento se NÃO for um retorno de OAuth processando na URL
         setLoading(false);
       }
     });
@@ -104,6 +126,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => {
       mounted = false;
       subscription.unsubscribe();
+      if (profileChannel) {
+        supabase.removeChannel(profileChannel);
+      }
     };
   }, [fetchProfile]);
 

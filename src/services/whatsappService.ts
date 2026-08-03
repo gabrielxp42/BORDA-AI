@@ -71,30 +71,67 @@ async function getEvolutionCredentials() {
     .eq('id', user.id)
     .single();
 
+  const defaultInstanceId = `borda_${user.id.replace(/-/g, '').substring(0, 10)}`;
+
   if (profile?.whatsapp_api_url && profile?.whatsapp_api_key) {
     return {
       apiUrl: profile.whatsapp_api_url.replace(/\/$/, ''),
       apiKey: profile.whatsapp_api_key,
-      instanceId: profile.whatsapp_instance_id || `borda_${user.id.substring(0, 6)}`
+      instanceId: profile.whatsapp_instance_id || defaultInstanceId
     };
   }
 
-  // Fallback: busca em admin profiles
-  const { data: adminProfile } = await supabase
-    .from('profiles')
-    .select('id, whatsapp_api_url, whatsapp_api_key, whatsapp_instance_id')
-    .not('whatsapp_api_url', 'is', null)
-    .not('whatsapp_api_key', 'is', null)
-    .limit(1)
-    .maybeSingle();
+  // 2. Busca em company_settings (tabela global acessível por todos os usuários)
+  try {
+    const { data: compSettings } = await supabase
+      .from('company_settings')
+      .select('whatsapp_api_url, whatsapp_api_key')
+      .maybeSingle();
 
-  if (adminProfile?.whatsapp_api_url && adminProfile?.whatsapp_api_key) {
-    return {
-      apiUrl: adminProfile.whatsapp_api_url.replace(/\/$/, ''),
-      apiKey: adminProfile.whatsapp_api_key,
-      instanceId: adminProfile.whatsapp_instance_id || `borda_${adminProfile.id.substring(0, 6)}`
-    };
+    if ((compSettings as any)?.whatsapp_api_url && (compSettings as any)?.whatsapp_api_key) {
+      return {
+        apiUrl: (compSettings as any).whatsapp_api_url.replace(/\/$/, ''),
+        apiKey: (compSettings as any).whatsapp_api_key,
+        instanceId: profile?.whatsapp_instance_id || defaultInstanceId
+      };
+    }
+  } catch (e) {
+    console.warn('[WhatsApp Credentials] Falha ao consultar company_settings:', e);
   }
+
+  // 3. Fallback: busca em admin profiles
+  try {
+    const { data: adminProfile } = await supabase
+      .from('profiles')
+      .select('id, whatsapp_api_url, whatsapp_api_key, whatsapp_instance_id')
+      .not('whatsapp_api_url', 'is', null)
+      .not('whatsapp_api_key', 'is', null)
+      .limit(1)
+      .maybeSingle();
+
+    if (adminProfile?.whatsapp_api_url && adminProfile?.whatsapp_api_key) {
+      return {
+        apiUrl: adminProfile.whatsapp_api_url.replace(/\/$/, ''),
+        apiKey: adminProfile.whatsapp_api_key,
+        instanceId: profile?.whatsapp_instance_id || defaultInstanceId
+      };
+    }
+  } catch (e) {
+    console.warn('[WhatsApp Credentials] RLS bloqueou consulta a admin profiles:', e);
+  }
+
+  // 4. Fallback final: localStorage
+  try {
+    const localUrl = localStorage.getItem('borda_whatsapp_api_url');
+    const localKey = localStorage.getItem('borda_whatsapp_api_key');
+    if (localUrl && localKey) {
+      return {
+        apiUrl: localUrl.replace(/\/$/, ''),
+        apiKey: localKey,
+        instanceId: profile?.whatsapp_instance_id || defaultInstanceId
+      };
+    }
+  } catch (e) {}
 
   return null;
 }
@@ -188,18 +225,20 @@ export async function createEvolutionInstance(instanceName: string, force = fals
  * Atualiza o status da conexão da instância com a Evolution API sem reiniciar o handshake Baileys
  */
 export async function checkEvolutionStatus(): Promise<EvolutionProxyResponse> {
+  // 1. Tenta via Edge Function whatsapp-proxy
   try {
     const { data, error } = await supabase.functions.invoke('whatsapp-proxy', {
       body: { action: 'update-status' }
     });
 
-    if (!error && data) {
+    if (!error && data && (data.connected || data.state === 'open')) {
       return data;
     }
   } catch (err) {
-    console.warn('[WhatsApp Service] Fallback direto para status da Evolution API...');
+    console.warn('[WhatsApp Service] Edge Function whatsapp-proxy não respondeu, tentando checagem direta...');
   }
 
+  // 2. Dupla-checagem via REST direto na Evolution API com inspetor ultra-robusto
   const creds = await getEvolutionCredentials();
   if (!creds) {
     return { connected: false, state: 'not_found' };
@@ -213,9 +252,20 @@ export async function checkEvolutionStatus(): Promise<EvolutionProxyResponse> {
 
     if (!resp.ok) return { connected: false, state: 'not_found' };
     const data = await resp.json();
-    const state = data?.instance?.state || data?.instance?.status;
+    
+    // Inspeciona TODAS as variações possíveis de payload da Evolution API v2 (raiz, instance, status, state, connectionStatus)
+    const rawState = String(
+      data?.instance?.state || 
+      data?.instance?.status || 
+      data?.state || 
+      data?.status || 
+      data?.connectionStatus ||
+      ''
+    ).toLowerCase();
 
-    if (state === 'open' || state === 'CONNECTED') {
+    const isConn = rawState === 'open' || rawState === 'connected';
+
+    if (isConn) {
       // Atualiza o perfil no Supabase como conectado
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
@@ -228,13 +278,12 @@ export async function checkEvolutionStatus(): Promise<EvolutionProxyResponse> {
       return { connected: true, state: 'open' };
     }
 
-    if (state === 'connecting' || state === 'CONNECTING') {
-      // IMPORTANTE: Mantém o handshake! Não rechama /connect durante o polling para não derrubar o QR Code
+    if (rawState === 'connecting') {
       return { connected: false, state: 'connecting' };
     }
 
     // Apenas se o estado for fechado ('close' / 'CLOSED'), tenta solicitar um novo QR Code
-    if (state === 'close' || state === 'CLOSED') {
+    if (rawState === 'close' || rawState === 'closed') {
       const connResp = await fetch(`${apiUrl}/instance/connect/${instanceId}`, { headers: { apikey: apiKey } });
       const connData = await connResp.json().catch(() => ({}));
       const b64 = connData?.qrcode?.base64 || connData?.base64 || connData?.code;
@@ -272,7 +321,16 @@ export async function deleteEvolutionInstance(): Promise<{ success: boolean }> {
     const { data, error } = await supabase.functions.invoke('whatsapp-proxy', {
       body: { action: 'delete' }
     });
-    if (!error) return data || { success: true };
+    if (!error && data) {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        await supabase.from('profiles').update({
+          whatsapp_status: 'disconnected',
+          whatsapp_qr_cache: null
+        }).eq('id', user.id);
+      }
+      return data;
+    }
   } catch { /* fallback */ }
 
   const creds = await getEvolutionCredentials();
@@ -280,6 +338,15 @@ export async function deleteEvolutionInstance(): Promise<{ success: boolean }> {
     await fetch(`${creds.apiUrl}/instance/logout/${creds.instanceId}`, { method: 'DELETE', headers: { apikey: creds.apiKey } }).catch(() => {});
     await fetch(`${creds.apiUrl}/instance/delete/${creds.instanceId}`, { method: 'DELETE', headers: { apikey: creds.apiKey } }).catch(() => {});
   }
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (user) {
+    await supabase.from('profiles').update({
+      whatsapp_status: 'disconnected',
+      whatsapp_qr_cache: null
+    }).eq('id', user.id);
+  }
+
   return { success: true };
 }
 
@@ -334,13 +401,13 @@ export async function sendEvolutionText(phone: string, message: string): Promise
     console.warn('[WhatsApp] Falha ao obter whatsapp_instance_id do perfil:', e);
   }
 
-  const targetInstance = userInstanceId;
+  const creds = await getEvolutionCredentials();
+  const targetInstance = userInstanceId || creds?.instanceId;
   if (!targetInstance) {
     throw new Error('Instância do WhatsApp não encontrada para este usuário. Por favor, conecte seu WhatsApp nas configurações.');
   }
 
   // 1. Tenta envio REST direto com parâmetro de presença "composing" (digitando...)
-  const creds = await getEvolutionCredentials();
   if (creds && creds.apiUrl && creds.apiKey) {
     const inst = targetInstance;
     console.log(`📲 [WhatsApp REST Direto Anti-Ban] Enviando para ${cleanPhone} via [${inst}] (Digitação: ${typingDelayMs}ms)...`);

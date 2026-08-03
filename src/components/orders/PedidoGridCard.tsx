@@ -10,7 +10,7 @@ import { formatCurrency } from '@/utils/currencyFormatter';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { getWhatsAppWebLink, sendEvolutionText, formatWhatsAppNumber } from '@/services/whatsappService';
-import { parsePaymentMetadata, formatOrderPaymentBadgeDetails } from '@/utils/paymentHelper';
+import { parsePaymentMetadata, formatOrderPaymentBadgeDetails, getDueDateAlertInfo } from '@/utils/paymentHelper';
 import { printOrderReceipt } from '@/services/pdfGenerator';
 import { printThermalReceipt } from '@/services/thermalPrinter';
 import { useCompanySettings } from '@/contexts/CompanySettingsContext';
@@ -215,6 +215,17 @@ const PedidoGridCardComponent: React.FC<PedidoGridCardProps> = ({
                 <Calendar className="h-3 w-3 text-purple-400 shrink-0" />
                 {format(new Date(order.created_at), 'dd/MM/yyyy HH:mm', { locale: ptBR })}
               </p>
+              {(() => {
+                const dueDateInfo = getDueDateAlertInfo(order.due_date, order.status);
+                if (!dueDateInfo) return null;
+                return (
+                  <div className="mt-1">
+                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] uppercase border ${dueDateInfo.badgeClass}`}>
+                      {dueDateInfo.label}
+                    </span>
+                  </div>
+                );
+              })()}
             </div>
 
             {/* Badge de Status Financeiro (Pill de 1 Linha Limpa) */}

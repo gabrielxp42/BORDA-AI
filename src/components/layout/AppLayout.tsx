@@ -87,13 +87,10 @@ export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children })
   });
   const location = useLocation();
 
-  const isAdmin = useMemo(() => {
-    return (
-      user?.email?.toLowerCase() === 'gabrielxp45@gmail.com' ||
-      authProfile?.email?.toLowerCase() === 'gabrielxp45@gmail.com' ||
-      authProfile?.role === 'admin'
-    );
-  }, [user, authProfile]);
+  const isMasterAdmin = useMemo(() => {
+    const userEmail = user?.email?.toLowerCase() || authProfile?.email?.toLowerCase();
+    return userEmail === 'gabrielxp45@gmail.com';
+  }, [user?.email, authProfile?.email]);
 
   // Mapeamento de rotas para a chave de permissão
   const pathToKey: Record<string, keyof typeof permissions.routes> = useMemo(() => ({
@@ -128,14 +125,14 @@ export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children })
       return key ? permissions.routes[key] !== false : true;
     });
 
-    if (isAdmin) {
+    if (isMasterAdmin) {
       items = [
         ...items,
         { label: 'Painel Master Admin', path: '/admin', icon: ShieldCheck, badge: <Crown className="h-3.5 w-3.5 text-amber-400" /> }
       ];
     }
     return items;
-  }, [permissions.routes, isAdmin, pathToKey]);
+  }, [permissions.routes, isMasterAdmin, pathToKey]);
 
   useEffect(() => {
     const root = document.documentElement;

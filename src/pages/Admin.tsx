@@ -28,11 +28,9 @@ export const Admin: React.FC = () => {
   const [usersList, setUsersList] = useState<UserProfileData[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(true);
 
-  // Verificação rigorosa se o usuário é Admin
-  const isMasterAdmin =
-    user?.email?.toLowerCase() === 'gabrielxp45@gmail.com' ||
-    profile?.email?.toLowerCase() === 'gabrielxp45@gmail.com' ||
-    profile?.role === 'admin';
+  // Verificação rigorosa se o usuário é o Admin Master do SaaS
+  const userEmail = user?.email?.toLowerCase() || profile?.email?.toLowerCase();
+  const isMasterAdmin = userEmail === 'gabrielxp45@gmail.com';
 
   useEffect(() => {
     if (isMasterAdmin) {

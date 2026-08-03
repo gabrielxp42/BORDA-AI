@@ -26,7 +26,7 @@ import {
 import { WhatsAppStatus } from '@/types/borda';
 
 export const WhatsAppConnectionCard: React.FC = () => {
-  const { profile } = useAuth();
+  const { profile, refreshProfile } = useAuth();
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<WhatsAppStatus>('disconnected');
   const [qrCode, setQrCode] = useState<string | null>(null);
@@ -79,42 +79,72 @@ export const WhatsAppConnectionCard: React.FC = () => {
     }
   }, [profile?.whatsapp_status, profile?.whatsapp_qr_cache]);
 
-  // Polling automático de status quando em estado 'connecting'
+  // Checagem automática real no carregamento do componente (F5 / navegação)
+  useEffect(() => {
+    let isSubscribed = true;
+    const verifyInitialStatus = async () => {
+      try {
+        const res = await checkEvolutionStatus();
+        if (!isSubscribed) return;
+        if (res.connected || res.state === 'open') {
+          setStatus('connected');
+          setQrCode(null);
+          await refreshProfile();
+        }
+      } catch (e) {
+        console.warn('[WhatsApp] Erro ao checar status inicial:', e);
+      }
+    };
+
+    verifyInitialStatus();
+
+    return () => {
+      isSubscribed = false;
+    };
+  }, [refreshProfile]);
+
+  // Polling automático e RÁPIDO (2s) de status quando em estado 'connecting'
   useEffect(() => {
     if (status !== 'connecting') {
       stopPolling();
       return;
     }
 
-    if (!pollingRef.current) {
-      pollingRef.current = setInterval(async () => {
-        try {
-          const res = await checkEvolutionStatus();
-          setLastChecked(new Date());
+    let isSubscribed = true;
 
-          if (res.connected || res.state === 'open') {
-            setStatus('connected');
-            setQrCode(null);
-            stopPolling();
-          } else if (typeof res.qrcode === 'string') {
-            setQrCode(res.qrcode);
-          } else if (res.qrcode?.base64) {
-            setQrCode(res.qrcode.base64);
-          } else if (res.state === 'not_found' || res.error) {
-            setStatus('disconnected');
-            setQrCode(null);
-            stopPolling();
-          }
-        } catch (err) {
-          console.warn('[WhatsApp Polling] Erro de checagem silenciosa:', err);
+    const doCheck = async () => {
+      try {
+        const res = await checkEvolutionStatus();
+        if (!isSubscribed) return;
+        setLastChecked(new Date());
+
+        if (res.connected || res.state === 'open') {
+          setStatus('connected');
+          setQrCode(null);
+          await refreshProfile();
+          stopPolling();
+        } else if (typeof res.qrcode === 'string' && res.qrcode.length > 50) {
+          setQrCode(res.qrcode);
+        } else if (res.qrcode?.base64) {
+          setQrCode(res.qrcode.base64);
         }
-      }, 5000);
+      } catch (err) {
+        console.warn('[WhatsApp Polling] Erro de checagem silenciosa:', err);
+      }
+    };
+
+    // Executa a primeira verificação no mesmo instante (0ms)
+    doCheck();
+
+    if (!pollingRef.current) {
+      pollingRef.current = setInterval(doCheck, 2000);
     }
 
     return () => {
+      isSubscribed = false;
       stopPolling();
     };
-  }, [status, stopPolling]);
+  }, [status, stopPolling, refreshProfile]);
 
   // Função principal de conexão / geração de QR Code
   const handleConnect = useCallback(async (force = false) => {
@@ -125,27 +155,22 @@ export const WhatsAppConnectionCard: React.FC = () => {
 
     try {
       if (force) {
+        setQrCode(null);
+        setStatus('disconnected');
         try {
           await deleteEvolutionInstance();
         } catch {}
-        await new Promise((r) => setTimeout(r, 1500));
+        await refreshProfile();
+        await new Promise((r) => setTimeout(r, 2000));
+        setStatus('connecting');
       }
 
-      const cleanCompanyName = (profile?.full_name || 'borda_user')
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .toLowerCase()
-        .replace(/[^a-z0-9]/g, '')
-        .substring(0, 12);
-
-      const randomSuffix = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
-      const instanceId = force 
-        ? `borda_${cleanCompanyName}_${randomSuffix}` 
-        : (profile?.whatsapp_instance_id || `borda_${cleanCompanyName}`);
+      const { data: { user } } = await supabase.auth.getUser();
+      const userHash = user?.id ? user.id.replace(/-/g, '').substring(0, 10) : 'user';
+      const instanceId = `borda_${userHash}`;
 
       const res = await createEvolutionInstance(instanceId, force);
 
-      const { data: { user } } = await supabase.auth.getUser();
       if (user?.id) {
         const qr = typeof res.qrcode === 'string' 
           ? res.qrcode 
@@ -154,12 +179,11 @@ export const WhatsAppConnectionCard: React.FC = () => {
         const isConn = res.connected || res.instance?.state === 'open' || res.status === 'connected';
         const formattedQr = qr ? (qr.startsWith('data:image') ? qr : `data:image/png;base64,${qr}`) : null;
 
-        await supabase.from('profiles').upsert({
-          id: user.id,
+        await supabase.from('profiles').update({
           whatsapp_instance_id: instanceId,
           whatsapp_status: isConn ? 'connected' : 'connecting',
           whatsapp_qr_cache: formattedQr
-        });
+        }).eq('id', user.id);
       }
 
       const isConnAfterUpsert = res.connected || res.instance?.state === 'open' || res.status === 'connected';
@@ -426,7 +450,7 @@ export const WhatsAppConnectionCard: React.FC = () => {
             <button
               onClick={() => handleConnect(true)}
               disabled={loading}
-              className="inline-flex items-center gap-2 text-xs font-bold text-rose-400 hover:text-rose-300 transition-colors"
+              className="inline-flex items-center gap-2 text-xs font-bold text-rose-400 hover:text-rose-300 transition-colors cursor-pointer"
             >
               <RefreshCcw className="h-3.5 w-3.5" /> Bugou ou travou? Clique para Recriar a Instância do Zero
             </button>

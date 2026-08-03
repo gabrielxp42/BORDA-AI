@@ -11,6 +11,7 @@ import { useCompanySettings } from '@/contexts/CompanySettingsContext';
 import { useProfile } from '@/contexts/ProfileContext';
 import { sendEvolutionText } from '@/services/whatsappService';
 import { toast } from 'sonner';
+import { format } from 'date-fns';
 
 interface GabiAlertItem {
   id: string;

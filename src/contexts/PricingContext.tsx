@@ -48,15 +48,46 @@ export const PricingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const fetchRules = async () => {
     setLoading(true);
     try {
+      if (!user?.id) {
+        setLoading(false);
+        return;
+      }
+
       const { data, error } = await supabase
         .from('pricing_rules')
         .select('*')
+        .eq('user_id', user.id)
         .order('display_order', { ascending: true });
 
       if (!error && data && data.length > 0) {
-        setRules(data as PricingRule[]);
-        localStorage.setItem(LOCAL_STORAGE_RULES_KEY, JSON.stringify(data));
-      } else if (user?.id) {
+        // DEDUPLICAÇÃO CIRÚRGICA: Se houver duplicatas (mesmo name), manter apenas
+        // a PRIMEIRA ocorrência (mais antiga / menor display_order) e apagar as extras
+        const seen = new Map<string, PricingRule>();
+        const duplicateIds: string[] = [];
+
+        for (const rule of data) {
+          const key = rule.name;
+          if (!seen.has(key)) {
+            seen.set(key, rule as PricingRule);
+          } else {
+            // Este é um duplicado — marcar para exclusão
+            duplicateIds.push(rule.id);
+          }
+        }
+
+        // Apagar duplicatas silenciosamente no banco (sem afetar as regras originais)
+        if (duplicateIds.length > 0) {
+          console.warn(`[Pricing] Detectadas ${duplicateIds.length} regras duplicadas. Limpando automaticamente...`);
+          await supabase
+            .from('pricing_rules')
+            .delete()
+            .in('id', duplicateIds);
+        }
+
+        const cleanRules = Array.from(seen.values());
+        setRules(cleanRules);
+        localStorage.setItem(LOCAL_STORAGE_RULES_KEY, JSON.stringify(cleanRules));
+      } else {
         // Se o usuário não possui regras cadastradas no DB, insere as padrão
         const rulesToInsert = DEFAULT_PRICING_RULES.map(r => ({
           ...r,

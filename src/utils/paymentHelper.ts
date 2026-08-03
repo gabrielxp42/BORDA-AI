@@ -188,3 +188,97 @@ export function formatOrderPaymentBadgeDetails(
     paymentNote: ''
   };
 }
+
+export interface DueDateAlertInfo {
+  isOverdue: boolean;
+  isToday: boolean;
+  isUrgent: boolean;
+  daysDiff: number;
+  formattedDate: string;
+  label: string;
+  badgeClass: string;
+}
+
+/**
+ * Retorna status e alerta do prazo de entrega de um pedido.
+ */
+export function getDueDateAlertInfo(dueDate?: string, status?: string): DueDateAlertInfo | null {
+  if (!dueDate) return null;
+
+  try {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const [year, month, day] = dueDate.split('-').map(Number);
+    const due = new Date(year, month - 1, day);
+    due.setHours(0, 0, 0, 0);
+
+    const diffMs = due.getTime() - today.getTime();
+    const daysDiff = Math.round(diffMs / (1000 * 60 * 60 * 24));
+    
+    const formattedDate = format(due, 'dd/MM/yyyy');
+    const isFinished = status === 'concluido' || status === 'cancelado';
+
+    if (isFinished) {
+      return {
+        isOverdue: false,
+        isToday: false,
+        isUrgent: false,
+        daysDiff,
+        formattedDate,
+        label: `Entrega: ${formattedDate}`,
+        badgeClass: 'bg-slate-500/10 text-slate-400 border-slate-500/20'
+      };
+    }
+
+    if (daysDiff < 0) {
+      const daysLate = Math.abs(daysDiff);
+      return {
+        isOverdue: true,
+        isToday: false,
+        isUrgent: true,
+        daysDiff,
+        formattedDate,
+        label: `🚨 ATRASADO (${daysLate}d atrás - ${formattedDate})`,
+        badgeClass: 'bg-rose-500/20 text-rose-500 dark:text-rose-400 border-rose-500/40 animate-pulse font-black'
+      };
+    }
+
+    if (daysDiff === 0) {
+      return {
+        isOverdue: false,
+        isToday: true,
+        isUrgent: true,
+        daysDiff,
+        formattedDate,
+        label: `⏰ VENCE HOJE (${formattedDate})`,
+        badgeClass: 'bg-amber-500/20 text-amber-600 dark:text-amber-400 border-amber-500/40 animate-pulse font-black'
+      };
+    }
+
+    if (daysDiff <= 2) {
+      return {
+        isOverdue: false,
+        isToday: false,
+        isUrgent: true,
+        daysDiff,
+        formattedDate,
+        label: `⏳ Entrega em ${daysDiff}d (${formattedDate})`,
+        badgeClass: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30 font-bold'
+      };
+    }
+
+    return {
+      isOverdue: false,
+      isToday: false,
+      isUrgent: false,
+      daysDiff,
+      formattedDate,
+      label: `📅 Entrega: ${formattedDate}`,
+      badgeClass: 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20 font-bold'
+    };
+  } catch (err) {
+    return null;
+  }
+}
+

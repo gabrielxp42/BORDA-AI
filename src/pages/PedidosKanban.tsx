@@ -8,7 +8,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useProfile } from '@/contexts/ProfileContext';
 import { useCompanySettings } from '@/contexts/CompanySettingsContext';
 import { useAuth } from '@/contexts/AuthContext';
-import { parsePaymentMetadata, formatOrderPaymentBadgeDetails } from '@/utils/paymentHelper';
+import { parsePaymentMetadata, formatOrderPaymentBadgeDetails, getDueDateAlertInfo } from '@/utils/paymentHelper';
 import { printOrderReceipt } from '@/services/pdfGenerator';
 import { printThermalReceipt } from '@/services/thermalPrinter';
 import { sendEvolutionText, getWhatsAppWebLink, handleWhatsAppDispatchError } from '@/services/whatsappService';
@@ -410,6 +410,17 @@ export const PedidosKanban: React.FC<PedidosKanbanProps> = ({
                               <p className="text-[10px] text-zinc-400 truncate flex items-center gap-1">
                                 <Building className="h-2.5 w-2.5 shrink-0" /> <span className="truncate">{ord.client?.company_name || 'Particular'}</span>
                               </p>
+                              {(() => {
+                                const dueDateInfo = getDueDateAlertInfo(ord.due_date, ord.status);
+                                if (!dueDateInfo) return null;
+                                return (
+                                  <div className="mt-1">
+                                    <span className={`inline-block px-1.5 py-0.5 rounded text-[8px] uppercase border ${dueDateInfo.badgeClass}`}>
+                                      {dueDateInfo.label}
+                                    </span>
+                                  </div>
+                                );
+                              })()}
                             </div>
                           </div>
 

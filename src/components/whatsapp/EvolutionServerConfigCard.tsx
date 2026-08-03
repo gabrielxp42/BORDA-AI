@@ -32,9 +32,12 @@ export const EvolutionServerConfigCard: React.FC = () => {
         throw new Error('Usuário não autenticado.');
       }
 
+      const cleanApiUrl = apiUrl.trim();
+      const cleanApiKey = apiKey.trim();
+
       const { error } = await supabase.from('profiles').update({
-        whatsapp_api_url: apiUrl.trim(),
-        whatsapp_api_key: apiKey.trim(),
+        whatsapp_api_url: cleanApiUrl,
+        whatsapp_api_key: cleanApiKey,
       }).eq('id', targetId);
 
       if (error) throw error;
