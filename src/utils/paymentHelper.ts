@@ -153,7 +153,7 @@ export function formatOrderPaymentBadgeDetails(
     const noteSuffix = paymentNote ? ` ("${paymentNote}")` : '';
     return {
       status: 'paid',
-      shortLabel: `✓ Pago 100%${methodSuffix}`,
+      shortLabel: '✓ Pago 100%',
       badgeSubtext: paidDateStr ? `Pago em ${paidDateStr}${noteSuffix}` : noteSuffix,
       fullLabel: `✓ Pago 100%${methodSuffix}${paidDateStr ? ` (${paidDateStr})` : ''}${noteSuffix}`,
       methodLabel,
@@ -169,7 +169,7 @@ export function formatOrderPaymentBadgeDetails(
     const noteSuffix = paymentNote ? ` ("${paymentNote}")` : '';
     return {
       status: 'half_paid',
-      shortLabel: `⚡ Sinal 50%${methodSuffix}`,
+      shortLabel: '⚡ Sinal 50%',
       badgeSubtext: `Sinal R$ ${depositVal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${noteSuffix}`,
       fullLabel: `⚡ Sinal 50%${methodSuffix} (Restam R$ ${remainingVal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})${noteSuffix}`,
       methodLabel,

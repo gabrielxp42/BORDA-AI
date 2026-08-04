@@ -148,43 +148,163 @@ export const Faturamento: React.FC = () => {
   // Modal State
   const [selectedClient, setSelectedClient] = useState<ClientBillingData | null>(null);
 
-  // Manual Cash Flow State (Receitas & Despesas)
-  const [financialTransactions, setFinancialTransactions] = useState<FinancialTransaction[]>(() => {
-    const saved = localStorage.getItem('borda_financial_transactions');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch {
-        return [];
-      }
-    }
-    return [
-      { id: '1', type: 'expense', description: 'Linhas Poliéster & Agulhas', amount: 350, category: 'Insumos de Bordado', created_at: new Date().toISOString() },
-      { id: '2', type: 'expense', description: 'Manutenção Preventiva Tajima', amount: 480, category: 'Manutenção de Máquinas', created_at: new Date().toISOString() },
-      { id: '3', type: 'expense', description: 'Energia Elétrica Ateliê', amount: 620, category: 'Energia & Utilidades', created_at: new Date().toISOString() },
-      { id: '4', type: 'income', description: 'Desenvolvimento Matriz Logos', amount: 250, category: 'Serviço de Programação', created_at: new Date().toISOString() }
-    ];
-  });
+  // Manual Cash Flow State (Receitas & Despesas) — Sincronizado via Supabase
+  const [financialTransactions, setFinancialTransactions] = useState<FinancialTransaction[]>([]);
   const [isFinModalOpen, setIsFinModalOpen] = useState(false);
   const [finModalType, setFinModalType] = useState<FinancialTransactionType>('income');
+  const [finSynced, setFinSynced] = useState(false);
 
+  // Carrega transações do Supabase e migra dados locais (localStorage) se existirem
   useEffect(() => {
-    localStorage.setItem('borda_financial_transactions', JSON.stringify(financialTransactions));
-  }, [financialTransactions]);
+    if (!isUnlocked) return;
 
-  const handleAddFinancialTransaction = (newTx: Omit<FinancialTransaction, 'id' | 'created_at'>) => {
+    const loadAndMigrateTransactions = async () => {
+      try {
+        const { data: authData } = await supabase.auth.getUser();
+        const userId = authData?.user?.id;
+        if (!userId) return;
+
+        // 1. Busca transações já salvas na nuvem
+        const { data: cloudTxs, error } = await supabase
+          .from('financial_transactions')
+          .select('*')
+          .eq('user_id', userId)
+          .order('created_at', { ascending: false });
+
+        const cloudList = (cloudTxs || []) as FinancialTransaction[];
+
+        // 2. Verifica se tem dados locais pendentes de migração
+        const localRaw = localStorage.getItem('borda_financial_transactions');
+        const alreadyMigrated = localStorage.getItem('borda_fin_migrated_to_cloud');
+
+        if (localRaw && !alreadyMigrated) {
+          try {
+            const localTxs: FinancialTransaction[] = JSON.parse(localRaw);
+            
+            // Filtra transações locais que NÃO existem na nuvem (evita duplicatas)
+            const existingIds = new Set(cloudList.map(t => t.id));
+            const toMigrate = localTxs.filter(t => !existingIds.has(t.id));
+
+            if (toMigrate.length > 0) {
+              // Envia para o Supabase com o user_id
+              const rows = toMigrate.map(t => ({
+                id: t.id,
+                user_id: userId,
+                type: t.type,
+                amount: t.amount,
+                description: t.description,
+                category: t.category,
+                payment_method: t.payment_method || 'other',
+                date: t.date || t.created_at,
+                expense_type: t.expense_type || null,
+                due_date: t.due_date || null,
+                status: t.status || 'paid',
+                order_id: t.order_id || null,
+                notes: t.notes || null,
+                created_at: t.created_at
+              }));
+
+              const { error: insertError } = await supabase
+                .from('financial_transactions')
+                .insert(rows);
+
+              if (!insertError) {
+                toast.success(`${toMigrate.length} lançamento(s) sincronizado(s) com a nuvem! ☁️`, { duration: 4000 });
+                // Marca como migrado para nunca mais repetir
+                localStorage.setItem('borda_fin_migrated_to_cloud', 'true');
+                // Mescla os dados: nuvem + migrados
+                setFinancialTransactions([...toMigrate, ...cloudList]);
+              } else {
+                console.error('Erro ao migrar transações para nuvem:', insertError);
+                // Fallback: usa dados locais mesmo
+                setFinancialTransactions(localTxs);
+              }
+            } else {
+              // Todos os locais já estão na nuvem
+              localStorage.setItem('borda_fin_migrated_to_cloud', 'true');
+              setFinancialTransactions(cloudList);
+            }
+          } catch {
+            setFinancialTransactions(cloudList);
+          }
+        } else {
+          // Sem dados locais ou já migrado — usa a nuvem
+          setFinancialTransactions(cloudList);
+        }
+        setFinSynced(true);
+      } catch (err) {
+        console.error('Erro ao carregar transações financeiras:', err);
+        // Fallback total: usa localStorage se a nuvem falhar
+        const localRaw = localStorage.getItem('borda_financial_transactions');
+        if (localRaw) {
+          try {
+            setFinancialTransactions(JSON.parse(localRaw));
+          } catch {
+            setFinancialTransactions([]);
+          }
+        }
+        setFinSynced(true);
+      }
+    };
+
+    loadAndMigrateTransactions();
+  }, [isUnlocked]);
+
+  // Persiste no localStorage como cache local (backup)
+  useEffect(() => {
+    if (finSynced && financialTransactions.length > 0) {
+      localStorage.setItem('borda_financial_transactions', JSON.stringify(financialTransactions));
+    }
+  }, [financialTransactions, finSynced]);
+
+  const handleAddFinancialTransaction = async (newTx: Omit<FinancialTransaction, 'id' | 'created_at'>) => {
     const created: FinancialTransaction = {
       ...newTx,
       id: Date.now().toString(),
       created_at: new Date().toISOString(),
     };
+
+    // Atualiza a UI imediatamente (otimistic update)
     setFinancialTransactions((prev) => [created, ...prev]);
     toast.success(`${newTx.type === 'income' ? 'Receita' : 'Despesa'} lançada com sucesso!`);
+
+    // Persiste no Supabase em background
+    try {
+      const { data: authData } = await supabase.auth.getUser();
+      const userId = authData?.user?.id;
+      if (userId) {
+        await supabase.from('financial_transactions').insert({
+          id: created.id,
+          user_id: userId,
+          type: created.type,
+          amount: created.amount,
+          description: created.description,
+          category: created.category,
+          payment_method: created.payment_method || 'other',
+          date: created.date || created.created_at,
+          expense_type: created.expense_type || null,
+          due_date: created.due_date || null,
+          status: created.status || 'paid',
+          order_id: created.order_id || null,
+          notes: created.notes || null,
+          created_at: created.created_at
+        });
+      }
+    } catch (err) {
+      console.error('Erro ao salvar transação na nuvem:', err);
+    }
   };
 
-  const handleDeleteTransaction = (id: string) => {
+  const handleDeleteTransaction = async (id: string) => {
     setFinancialTransactions(prev => prev.filter(t => t.id !== id));
     toast.info('Lançamento removido.');
+    
+    // Remove do Supabase em background
+    try {
+      await supabase.from('financial_transactions').delete().eq('id', id);
+    } catch (err) {
+      console.error('Erro ao remover transação da nuvem:', err);
+    }
   };
 
   const openFinModal = (type: FinancialTransactionType) => {

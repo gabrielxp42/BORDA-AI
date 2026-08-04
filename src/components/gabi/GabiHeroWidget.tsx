@@ -278,13 +278,35 @@ export const GabiHeroWidget: React.FC = () => {
         }
       }
 
-      // 6. Contas Fixas a Vencer
+      // 6. Contas Fixas a Vencer (lê do Supabase com fallback para localStorage)
       try {
-        const savedTxs = localStorage.getItem('borda_financial_transactions');
-        if (savedTxs) {
-          const txs: any[] = JSON.parse(savedTxs);
-          const pendingFixed = txs.filter(t => t.type === 'expense' && t.expense_type === 'fixed' && t.status !== 'paid' && t.due_date);
-          if (pendingFixed.length > 0) {
+        let txs: any[] = [];
+        const { data: authData } = await supabase.auth.getUser();
+        const userId = authData?.user?.id;
+        
+        if (userId) {
+          const { data: cloudTxs } = await supabase
+            .from('financial_transactions')
+            .select('*')
+            .eq('user_id', userId)
+            .eq('type', 'expense')
+            .eq('expense_type', 'fixed')
+            .neq('status', 'paid');
+          
+          txs = cloudTxs || [];
+        }
+        
+        // Fallback para localStorage se a nuvem estiver vazia
+        if (txs.length === 0) {
+          const savedTxs = localStorage.getItem('borda_financial_transactions');
+          if (savedTxs) {
+            const localTxs: any[] = JSON.parse(savedTxs);
+            txs = localTxs.filter(t => t.type === 'expense' && t.expense_type === 'fixed' && t.status !== 'paid' && t.due_date);
+          }
+        }
+        
+        const pendingFixed = txs.filter(t => t.due_date);
+        if (pendingFixed.length > 0) {
             newAlerts.push({
               id: 'group_contas_vencer',
               type: 'contas_vencer',
@@ -299,16 +321,15 @@ export const GabiHeroWidget: React.FC = () => {
               }))
             });
           }
-        }
       } catch (e) {
         console.error('Erro ao ler contas fixas na Gabi:', e);
       }
     } catch (err) {
       console.error('[Gabi] Erro ao carregar alertas:', err);
+    } finally {
+      setAlerts(newAlerts);
+      setLoading(false);
     }
-
-    setAlerts(newAlerts);
-    setLoading(false);
   }, [settings.systemName]);
 
   const loadOperadorData = useCallback(async () => {

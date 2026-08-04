@@ -97,30 +97,32 @@ const PedidoGridCardComponent: React.FC<PedidoGridCardProps> = ({
 
   const isUnpriced = order.total_amount === 0;
 
-  // Badge de Pagamento com Detalhes Completos (Sinal via PIX / Pago via Dinheiro)
-  const paymentBadge = useMemo(() => {
-    const details = formatOrderPaymentBadgeDetails(order.payment_status, order.total_amount, order.notes, order.payment_method);
+  // Badge de Pagamento com Detalhes Limpos no Topo
+  const paymentDetails = useMemo(() => {
+    return formatOrderPaymentBadgeDetails(order.payment_status, order.total_amount, order.notes, order.payment_method);
+  }, [order.payment_status, order.total_amount, order.notes, order.payment_method]);
 
-    if (details.status === 'paid') {
+  const paymentBadge = useMemo(() => {
+    if (paymentDetails.status === 'paid') {
       return {
-        label: details.fullLabel,
+        label: paymentDetails.shortLabel,
         className: 'border-emerald-500/40 bg-emerald-500/10 text-emerald-400 shadow-sm shadow-emerald-500/10',
         icon: CheckCircle2
       };
     }
-    if (details.status === 'half_paid') {
+    if (paymentDetails.status === 'half_paid') {
       return {
-        label: details.fullLabel,
+        label: paymentDetails.shortLabel,
         className: 'border-blue-500/40 bg-blue-500/10 text-blue-400 shadow-sm shadow-blue-500/10',
         icon: HandCoins
       };
     }
     return {
-      label: details.fullLabel,
+      label: paymentDetails.shortLabel,
       className: 'border-rose-500/40 bg-rose-500/10 text-rose-400 shadow-sm shadow-rose-500/10',
       icon: AlertCircle
     };
-  }, [order.payment_status, order.total_amount, order.notes, order.payment_method]);
+  }, [paymentDetails]);
 
   // Gerador Impressão Direta PDF Ordem de Serviço com Identidade Visual Total
   const getPrintData = () => ({
@@ -304,9 +306,48 @@ const PedidoGridCardComponent: React.FC<PedidoGridCardProps> = ({
               </div>
             )}
 
-            {/* Observações do Cliente Limpas (Sem comentários PAYMENT_METADATA vazados) */}
+            {/* Detalhamento Financeiro (Método, Data, Sinal) */}
+            {paymentDetails.status !== 'pending' && (paymentDetails.methodLabel || paymentDetails.paidDateStr || paymentDetails.depositVal) && (
+              <div className="bg-emerald-500/5 dark:bg-emerald-500/[0.04] p-2.5 rounded-2xl border border-emerald-500/10 dark:border-emerald-500/10 space-y-1">
+                <span className="text-[9px] font-black uppercase tracking-widest text-emerald-600/70 dark:text-emerald-400/60 flex items-center gap-1">
+                  <DollarSign className="h-3 w-3" /> Detalhes do Pagamento
+                </span>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {paymentDetails.methodLabel && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/15">
+                      💳 {paymentDetails.methodLabel}
+                    </span>
+                  )}
+                  {paymentDetails.paidDateStr && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-bold bg-slate-200/60 dark:bg-white/5 text-slate-600 dark:text-zinc-400">
+                      <Clock className="h-3 w-3" /> {paymentDetails.paidDateStr}
+                    </span>
+                  )}
+                  {paymentDetails.depositVal !== undefined && paymentDetails.status === 'half_paid' && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-bold bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/15">
+                      Sinal: R$ {paymentDetails.depositVal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    </span>
+                  )}
+                  {paymentDetails.remainingVal !== undefined && paymentDetails.remainingVal > 0 && paymentDetails.status === 'half_paid' && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/15">
+                      Restam: R$ {paymentDetails.remainingVal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    </span>
+                  )}
+                </div>
+                {paymentDetails.paymentNote && (
+                  <p className="text-[10px] text-slate-500 dark:text-zinc-400 italic mt-0.5">
+                    📝 {paymentDetails.paymentNote}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Observações do Pedido (Texto do Cliente - Separado do Pagamento) */}
             {cleanNotes && cleanNotes.trim().length > 0 && (
               <div className="bg-slate-50 dark:bg-white/[0.03] p-2.5 rounded-2xl border border-slate-200/60 dark:border-white/5">
+                <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 dark:text-zinc-500 flex items-center gap-1 mb-1">
+                  💬 Observação
+                </span>
                 <p className="text-[10px] font-medium text-slate-600 dark:text-zinc-300 italic line-clamp-2">
                   "{cleanNotes.trim()}"
                 </p>

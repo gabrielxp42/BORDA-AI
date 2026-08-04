@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   ShoppingBag, Play, Package, Lock, Printer, Send, FileText, 
   Building, Phone, AlertTriangle, Calendar, Zap, Download, 
-  CheckCircle2, Clock, Eye, Plus 
+  CheckCircle2, Clock, Eye, Plus, MessageCircle 
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useProfile } from '@/contexts/ProfileContext';
@@ -69,6 +69,14 @@ export const PedidosKanban: React.FC<PedidosKanbanProps> = ({
   const [activePrintOption, setActivePrintOption] = useState<string | null>(null);
   const [selectedOrderForPaymentModal, setSelectedOrderForPaymentModal] = useState<any | null>(null);
   const [visibleLimits, setVisibleLimits] = useState<Record<string, number>>({});
+  const [kanbanNotificationsEnabled, setKanbanNotificationsEnabled] = useState<Record<string, boolean>>(() => {
+    const saved = localStorage.getItem('kanban_notifications_enabled');
+    return saved ? JSON.parse(saved) : { design: true, embroidering: true, finishing: true, completed: true };
+  });
+
+  useEffect(() => {
+    localStorage.setItem('kanban_notifications_enabled', JSON.stringify(kanbanNotificationsEnabled));
+  }, [kanbanNotificationsEnabled]);
   const { isUnlocked } = useProfile();
   const { settings } = useCompanySettings();
   const { profile } = useAuth();
@@ -148,7 +156,7 @@ export const PedidosKanban: React.FC<PedidosKanbanProps> = ({
       const phone = orderToNotify?.client?.phone;
       const clientName = orderToNotify?.client?.name || 'Cliente';
       
-      if (phone && newStatus !== 'pending') {
+      if (phone && newStatus !== 'pending' && kanbanNotificationsEnabled[newStatus]) {
         const templates: Record<string, string> = {
             design: `Olá, ${clientName}! Seu pedido #${orderToNotify.order_number || orderToNotify.id.slice(0, 4)} entrou em fase de Criação de Matriz. 🎨`,
             embroidering: `Boas notícias, ${clientName}! Seu pedido #${orderToNotify.order_number || orderToNotify.id.slice(0, 4)} está na Máquina sendo bordado. 🧵`,
@@ -337,6 +345,17 @@ export const PedidosKanban: React.FC<PedidosKanbanProps> = ({
                       {/* Cabeçalho da Coluna com Botão + */}
                       <div className={`p-2.5 rounded-2xl border text-xs font-black uppercase tracking-wider flex items-center justify-between transition-colors ${col.color} ${snapshot.isDraggingOver ? 'shadow-lg shadow-purple-500/10' : ''}`}>
                         <div className="flex items-center gap-2">
+                          <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                const newState = { ...kanbanNotificationsEnabled, [col.id]: !kanbanNotificationsEnabled[col.id] };
+                                setKanbanNotificationsEnabled(newState);
+                            }}
+                            className={`p-1 rounded-lg ${kanbanNotificationsEnabled[col.id] ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-500/20 text-slate-400'}`}
+                            title={kanbanNotificationsEnabled[col.id] ? 'Notificações automáticas ATIVAS' : 'Notificações automáticas DESATIVADAS'}
+                          >
+                            <MessageCircle className="h-3.5 w-3.5" />
+                          </button>
                           <span>{col.title}</span>
                           <span className="h-5 w-5 rounded-full bg-white/10 flex items-center justify-center text-[10px]">
                             {colOrders.length}
