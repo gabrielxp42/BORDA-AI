@@ -204,103 +204,34 @@ export const Faturamento: React.FC = () => {
   // Modal State
   const [selectedClient, setSelectedClient] = useState<ClientBillingData | null>(null);
 
-  // Carrega transações do Supabase e migra dados locais (localStorage) se existirem
+  // Carrega transações do Supabase (migração de localStorage delegada ao cloudSync.ts)
   useEffect(() => {
     if (!isUnlocked) return;
 
-    const loadAndMigrateTransactions = async () => {
+    const loadTransactions = async () => {
       try {
         const { data: authData } = await supabase.auth.getUser();
         const userId = authData?.user?.id;
         if (!userId) return;
 
-        // 1. Busca transações já salvas na nuvem
-        const { data: cloudTxs, error } = await supabase
+        // Garante que dados locais residuais sejam enviados para nuvem antes de exibir
+        await syncLocalToCloud(true);
+
+        // Busca 100% da fonte de verdade: Supabase
+        const { data: cloudTxs } = await supabase
           .from('financial_transactions')
           .select('*')
           .eq('user_id', userId)
           .order('created_at', { ascending: false });
 
-        const cloudList = (cloudTxs || []) as FinancialTransaction[];
-
-        // 2. Verifica se tem dados locais pendentes de migração
-        const localRaw = localStorage.getItem('borda_financial_transactions');
-        const alreadyMigrated = localStorage.getItem('borda_fin_migrated_to_cloud');
-
-        if (localRaw && !alreadyMigrated) {
-          try {
-            const localTxs: FinancialTransaction[] = JSON.parse(localRaw);
-            
-            // Filtra transações locais que NÃO existem na nuvem (evita duplicatas)
-            const existingIds = new Set(cloudList.map(t => t.id));
-            const toMigrate = localTxs.filter(t => !existingIds.has(t.id));
-
-            if (toMigrate.length > 0) {
-              // Envia para o Supabase com o user_id
-              const isUUID = (str: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
-              const ensureUUID = (str?: string) => (str && isUUID(str)) ? str : crypto.randomUUID();
-
-              const rows = toMigrate.map(t => ({
-                id: ensureUUID(t.id),
-                user_id: userId,
-                type: t.type,
-                amount: t.amount,
-                description: t.description,
-                category: t.category,
-                payment_method: t.payment_method || 'other',
-                date: t.date || t.created_at,
-                expense_type: t.expense_type || null,
-                due_date: t.due_date || null,
-                status: t.status || 'paid',
-                order_id: t.order_id || null,
-                notes: t.notes || null,
-                created_at: t.created_at
-              }));
-
-              const { error: insertError } = await supabase
-                .from('financial_transactions')
-                .upsert(rows, { onConflict: 'id' });
-
-              if (!insertError) {
-                toast.success(`${toMigrate.length} lançamento(s) sincronizado(s) com a nuvem! ☁️`, { duration: 4000 });
-                // Marca como migrado para nunca mais repetir
-                localStorage.setItem('borda_fin_migrated_to_cloud', 'true');
-                // Mescla os dados: nuvem + migrados
-                setFinancialTransactions([...toMigrate, ...cloudList]);
-              } else {
-                console.error('Erro ao migrar transações para nuvem:', insertError);
-                // Fallback: usa dados locais mesmo
-                setFinancialTransactions(localTxs);
-              }
-            } else {
-              // Todos os locais já estão na nuvem
-              localStorage.setItem('borda_fin_migrated_to_cloud', 'true');
-              setFinancialTransactions(cloudList);
-            }
-          } catch {
-            setFinancialTransactions(cloudList);
-          }
-        } else {
-          // Sem dados locais ou já migrado — usa a nuvem
-          setFinancialTransactions(cloudList);
-        }
+        setFinancialTransactions((cloudTxs || []) as FinancialTransaction[]);
         setFinSynced(true);
       } catch (err) {
         console.error('Erro ao carregar transações financeiras:', err);
-        // Fallback total: usa localStorage se a nuvem falhar
-        const localRaw = localStorage.getItem('borda_financial_transactions');
-        if (localRaw) {
-          try {
-            setFinancialTransactions(JSON.parse(localRaw));
-          } catch {
-            setFinancialTransactions([]);
-          }
-        }
-        setFinSynced(true);
       }
     };
 
-    loadAndMigrateTransactions();
+    loadTransactions();
   }, [isUnlocked]);
 
   // Persiste no localStorage como cache local (backup)
