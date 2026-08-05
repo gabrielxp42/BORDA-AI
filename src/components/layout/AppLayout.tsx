@@ -234,11 +234,21 @@ export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children })
   }, [location.pathname]);
 
   useEffect(() => {
-    // Aplica o fator de zoom no elemento raiz do documento (html)
-    // Suportado por Chrome, Safari, Edge, e Firefox 126+
-    (document.documentElement.style as any).zoom = `${globalZoom / 100}`;
+    // Aplica o fator de zoom e ajusta a altura proporcional no elemento raiz para eliminar vãos pretos no rodape
+    const zoomRatio = globalZoom / 100;
+    const minH = `${100 / zoomRatio}vh`;
+
+    (document.documentElement.style as any).zoom = `${zoomRatio}`;
+    document.documentElement.style.minHeight = minH;
+    document.documentElement.style.height = minH;
+    document.documentElement.style.backgroundColor = isDark ? '#09090d' : '#f8fafc';
+    
+    document.body.style.minHeight = minH;
+    document.body.style.height = minH;
+    document.body.style.backgroundColor = isDark ? '#09090d' : '#f8fafc';
+
     localStorage.setItem('borda-global-zoom', globalZoom.toString());
-  }, [globalZoom]);
+  }, [globalZoom, isDark]);
 
   const isMasterAdmin = useMemo(() => {
     const userEmail = user?.email?.toLowerCase() || authProfile?.email?.toLowerCase();
@@ -302,7 +312,7 @@ export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children })
   const primaryStyle = { color: settings.primaryColor };
 
   return (
-    <div className={`flex h-screen ${isDark ? 'bg-[#09090d] text-zinc-100' : 'bg-slate-50 text-slate-900'} overflow-hidden transition-colors duration-300`}>
+    <div className={`flex h-full ${isDark ? 'bg-[#09090d] text-zinc-100' : 'bg-slate-50 text-slate-900'} overflow-hidden transition-colors duration-300`}>
       {/* Sidebar Desktop Otimizada via Subcomponente Memorizado */}
       <DesktopSidebar
         settings={settings}
