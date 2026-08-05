@@ -340,7 +340,7 @@ export const Faturamento: React.FC = () => {
           clients (id, name, phone, company_name)
         `)
         .eq('user_id', userId)
-        .neq('payment_status', 'paid')
+        .or('payment_status.neq.paid,payment_status.is.null');
       setAllTimePendingOrders(pendingOrders || []);
 
       // Buscar histórico completo de todas as entradas/recebimentos (pedidos pagos ou com sinal)
