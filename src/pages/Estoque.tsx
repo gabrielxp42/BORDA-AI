@@ -29,18 +29,8 @@ export const Estoque: React.FC = () => {
   // Items State — começa vazio, dados vêm 100% do Supabase
   const [items, setItems] = useState<StockItem[]>([]);
 
-  // Movements Log State
-  const [movements, setMovements] = useState<StockMovement[]>(() => {
-    const saved = localStorage.getItem('borda_stock_movements');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch {
-        return [];
-      }
-    }
-    return [];
-  });
+  // Movements Log State (Sincronizado via Supabase)
+  const [movements, setMovements] = useState<StockMovement[]>([]);
 
   // Filters & Search
   const [searchTerm, setSearchTerm] = useState('');
@@ -53,9 +43,8 @@ export const Estoque: React.FC = () => {
   const [preselectedItem, setPreselectedItem] = useState<StockItem | null>(null);
   const [isCreateItemModalOpen, setIsCreateItemModalOpen] = useState(false);
 
-  // Persistence & Supabase Cloud Sync — só sincroniza itens reais (com IDs no formato stk_...)
+  // Sincroniza estoque em tempo real com o Supabase
   useEffect(() => {
-    // IDs simples numéricos ('1','2',...'7') são os mocks antigos — NÃO sincronizar
     const realItems = items.filter(i => i.id.startsWith('stk_'));
     if (realItems.length === 0) return;
 
@@ -90,29 +79,27 @@ export const Estoque: React.FC = () => {
     return () => clearTimeout(timer);
   }, [items]);
 
-  useEffect(() => {
-    localStorage.setItem('borda_stock_movements', JSON.stringify(movements));
-  }, [movements]);
-
-  // Carrega insumos do Supabase na inicialização, filtrado pelo usuário logado
+  // Carrega insumos e histórico de movimentações do Supabase na inicialização
   useEffect(() => {
     const fetchCloudStock = async () => {
       try {
         const { data: authData } = await supabase.auth.getUser();
         const userId = authData?.user?.id;
-        if (!userId) return; // sem login, estoque fica vazio
+        if (!userId) return;
 
-        // Limpa localStorage antigo que pode ter dados de mock ou de outros usuários
+        // Auto-sincroniza registros locais retidos antes de buscar da nuvem
+        await syncAllLocalDataToCloud(true);
+
         localStorage.removeItem('borda_stock_items');
 
-        const { data, error } = await supabase
+        const { data: itemsData, error: itemsError } = await supabase
           .from('stock_items')
           .select('*')
-          .eq('user_id', userId)  // ← ISOLAMENTO: só itens desse usuário
+          .eq('user_id', userId)
           .order('created_at', { ascending: false });
 
-        if (!error) {
-          const loaded: StockItem[] = (data || []).map((item: any) => ({
+        if (!itemsError && itemsData) {
+          const loaded: StockItem[] = itemsData.map((item: any) => ({
             id: item.id,
             name: item.name,
             category: item.category as any,
@@ -126,7 +113,27 @@ export const Estoque: React.FC = () => {
             created_at: item.created_at,
             updated_at: item.updated_at,
           }));
-          setItems(loaded); // mesmo se vier vazio — estoque começa do zero
+          setItems(loaded);
+        }
+
+        const { data: movementsData, error: movementsError } = await supabase
+          .from('stock_movements')
+          .select('*')
+          .eq('user_id', userId)
+          .order('created_at', { ascending: false });
+
+        if (!movementsError && movementsData) {
+          const loadedMovements: StockMovement[] = movementsData.map((m: any) => ({
+            id: m.id,
+            item_id: m.item_id,
+            item_name: m.item_name,
+            type: m.type as any,
+            quantity: Number(m.quantity) || 0,
+            reason: m.reason,
+            date: m.date || m.created_at,
+            created_at: m.created_at
+          }));
+          setMovements(loadedMovements);
         }
       } catch (err) {
         console.warn('Erro ao carregar insumos da nuvem:', err);
@@ -136,14 +143,12 @@ export const Estoque: React.FC = () => {
     fetchCloudStock();
   }, []);
 
-  // Open Movement Modal
   const openMovementModal = (type: MovementType, item?: StockItem) => {
     setMovementType(type);
     setPreselectedItem(item || null);
     setIsMovementModalOpen(true);
   };
 
-  // Submit Movement Handler
   const handleMovementSubmit = async (itemId: string, type: MovementType, qty: number, reason: string) => {
     const targetItem = items.find((i) => i.id === itemId);
     if (!targetItem) return;
@@ -172,8 +177,9 @@ export const Estoque: React.FC = () => {
       })
     );
 
+    const newMovementId = "mov_" + Date.now() + "_" + Math.random().toString(36).substr(2, 4);
     const newMovement: StockMovement = {
-      id: Date.now().toString(),
+      id: newMovementId,
       item_id: itemId,
       item_name: targetItem?.name || 'Insumo',
       type,
@@ -183,26 +189,44 @@ export const Estoque: React.FC = () => {
       created_at: new Date().toISOString(),
     };
 
+    try {
+      const { data: authData } = await supabase.auth.getUser();
+      const userId = authData?.user?.id;
+      if (userId) {
+        await supabase.from('stock_movements').insert({
+          id: newMovement.id,
+          user_id: userId,
+          item_id: newMovement.item_id,
+          item_name: newMovement.item_name,
+          type: newMovement.type,
+          quantity: newMovement.quantity,
+          reason: newMovement.reason,
+          date: newMovement.date
+        });
+      }
+    } catch (err) {
+      console.warn('Erro ao salvar movimentacao de estoque na nuvem:', err);
+    }
+
     setMovements((prev) => [newMovement, ...prev]);
 
     if (type === 'in') {
-      toast.success(`Entrada de +${qty} ${targetItem?.unit || ''}(s) registrada com sucesso!`);
+      toast.success("Entrada de +" + qty + " registrada com sucesso!");
     } else {
-      toast.warning(`Baixa de -${qty} ${targetItem?.unit || ''}(s) realizada!`);
+      toast.warning("Baixa de -" + qty + " realizada!");
     }
   };
 
-  // Create Item Handler
   const handleCreateItem = async (newItemData: Omit<StockItem, 'id' | 'created_at' | 'updated_at'>) => {
     try {
       const { data: authData } = await supabase.auth.getUser();
       const userId = authData?.user?.id;
 
       if (!userId) {
-        console.warn("Usuário não autenticado.");
+        console.warn("Usuario nao autenticado.");
         return;
       }
-      const newId = `stk_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
+      const newId = "stk_" + Date.now() + "_" + Math.random().toString(36).substr(2, 4);
 
       const newItem: StockItem = {
         ...newItemData,
@@ -211,7 +235,6 @@ export const Estoque: React.FC = () => {
         updated_at: new Date().toISOString(),
       };
 
-      // Inserir direto no Supabase
       const { error } = await supabase.from('stock_items').insert({
         id: newItem.id,
         user_id: userId,
@@ -230,10 +253,10 @@ export const Estoque: React.FC = () => {
 
       setItems((prev) => [newItem, ...prev]);
 
-      // Lança movimento inicial de entrada se houver quantidade
       if (newItem.quantity > 0) {
+        const initialMovementId = "mov_" + Date.now() + "_init";
         const initialMovement: StockMovement = {
-          id: (Date.now() + 1).toString(),
+          id: initialMovementId,
           item_id: newItem.id,
           item_name: newItem.name,
           type: 'in',
@@ -242,27 +265,38 @@ export const Estoque: React.FC = () => {
           date: new Date().toISOString(),
           created_at: new Date().toISOString(),
         };
+
+        await supabase.from('stock_movements').insert({
+          id: initialMovement.id,
+          user_id: userId,
+          item_id: initialMovement.item_id,
+          item_name: initialMovement.item_name,
+          type: initialMovement.type,
+          quantity: initialMovement.quantity,
+          reason: initialMovement.reason,
+          date: initialMovement.date
+        });
+
         setMovements((prev) => [initialMovement, ...prev]);
       }
-      toast.success(`Insumo "${newItem.name}" adicionado com sucesso!`);
+      toast.success("Insumo cadastrado com sucesso!");
     } catch (err: any) {
       console.error("Erro ao criar insumo no Supabase:", err);
-      toast.error(`Erro ao salvar insumo: ${err.message || 'Falha na rede'}`);
+      toast.error("Erro ao salvar insumo: " + (err.message || 'Falha na rede'));
     }
   };
 
-  // Delete Item Handler
   const handleDeleteItem = async (id: string, name: string) => {
-    if (window.confirm(`Tem certeza que deseja remover "${name}" do estoque?`)) {
+    if (window.confirm("Tem certeza que deseja remover " + name + " do estoque?")) {
       try {
         const { error } = await supabase.from('stock_items').delete().eq('id', id);
         if (error) throw error;
 
         setItems((prev) => prev.filter((i) => i.id !== id));
-        toast.info(`"${name}" removido do estoque.`);
+        toast.info(name + " removido do estoque.");
       } catch (err: any) {
         console.error("Erro ao deletar insumo no Supabase:", err);
-        toast.error(`Erro ao remover insumo: ${err.message || 'Falha no banco de dados'}`);
+        toast.error("Erro ao remover insumo: " + (err.message || 'Falha no banco de dados'));
       }
     }
   };

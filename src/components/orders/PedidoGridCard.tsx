@@ -48,6 +48,7 @@ interface PedidoGridCardProps {
   onDeleteOrder: (orderId: string) => void;
   onCobrarOrder: (order: Order) => void;
   onPrintReceipt?: (order: Order) => void;
+  onConfigureVisibility?: (order: Order) => void;
   pixKey?: string | null;
   systemName?: string;
 }
@@ -59,9 +60,10 @@ const PedidoGridCardComponent: React.FC<PedidoGridCardProps> = ({
   onOpenEditModal,
   onDeleteOrder,
   onCobrarOrder,
+  onConfigureVisibility,
 }) => {
   const { settings } = useCompanySettings();
-  const { permissions } = useProfile();
+  const { permissions, role } = useProfile();
   const [activeLightbox, setActiveLightbox] = useState<string | null>(null);
   const [showFiscalModal, setShowFiscalModal] = useState(false);
   const [showPrintOptions, setShowPrintOptions] = useState(false);
@@ -196,7 +198,9 @@ const PedidoGridCardComponent: React.FC<PedidoGridCardProps> = ({
     <>
       <div 
         onClick={() => onOpenDetails(order)}
-        className="group relative flex flex-col justify-between rounded-3xl border border-slate-200 dark:border-white/10 bg-white dark:bg-[#12121a]/90 backdrop-blur-xl p-5 shadow-lg transition-all duration-300 hover:-translate-y-1 hover:border-purple-500/40 hover:shadow-2xl hover:shadow-purple-500/10 cursor-pointer overflow-hidden"
+        className={`group relative flex flex-col justify-between rounded-3xl border border-slate-200 dark:border-white/10 bg-white dark:bg-[#12121a]/90 backdrop-blur-xl p-5 shadow-lg transition-all duration-300 hover:-translate-y-1 hover:border-purple-500/40 hover:shadow-2xl hover:shadow-purple-500/10 cursor-pointer overflow-hidden ${
+          order.visible_profile_ids && order.visible_profile_ids.length > 0 ? 'opacity-60 hover:opacity-85' : ''
+        }`}
       >
         {/* Top Background Glow Effect */}
         <div className="absolute top-0 right-0 w-32 h-32 bg-purple-500/5 rounded-full blur-2xl group-hover:bg-purple-500/15 transition-all duration-500 pointer-events-none" />
@@ -212,6 +216,11 @@ const PedidoGridCardComponent: React.FC<PedidoGridCardProps> = ({
                 <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20">
                   Bordado
                 </span>
+                {order.visible_profile_ids && order.visible_profile_ids.length > 0 && (
+                  <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 flex items-center gap-1">
+                    👁️ Restrito
+                  </span>
+                )}
               </div>
               <p className="text-[11px] text-slate-500 dark:text-zinc-400 mt-0.5 flex items-center gap-1">
                 <Calendar className="h-3 w-3 text-purple-400 shrink-0" />
@@ -230,14 +239,35 @@ const PedidoGridCardComponent: React.FC<PedidoGridCardProps> = ({
               })()}
             </div>
 
-            {/* Badge de Status Financeiro (Pill de 1 Linha Limpa) */}
-            <div 
-              onClick={(e) => { e.stopPropagation(); onOpenStatusModal(order); }}
-              title={paymentBadge.subtext ? `${paymentBadge.label} (${paymentBadge.subtext})` : paymentBadge.label}
-              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider border transition-transform hover:scale-105 cursor-pointer whitespace-nowrap shrink-0 ${paymentBadge.className}`}
-            >
-              <paymentBadge.icon className="h-3 w-3 shrink-0" />
-              <span>{paymentBadge.label}</span>
+            <div className="flex items-center gap-2 shrink-0">
+              {/* Configurar Visibilidade (Somente Chefe) no Topo */}
+              {role === 'chefe' && onConfigureVisibility && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onConfigureVisibility(order);
+                  }}
+                  className={`p-1.5 rounded-xl border transition-all hover:scale-105 active:scale-95 ${
+                    order.visible_profile_ids && order.visible_profile_ids.length > 0
+                      ? 'bg-amber-500/10 border-amber-500/35 text-amber-500 hover:bg-amber-500/20'
+                      : 'bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-500 dark:text-zinc-400 border-slate-200 dark:border-white/10'
+                  }`}
+                  title="Configurar Visibilidade do Pedido"
+                >
+                  <Eye className="h-3.5 w-3.5" />
+                </button>
+              )}
+
+              {/* Badge de Status Financeiro (Pill de 1 Linha Limpa) */}
+              <div 
+                onClick={(e) => { e.stopPropagation(); onOpenStatusModal(order); }}
+                title={paymentBadge.subtext ? `${paymentBadge.label} (${paymentBadge.subtext})` : paymentBadge.label}
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider border transition-transform hover:scale-105 cursor-pointer whitespace-nowrap ${paymentBadge.className}`}
+              >
+                <paymentBadge.icon className="h-3 w-3 shrink-0" />
+                <span>{paymentBadge.label}</span>
+              </div>
             </div>
           </div>
 
@@ -471,6 +501,7 @@ const PedidoGridCardComponent: React.FC<PedidoGridCardProps> = ({
               >
                 <Copy className="h-4 w-4" />
               </button>
+
 
               {/* 5. Excluir Pedido */}
               <button

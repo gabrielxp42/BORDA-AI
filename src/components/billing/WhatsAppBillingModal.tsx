@@ -1,14 +1,15 @@
 import React, { useState } from 'react';
-import { X, Send, MessageCircle, ExternalLink, CheckCircle2, AlertCircle } from 'lucide-react';
+import { X, Send, MessageCircle, ExternalLink, CheckCircle2, FileText } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
-import { sendEvolutionText, getWhatsAppWebLink, handleWhatsAppDispatchError } from '@/services/whatsappService';
+import { sendEvolutionText, sendEvolutionMedia, getWhatsAppWebLink, handleWhatsAppDispatchError } from '@/services/whatsappService';
 import { getStoredTemplates, formatEmbroideryTemplate } from '@/services/whatsappTemplatesService';
 import { useCompanySettings } from '@/contexts/CompanySettingsContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProfile } from '@/contexts/ProfileContext';
 import { formatCurrency } from '@/utils/currencyFormatter';
+import { generateOrderPDFBase64 } from '@/services/pdfGenerator';
 
 interface WhatsAppBillingModalProps {
   isOpen: boolean;
@@ -30,13 +31,13 @@ export const WhatsAppBillingModal: React.FC<WhatsAppBillingModalProps> = ({ isOp
   const [phoneNumber, setPhoneNumber] = useState(clientData?.phone || '');
   const [isSending, setIsSending] = useState(false);
   const [sendSuccess, setSendSuccess] = useState(false);
+  const [attachPDF, setAttachPDF] = useState(false);
 
   if (!isOpen || !clientData) return null;
 
   const currentMonth = format(new Date(), 'MMMM', { locale: ptBR });
   const formattedTotal = formatCurrency(clientData.totalAmount, permissions?.canSeeFinancials ?? true);
 
-  // Tenta carregar template de cobrança personalizado da Central GABI (/gabi)
   const gabiTemplates = getStoredTemplates();
   const billingTpl = gabiTemplates.find(t => t.id === 'tpl_cobranca_pix');
   const gabiContext = {
@@ -65,10 +66,37 @@ export const WhatsAppBillingModal: React.FC<WhatsAppBillingModalProps> = ({ isOp
 
     setIsSending(true);
     try {
-      await sendEvolutionText(phoneNumber, message);
+      if (attachPDF) {
+        // Need to pick the 'first' order to generate a sample PDF if multiple exist, or adjust generator
+        // Assuming clientData.orders[0] is the base for the PDF
+        const latestOrder = clientData.orders[clientData.orders.length - 1];
+        if (!latestOrder) throw new Error("Pedido não encontrado para gerar PDF.");
+        
+        const pdfBase64 = await generateOrderPDFBase64({
+            id: latestOrder.id,
+            orderNumber: latestOrder.order_number,
+            createdAt: latestOrder.created_at,
+            clientName: clientData.name,
+            paymentStatus: 'pending',
+            totalAmount: latestOrder.total_amount,
+            items: latestOrder.items || [],
+            companyName: settings.systemName,
+        });
+
+        await sendEvolutionMedia({
+            phone: phoneNumber,
+            message: message,
+            mediaUrl: `data:application/pdf;base64,${pdfBase64}`,
+            mediaType: 'document',
+            mediaName: `Fechamento_${clientData.name.replace(/\s+/g, '_')}.pdf`
+        });
+      } else {
+        await sendEvolutionText(phoneNumber, message);
+      }
+      
       setIsSending(false);
       setSendSuccess(true);
-      toast.success("Cobrança enviada com sucesso pelo WhatsApp!");
+      toast.success("Cobrança enviada com sucesso!");
       setTimeout(() => {
         setSendSuccess(false);
         onClose();
@@ -133,6 +161,17 @@ export const WhatsAppBillingModal: React.FC<WhatsAppBillingModalProps> = ({ isOp
               onChange={e => setPhoneNumber(e.target.value)}
               className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm text-zinc-200 focus:border-emerald-500/50 outline-none"
             />
+          </div>
+
+          <div className="flex items-center gap-2 p-3 bg-white/5 rounded-xl border border-white/10 cursor-pointer" onClick={() => setAttachPDF(!attachPDF)}>
+            <input 
+              type="checkbox" 
+              checked={attachPDF}
+              onChange={(e) => setAttachPDF(e.target.checked)}
+              className="h-4 w-4 accent-emerald-500"
+            />
+            <FileText className="h-4 w-4 text-emerald-400" />
+            <span className="text-xs font-bold text-zinc-300">Anexar Ficha do Pedido em PDF</span>
           </div>
 
           <div className="space-y-2">

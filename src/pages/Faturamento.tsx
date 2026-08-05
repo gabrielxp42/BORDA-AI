@@ -49,11 +49,15 @@ import {
 import { WhatsAppBillingModal } from '@/components/billing/WhatsAppBillingModal';
 import { FinancialTransactionModal } from '@/components/billing/FinancialTransactionModal';
 import { ReceberDetailsModal } from '@/components/billing/ReceberDetailsModal';
+import { ReceitaDetailsModal } from '@/components/billing/ReceitaDetailsModal';
+import { DespesasDetailsModal } from '@/components/billing/DespesasDetailsModal';
 import { FinancialTransaction, FinancialTransactionType } from '@/types/stockTypes';
 import { format, startOfMonth, endOfMonth, subMonths, eachMonthOfInterval, eachDayOfInterval, isSameDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
 import { formatCurrency } from '@/utils/currencyFormatter';
+import { parsePaymentMetadata, formatPaymentMethodName } from '@/utils/paymentHelper';
+import { useUniversalCloudSync } from '@/hooks/useUniversalCloudSync';
 
 interface ClientBillingData {
   id: string;
@@ -67,19 +71,64 @@ interface ClientBillingData {
 }
 
 export const Faturamento: React.FC = () => {
-  const { isUnlocked, permissions } = useProfile();
-  const { settings } = useCompanySettings();
-  const pc = settings.primaryColor;
+  const { isUnlocked, activeProfile } = useProfile();
+  const { permissions } = useCompanySettings();
+  const { syncAllLocalDataToCloud } = useUniversalCloudSync();
   
   const [loading, setLoading] = useState(false);
   const [billingData, setBillingData] = useState<ClientBillingData[]>([]);
   const [rawOrders, setRawOrders] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState<'entradas' | 'fixos' | 'variaveis' | 'areceber' | 'resumo'>('resumo');
   const [allTimePendingOrders, setAllTimePendingOrders] = useState<any[]>([]);
+  const [allTimePaidOrders, setAllTimePaidOrders] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedMonthOffset, setSelectedMonthOffset] = useState<number>(0); // 0 = este mês, -1 = mês passado
   const [isReceberModalOpen, setIsReceberModalOpen] = useState(false);
+  const [isReceitaModalOpen, setIsReceitaModalOpen] = useState(false);
+  const [isDespesasModalOpen, setIsDespesasModalOpen] = useState(false);
   const [expandedCard, setExpandedCard] = useState<'receita' | 'despesas' | 'areceber' | null>(null);
+  const [receberFilter, setReceberFilter] = useState<'all' | 'production' | 'delivered'>('all');
+
+  // Histórico Consolidado de Todas as Entradas do Caixa (Pedidos pagos/sinais + Transações Manuais)
+  const allIncomeEntries = useMemo(() => {
+    const orderEntries = allTimePaidOrders.map(o => {
+      const { metadata } = parsePaymentMetadata(o.notes);
+      const isHalf = o.payment_status === 'half_paid';
+      const amountVal = isHalf 
+        ? (metadata.depositAmount || Number(o.total_amount || 0) * 0.5) 
+        : Number(o.total_amount || 0);
+      const methodStr = formatPaymentMethodName(o.payment_method || metadata.paymentMethod || 'Dinheiro');
+      const dateStr = metadata.paidAt || o.created_at;
+
+      return {
+        id: `order-${o.id}`,
+        date: new Date(dateStr),
+        title: `Pedido #${o.order_number || o.id.slice(0, 4)} - ${o.clients?.name || 'Cliente Geral'}`,
+        isOrder: true,
+        orderStatus: o.payment_status,
+        paymentMethod: methodStr || 'PIX / Dinheiro',
+        profileName: metadata.paymentNote?.includes('Perfil:') ? metadata.paymentNote : (o.created_by_profile || 'Atendimento'),
+        amount: amountVal,
+        originalOrder: o
+      };
+    });
+
+    const manualEntries = financialTransactions
+      .filter(t => t.type === 'income')
+      .map(t => ({
+        id: `tx-${t.id}`,
+        date: new Date(t.date || t.created_at),
+        title: t.description || 'Receita Direta de Caixa',
+        isOrder: false,
+        orderStatus: 'paid',
+        paymentMethod: formatPaymentMethodName(t.payment_method || 'Outros'),
+        profileName: t.created_by_profile || 'Caixa',
+        amount: Number(t.amount || 0),
+        originalTx: t
+      }));
+
+    return [...orderEntries, ...manualEntries].sort((a, b) => b.date.getTime() - a.date.getTime());
+  }, [allTimePaidOrders, financialTransactions]);
 
   // Cálculo Detalhado do Saldo A Receber (Agrupado por Mês Atual, Mês Passado, Histórico e Top Devedores)
   const pendingBreakdown = useMemo(() => {
@@ -258,10 +307,13 @@ export const Faturamento: React.FC = () => {
   }, [financialTransactions, finSynced]);
 
   const handleAddFinancialTransaction = async (newTx: Omit<FinancialTransaction, 'id' | 'created_at'>) => {
-    const created: FinancialTransaction = {
+    const profileName = activeProfile ? (activeProfile.name || activeProfile.id) : 'Desconhecido';
+    
+    const created: any = {
       ...newTx,
       id: Date.now().toString(),
       created_at: new Date().toISOString(),
+      created_by_profile: profileName
     };
 
     // Atualiza a UI imediatamente (otimistic update)
@@ -287,7 +339,8 @@ export const Faturamento: React.FC = () => {
           status: created.status || 'paid',
           order_id: created.order_id || null,
           notes: created.notes || null,
-          created_at: created.created_at
+          created_at: created.created_at,
+          created_by_profile: profileName
         });
       }
     } catch (err) {
@@ -334,10 +387,12 @@ export const Faturamento: React.FC = () => {
         return;
       }
 
+      await syncAllLocalDataToCloud(true);
+
       const { data: orders, error: ordersError } = await supabase
         .from('orders')
         .select(`
-          id, order_number, total_amount, payment_status, created_at, notes, due_date,
+          id, order_number, status, total_amount, payment_status, created_at, notes, due_date,
           clients (id, name, phone, company_name)
         `)
         .eq('user_id', userId)
@@ -351,14 +406,25 @@ export const Faturamento: React.FC = () => {
       const { data: pendingOrders } = await supabase
         .from('orders')
         .select(`
-          id, order_number, total_amount, payment_status, created_at, notes, due_date,
+          id, order_number, status, total_amount, payment_status, created_at, notes, due_date,
           clients (id, name, phone, company_name)
         `)
         .eq('user_id', userId)
         .neq('payment_status', 'paid')
+      setAllTimePendingOrders(pendingOrders || []);
+
+      // Buscar histórico completo de todas as entradas/recebimentos (pedidos pagos ou com sinal)
+      const { data: paidOrders } = await supabase
+        .from('orders')
+        .select(`
+          id, order_number, status, total_amount, payment_status, payment_method, created_at, notes, due_date,
+          clients (id, name, phone, company_name)
+        `)
+        .eq('user_id', userId)
+        .in('payment_status', ['paid', 'half_paid'])
         .order('created_at', { ascending: false });
 
-      setAllTimePendingOrders(pendingOrders || []);
+      setAllTimePaidOrders(paidOrders || []);
 
       let gTotal = 0;
       let pTotal = 0;
@@ -753,12 +819,8 @@ export const Faturamento: React.FC = () => {
         
         {/* PILAR 1: ENTRADAS / TOTAL FATURADO (CLICÁVEL) */}
         <div 
-          onClick={() => setExpandedCard(prev => prev === 'receita' ? null : 'receita')}
-          className={`glass-panel p-6 rounded-3xl border transition-all cursor-pointer relative overflow-hidden flex flex-col justify-between space-y-4 ${
-            expandedCard === 'receita'
-              ? 'border-emerald-400 bg-emerald-950/30 shadow-xl shadow-emerald-950/40 ring-1 ring-emerald-400/50'
-              : 'border-emerald-500/30 bg-gradient-to-b from-emerald-950/20 via-black/40 to-black/60 hover:border-emerald-400/60'
-          }`}
+          onClick={() => setIsReceitaModalOpen(true)}
+          className={`glass-panel p-6 rounded-3xl border transition-all cursor-pointer relative overflow-hidden flex flex-col justify-between space-y-4 border-emerald-500/30 bg-gradient-to-b from-emerald-950/20 via-black/40 to-black/60 hover:border-emerald-400/60`}
         >
           <div className="flex items-center justify-between">
             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-black uppercase tracking-wider">
@@ -778,7 +840,7 @@ export const Faturamento: React.FC = () => {
           <div>
             <p className="text-xs font-bold text-zinc-400 flex items-center justify-between">
               <span>Total Faturado no Período</span>
-              <span className="text-[10px] text-emerald-400 font-bold">{expandedCard === 'receita' ? '▲ Ocultar' : '▼ Expandir Detalhes'}</span>
+              <span className="text-[10px] text-emerald-400 font-bold">▼ Expandir Detalhes</span>
             </p>
             <h2 className="text-3xl font-black text-white tracking-tight mt-1">
               {formatCurrency(totalRevenue, permissions?.canSeeFinancials ?? true)}
@@ -795,12 +857,8 @@ export const Faturamento: React.FC = () => {
 
         {/* PILAR 2: SAÍDAS & DESPESAS (CLICÁVEL) */}
         <div 
-          onClick={() => setExpandedCard(prev => prev === 'despesas' ? null : 'despesas')}
-          className={`glass-panel p-6 rounded-3xl border transition-all cursor-pointer relative overflow-hidden flex flex-col justify-between space-y-4 ${
-            expandedCard === 'despesas'
-              ? 'border-rose-400 bg-rose-950/30 shadow-xl shadow-rose-950/40 ring-1 ring-rose-400/50'
-              : 'border-rose-500/30 bg-gradient-to-b from-rose-950/20 via-black/40 to-black/60 hover:border-rose-400/60'
-          }`}
+          onClick={() => setIsDespesasModalOpen(true)}
+          className={`glass-panel p-6 rounded-3xl border transition-all cursor-pointer relative overflow-hidden flex flex-col justify-between space-y-4 border-rose-500/30 bg-gradient-to-b from-rose-950/20 via-black/40 to-black/60 hover:border-rose-400/60`}
         >
           <div className="flex items-center justify-between">
             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/20 text-[10px] font-black uppercase tracking-wider">
@@ -820,7 +878,7 @@ export const Faturamento: React.FC = () => {
           <div>
             <p className="text-xs font-bold text-zinc-400 flex items-center justify-between">
               <span>Gastos Registrados</span>
-              <span className="text-[10px] text-rose-400 font-bold">{expandedCard === 'despesas' ? '▲ Ocultar' : '▼ Expandir Detalhes'}</span>
+              <span className="text-[10px] text-rose-400 font-bold">▼ Expandir Detalhes</span>
             </p>
             <h2 className="text-3xl font-black text-white tracking-tight mt-1">
               {formatCurrency(manualExpenses, permissions?.canSeeFinancials ?? true)}
@@ -835,49 +893,83 @@ export const Faturamento: React.FC = () => {
           </div>
         </div>
 
-        {/* PILAR 3: A RECEBER ACUMULADO (ABRE O MODAL INTELIGENTE) */}
-        <div 
-          onClick={() => setIsReceberModalOpen(true)}
-          className="glass-panel p-6 rounded-3xl border border-amber-500/30 bg-gradient-to-b from-amber-950/20 via-black/40 to-black/60 hover:border-amber-400/80 hover:scale-[1.01] transition-all cursor-pointer relative overflow-hidden flex flex-col justify-between space-y-4 shadow-xl hover:shadow-amber-950/50"
-        >
-          <div className="flex items-center justify-between">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[10px] font-black uppercase tracking-wider">
-              ⏳ A Receber (Acumulado)
-            </span>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setIsReceberModalOpen(true);
-              }}
-              className="px-3 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 text-xs font-bold flex items-center gap-1 transition-all active:scale-95 cursor-pointer"
-            >
-              Ver Faturas
-            </button>
+        {/* PILAR 3: A RECEBER DIVIDIDO (EM PRODUÇÃO VS ENTREGUES) */}
+        <div className="flex flex-col gap-4">
+          
+          {/* Card A Receber: Em Produção */}
+          <div 
+            onClick={() => {
+              setActiveTab('areceber');
+              setReceberFilter('production');
+              const el = document.getElementById('billing-tabs-container');
+              if (el) el.scrollIntoView({ behavior: 'smooth' });
+            }}
+            className="glass-panel p-5 rounded-3xl border border-amber-500/20 bg-gradient-to-b from-amber-950/10 via-black/40 to-black/60 hover:border-amber-400/60 hover:scale-[1.01] transition-all cursor-pointer relative overflow-hidden flex flex-col justify-between space-y-3 shadow-md"
+          >
+            <div className="flex items-center justify-between">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[9px] font-black uppercase tracking-wider">
+                ⏳ A Receber (Em Produção)
+              </span>
+              <span className="text-[9px] text-amber-400 font-bold">🔍 Detalhar</span>
+            </div>
+            <div>
+              <p className="text-[11px] font-bold text-zinc-400">Total em Fila de Produção</p>
+              <h3 className="text-2xl font-black text-amber-400 tracking-tight mt-0.5">
+                {formatCurrency(
+                  allTimePendingOrders
+                    .filter(o => o.status !== 'entregue')
+                    .reduce((sum, o) => {
+                      const total = Number(o.total_amount || 0);
+                      if (o.payment_status === 'half_paid') return sum + (total * 0.5);
+                      return sum + total;
+                    }, 0),
+                  permissions?.canSeeFinancials ?? true
+                )}
+              </h3>
+              <div className="flex items-center justify-between text-[10px] mt-1.5 pt-1.5 border-t border-white/5 text-zinc-500">
+                <span>Pedidos Pendentes:</span>
+                <span className="font-bold text-amber-300">{allTimePendingOrders.filter(o => o.status !== 'entregue').length} un.</span>
+              </div>
+            </div>
           </div>
 
-          <div>
-            <p className="text-xs font-bold text-zinc-400 flex items-center justify-between">
-              <span>Saldo a Cobrar dos Clientes</span>
-              <span className="text-[10px] text-amber-400 font-bold">🔍 Abrir Painel</span>
-            </p>
-            <h2 className="text-3xl font-black text-amber-400 tracking-tight mt-1">
-              {formatCurrency(
-                allTimePendingOrders.reduce((sum, o) => {
-                  const total = Number(o.total_amount || 0);
-                  if (o.payment_status === 'half_paid') return sum + (total * 0.5);
-                  return sum + total;
-                }, 0),
-                permissions?.canSeeFinancials ?? true
-              )}
-            </h2>
-            <div className="flex items-center justify-between text-xs mt-2 pt-2 border-t border-white/5 text-zinc-400">
-              <span>Pedidos Pendentes:</span>
-              <span className="font-bold text-amber-300">{allTimePendingOrders.length} pedido(s)</span>
+          {/* Card A Receber: Já Entregues */}
+          <div 
+            onClick={() => {
+              setActiveTab('areceber');
+              setReceberFilter('delivered');
+              const el = document.getElementById('billing-tabs-container');
+              if (el) el.scrollIntoView({ behavior: 'smooth' });
+            }}
+            className="glass-panel p-5 rounded-3xl border border-indigo-500/20 bg-gradient-to-b from-indigo-950/10 via-black/40 to-black/60 hover:border-indigo-400/60 hover:scale-[1.01] transition-all cursor-pointer relative overflow-hidden flex flex-col justify-between space-y-3 shadow-md"
+          >
+            <div className="flex items-center justify-between">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 text-[9px] font-black uppercase tracking-wider">
+                📦 A Receber (Já Entregues)
+              </span>
+              <span className="text-[9px] text-indigo-400 font-bold">🔍 Detalhar</span>
             </div>
-            <p className="text-[10px] text-amber-400/80 font-medium pt-1 flex items-center gap-1">
-              ✨ Toque para ver mais detalhes & devedores
-            </p>
+            <div>
+              <p className="text-[11px] font-bold text-zinc-400">Total Já Entregue (A Prazo)</p>
+              <h3 className="text-2xl font-black text-indigo-400 tracking-tight mt-0.5">
+                {formatCurrency(
+                  allTimePendingOrders
+                    .filter(o => o.status === 'entregue')
+                    .reduce((sum, o) => {
+                      const total = Number(o.total_amount || 0);
+                      if (o.payment_status === 'half_paid') return sum + (total * 0.5);
+                      return sum + total;
+                    }, 0),
+                  permissions?.canSeeFinancials ?? true
+                )}
+              </h3>
+              <div className="flex items-center justify-between text-[10px] mt-1.5 pt-1.5 border-t border-white/5 text-zinc-500">
+                <span>Faturamentos a Receber:</span>
+                <span className="font-bold text-indigo-300">{allTimePendingOrders.filter(o => o.status === 'entregue').length} un.</span>
+              </div>
+            </div>
           </div>
+
         </div>
 
       </div>
@@ -1037,7 +1129,7 @@ export const Faturamento: React.FC = () => {
       )}
 
       {/* ABAS SOFISTICADAS DE NAVEGAÇÃO */}
-      <div className="flex items-center gap-2 p-1.5 bg-white/5 border border-white/10 rounded-2xl overflow-x-auto custom-scrollbar">
+      <div id="billing-tabs-container" className="flex items-center gap-2 p-1.5 bg-white/5 border border-white/10 rounded-2xl overflow-x-auto custom-scrollbar">
         {[
           { id: 'resumo', label: '📊 Visão Geral & DRE' },
           { id: 'areceber', label: `⏳ Faturas A Receber (${allTimePendingOrders.length})` },
@@ -1065,35 +1157,79 @@ export const Faturamento: React.FC = () => {
       {activeTab === 'areceber' && (
         <div className="space-y-6 animate-in fade-in duration-200">
           {/* Card Banner do Saldo Acumulado */}
-          <div className="glass-panel p-6 rounded-3xl border border-amber-500/30 bg-gradient-to-r from-amber-950/30 via-black/40 to-amber-950/20 relative overflow-hidden flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className={`glass-panel p-6 rounded-3xl border relative overflow-hidden flex flex-col md:flex-row md:items-center justify-between gap-4 ${
+            receberFilter === 'production'
+              ? 'border-amber-500/30 bg-gradient-to-r from-amber-950/30 via-black/40 to-amber-950/20'
+              : receberFilter === 'delivered'
+              ? 'border-indigo-500/30 bg-gradient-to-r from-indigo-950/30 via-black/40 to-indigo-950/20'
+              : 'border-zinc-500/30 bg-gradient-to-r from-zinc-950/30 via-black/40 to-zinc-950/20'
+          }`}>
             <div className="space-y-1 z-10">
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30 text-[10px] font-black uppercase tracking-wider">
-                <Clock className="h-3 w-3" /> Saldo Pendente Acumulado Sem Zerar no Mês
+              <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                receberFilter === 'production'
+                  ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                  : receberFilter === 'delivered'
+                  ? 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/30'
+                  : 'bg-zinc-500/20 text-zinc-400 border border-zinc-500/30'
+              }`}>
+                <Clock className="h-3 w-3" /> 
+                {receberFilter === 'production' && 'Saldo A Receber (Em Produção)'}
+                {receberFilter === 'delivered' && 'Saldo A Receber (Já Entregues)'}
+                {receberFilter === 'all' && 'Saldo Pendente Acumulado Geral'}
               </span>
               <h2 className="text-3xl font-black text-white tracking-tight">
                 {formatCurrency(
-                  allTimePendingOrders.reduce((sum, o) => {
-                    const total = Number(o.total_amount || 0);
-                    if (o.payment_status === 'half_paid') return sum + (total * 0.5);
-                    return sum + total;
-                  }, 0),
+                  allTimePendingOrders
+                    .filter(o => {
+                      if (receberFilter === 'production') return o.status !== 'entregue';
+                      if (receberFilter === 'delivered') return o.status === 'entregue';
+                      return true;
+                    })
+                    .reduce((sum, o) => {
+                      const total = Number(o.total_amount || 0);
+                      if (o.payment_status === 'half_paid') return sum + (total * 0.5);
+                      return sum + total;
+                    }, 0),
                   permissions?.canSeeFinancials ?? true
                 )}
               </h2>
               <p className="text-xs text-zinc-400">
-                Total acumulado de faturas pendentes de cobrança em todo o histórico da oficina ({allTimePendingOrders.length} pedido(s) a receber).
+                {receberFilter === 'production' && `Saldo pendente dos serviços que ainda estão sendo produzidos na oficina (${allTimePendingOrders.filter(o => o.status !== 'entregue').length} pedido(s) pendentes).`}
+                {receberFilter === 'delivered' && `Saldo a receber a prazo de pedidos que já foram entregues ao cliente (${allTimePendingOrders.filter(o => o.status === 'entregue').length} faturamento(s) pendentes).`}
+                {receberFilter === 'all' && `Total acumulado de faturas pendentes de cobrança em todo o histórico da oficina (${allTimePendingOrders.length} pedido(s) a receber).`}
               </p>
             </div>
 
-            <div className="relative z-10 flex items-center gap-2">
-              <div className="relative w-full sm:w-64">
+            <div className="relative z-10 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+              {/* Filtro Sub-Tabs */}
+              <div className="flex items-center gap-1.5 bg-black/40 border border-white/10 rounded-2xl p-1">
+                {[
+                  { id: 'all', label: '📂 Todos' },
+                  { id: 'production', label: '⏳ Em Produção' },
+                  { id: 'delivered', label: '📦 Entregues' },
+                ].map(sub => (
+                  <button
+                    key={sub.id}
+                    onClick={() => setReceberFilter(sub.id as any)}
+                    className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer ${
+                      receberFilter === sub.id
+                        ? 'bg-purple-600 text-white shadow-md'
+                        : 'text-zinc-400 hover:text-white'
+                    }`}
+                  >
+                    {sub.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="relative w-full sm:w-56">
                 <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-500" />
                 <input 
                   type="text" 
-                  placeholder="Buscar por cliente ou pedido..."
+                  placeholder="Buscar por cliente..."
                   value={searchTerm}
                   onChange={e => setSearchTerm(e.target.value)}
-                  className="w-full bg-black/60 border border-white/10 rounded-2xl pl-9 pr-4 py-2.5 text-xs text-zinc-200 outline-none focus:border-amber-500"
+                  className="w-full bg-black/60 border border-white/10 rounded-2xl pl-9 pr-4 py-2 text-xs text-zinc-200 outline-none focus:border-purple-500"
                 />
               </div>
             </div>
@@ -1103,10 +1239,14 @@ export const Faturamento: React.FC = () => {
           <div className="glass-panel rounded-3xl border border-white/10 overflow-hidden">
             <div className="p-4 border-b border-white/10 bg-white/5 flex items-center justify-between">
               <h3 className="text-xs font-black uppercase tracking-wider text-white flex items-center gap-2">
-                <Receipt className="h-4 w-4 text-amber-400" /> Relação Completa de Pedidos A Receber
+                <Receipt className="h-4 w-4 text-amber-400" /> Detalhes dos Saldos em Aberto
               </h3>
               <span className="text-[10px] font-bold text-zinc-400">
-                {allTimePendingOrders.length} fatura(s) pendente(s)
+                {allTimePendingOrders.filter(o => {
+                  if (receberFilter === 'production') return o.status !== 'entregue';
+                  if (receberFilter === 'delivered') return o.status === 'entregue';
+                  return true;
+                }).length} registro(s) pendente(s)
               </span>
             </div>
 
@@ -1116,7 +1256,7 @@ export const Faturamento: React.FC = () => {
                   <tr className="border-b border-white/10 bg-white/5 font-bold uppercase text-[10px] text-zinc-400">
                     <th className="px-6 py-4">Pedido / Cliente</th>
                     <th className="px-6 py-4">Data Entrada</th>
-                    <th className="px-6 py-4">Previsão Entrega</th>
+                    <th className="px-6 py-4">Combinado p/ Pagamento</th>
                     <th className="px-6 py-4 text-center">Status Pagamento</th>
                     <th className="px-6 py-4 text-right">Valor Total</th>
                     <th className="px-6 py-4 text-right">A Receber</th>
@@ -1124,97 +1264,133 @@ export const Faturamento: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5 font-medium text-zinc-200">
-                  {allTimePendingOrders.filter(o => 
-                    (o.clients?.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-                    String(o.order_number || o.id).includes(searchTerm)
-                  ).length === 0 ? (
-                    <tr>
-                      <td colSpan={7} className="px-6 py-12 text-center text-zinc-500">
-                        🎉 Nenhum pedido pendente a receber encontrado!
-                      </td>
-                    </tr>
-                  ) : (
-                    allTimePendingOrders
+                  {(() => {
+                    const filtered = allTimePendingOrders
+                      .filter(o => {
+                        if (receberFilter === 'production') return o.status !== 'entregue';
+                        if (receberFilter === 'delivered') return o.status === 'entregue';
+                        return true;
+                      })
                       .filter(o => 
                         (o.clients?.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
                         String(o.order_number || o.id).includes(searchTerm)
-                      )
-                      .map((o) => {
-                        const totalVal = Number(o.total_amount || 0);
-                        const isHalf = o.payment_status === 'half_paid';
-                        const pendingVal = isHalf ? totalVal * 0.5 : totalVal;
+                      );
 
-                        return (
-                          <tr key={o.id} className="hover:bg-white/5 transition-colors">
-                            <td className="px-6 py-4">
-                              <p className="font-bold text-white">#{o.order_number || o.id.slice(0, 6)} - {o.clients?.name || 'Cliente Geral'}</p>
-                              <p className="text-[11px] text-zinc-400">{o.clients?.phone || 'Sem telefone'}</p>
-                            </td>
-                            <td className="px-6 py-4 text-zinc-400">
-                              {o.created_at ? format(new Date(o.created_at), 'dd/MM/yyyy') : '-'}
-                            </td>
-                            <td className="px-6 py-4 text-amber-400 font-bold">
-                              {o.due_date ? format(new Date(o.due_date), 'dd/MM/yyyy') : 'A combinar'}
-                            </td>
-                            <td className="px-6 py-4 text-center">
-                              <span className={`inline-block px-2.5 py-1 rounded-full text-[9px] font-black uppercase ${
-                                isHalf 
-                                  ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30' 
-                                  : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                              }`}>
-                                {isHalf ? '⚡ Sinal 50% Recebido' : '⏳ 100% Pendente'}
-                              </span>
-                            </td>
-                            <td className="px-6 py-4 text-right font-bold text-zinc-300">
-                              {formatCurrency(totalVal, permissions?.canSeeFinancials ?? true)}
-                            </td>
-                            <td className="px-6 py-4 text-right font-black text-amber-400 text-sm">
-                              {formatCurrency(pendingVal, permissions?.canSeeFinancials ?? true)}
-                            </td>
-                            <td className="px-6 py-4">
-                              <div className="flex items-center justify-center gap-2">
-                                <button
-                                  onClick={() => setSelectedClient({
-                                    id: o.clients?.id || o.id,
-                                    name: o.clients?.name || 'Cliente Geral',
-                                    phone: o.clients?.phone || '',
-                                    orderCount: 1,
-                                    totalAmount: totalVal,
-                                    paidAmount: isHalf ? totalVal * 0.5 : 0,
-                                    pendingAmount: pendingVal,
-                                    orders: [o]
-                                  })}
-                                  className="px-3 py-1.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[11px] font-bold flex items-center gap-1.5 transition-all cursor-pointer"
-                                  title="Disparar Fatura via WhatsApp"
-                                >
-                                  <Send className="h-3 w-3" /> Cobrar Zap
-                                </button>
+                    if (filtered.length === 0) {
+                      return (
+                        <tr>
+                          <td colSpan={7} className="px-6 py-12 text-center text-zinc-500">
+                            🎉 Nenhum faturamento pendente encontrado com estes filtros!
+                          </td>
+                        </tr>
+                      );
+                    }
 
-                                <button
-                                  onClick={async () => {
-                                    try {
-                                      const { error } = await supabase
-                                        .from('orders')
-                                        .update({ payment_status: 'paid' })
-                                        .eq('id', o.id);
-                                      if (error) throw error;
-                                      toast.success("Fatura quitada com sucesso!");
-                                      fetchBillingData();
-                                    } catch (err) {
-                                      toast.error("Erro ao registrar quitação.");
-                                    }
-                                  }}
-                                  className="px-3 py-1.5 rounded-xl bg-purple-500/10 hover:bg-purple-500/20 text-purple-300 border border-purple-500/30 text-[11px] font-bold flex items-center gap-1.5 transition-all cursor-pointer"
-                                  title="Marcar como Pago"
-                                >
-                                  <CheckCircle2 className="h-3 w-3" /> Dar Baixa
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })
-                  )}
+                    return filtered.map((o) => {
+                      const totalVal = Number(o.total_amount || 0);
+                      const isHalf = o.payment_status === 'half_paid';
+                      const pendingVal = isHalf ? totalVal * 0.5 : totalVal;
+
+                      return (
+                        <tr key={o.id} className="hover:bg-white/5 transition-colors">
+                          <td className="px-6 py-4">
+                            <p className="font-bold text-white flex items-center gap-1.5">
+                              #{o.order_number || o.id.slice(0, 4)} - {o.clients?.name || 'Cliente Geral'}
+                              {o.status === 'entregue' ? (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/35">
+                                  📦 Entregue
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/35">
+                                  ⏳ Produção
+                                </span>
+                              )}
+                            </p>
+                            <p className="text-[11px] text-zinc-400">{o.clients?.phone || 'Sem telefone'}</p>
+                          </td>
+                          <td className="px-6 py-4 text-zinc-400">
+                            {o.created_at ? format(new Date(o.created_at), 'dd/MM/yyyy') : '-'}
+                          </td>
+                          <td className="px-6 py-4">
+                            <input 
+                              type="date"
+                              value={o.due_date ? format(new Date(o.due_date), 'yyyy-MM-dd') : ''}
+                              onChange={async (e) => {
+                                const newDate = e.target.value;
+                                try {
+                                  const { error } = await supabase
+                                    .from('orders')
+                                    .update({ due_date: newDate ? new Date(newDate).toISOString() : null })
+                                    .eq('id', o.id);
+                                  if (error) throw error;
+                                  toast.success('Data combinada atualizada!');
+                                  fetchBillingData();
+                                } catch (err) {
+                                  toast.error('Erro ao atualizar data combinada.');
+                                }
+                              }}
+                              className="bg-black/40 border border-white/10 rounded-xl px-2 py-1 text-[11px] text-amber-400 outline-none focus:border-amber-500 font-bold"
+                            />
+                          </td>
+                          <td className="px-6 py-4 text-center">
+                            <span className={`inline-block px-2.5 py-1 rounded-full text-[9px] font-black uppercase ${
+                              isHalf 
+                                ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30' 
+                                : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                            }`}>
+                              {isHalf ? '⚡ Sinal 50% Recebido' : '⏳ 100% Pendente'}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 text-right font-bold text-zinc-300">
+                            {formatCurrency(totalVal, permissions?.canSeeFinancials ?? true)}
+                          </td>
+                          <td className="px-6 py-4 text-right font-black text-amber-400 text-sm">
+                            {formatCurrency(pendingVal, permissions?.canSeeFinancials ?? true)}
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex items-center justify-center gap-2">
+                              <button
+                                onClick={() => setSelectedClient({
+                                  id: o.clients?.id || o.id,
+                                  name: o.clients?.name || 'Cliente Geral',
+                                  phone: o.clients?.phone || '',
+                                  orderCount: 1,
+                                  totalAmount: totalVal,
+                                  paidAmount: isHalf ? totalVal * 0.5 : 0,
+                                  pendingAmount: pendingVal,
+                                  orders: [o]
+                                })}
+                                className="px-3 py-1.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[11px] font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+                                title="Disparar Fatura via WhatsApp"
+                              >
+                                <Send className="h-3 w-3" /> Cobrar Zap
+                              </button>
+
+                              <button
+                                onClick={async () => {
+                                  try {
+                                    const { error } = await supabase
+                                      .from('orders')
+                                      .update({ payment_status: 'paid' })
+                                      .eq('id', o.id);
+                                    if (error) throw error;
+                                    toast.success("Fatura quitada com sucesso!");
+                                    fetchBillingData();
+                                  } catch (err) {
+                                    toast.error("Erro ao registrar quitação.");
+                                  }
+                                }}
+                                className="px-3 py-1.5 rounded-xl bg-purple-500/10 hover:bg-purple-500/20 text-purple-300 border border-purple-500/30 text-[11px] font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+                                title="Marcar como Pago"
+                              >
+                                <CheckCircle2 className="h-3 w-3" /> Dar Baixa
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    });
+                  })()}
                 </tbody>
               </table>
             </div>
@@ -1375,21 +1551,23 @@ export const Faturamento: React.FC = () => {
       {/* ABA 4: 📥 ENTRADAS (DIA A DIA) */}
       {activeTab === 'entradas' && (
         <div className="space-y-6 animate-in fade-in duration-200">
-          <div className="glass-panel p-5 rounded-3xl border border-white/10 flex items-center justify-between">
+          <div className="glass-panel p-5 rounded-3xl border border-white/10 flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
               <h2 className="text-lg font-black text-white flex items-center gap-2">
-                📥 Entradas & Recebimentos Diários
+                📥 Extrato Unificado de Entradas & Recebimentos
               </h2>
               <p className="text-xs text-zinc-400 mt-0.5">
-                Histórico diário de pagamentos 100% liquidados no caixa do ateliê.
+                Exibe automaticamente todos os recebimentos de pedidos (totais e sinais de 50%) e lançamentos manuais do ateliê.
               </p>
             </div>
-            <button
-              onClick={() => openFinModal('income')}
-              className="px-4 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black uppercase tracking-wider flex items-center gap-2 transition-all shadow-lg shadow-emerald-600/30"
-            >
-              + Registrar Entrada de Caixa
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => openFinModal('income')}
+                className="px-4 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black uppercase tracking-wider flex items-center gap-2 transition-all shadow-lg shadow-emerald-600/30 cursor-pointer"
+              >
+                + Registrar Entrada Avulsa
+              </button>
+            </div>
           </div>
 
           <div className="glass-panel rounded-3xl border border-white/10 overflow-hidden">
@@ -1398,38 +1576,55 @@ export const Faturamento: React.FC = () => {
                 <thead>
                   <tr className="border-b border-white/10 bg-white/5 font-bold uppercase text-[10px] text-zinc-400">
                     <th className="px-6 py-3.5">Data / Hora</th>
-                    <th className="px-6 py-3.5">Origem / Descrição</th>
-                    <th className="px-6 py-3.5">Categoria</th>
+                    <th className="px-6 py-3.5">Origem / Pedido / Cliente</th>
+                    <th className="px-6 py-3.5">Status & Forma de Pagamento</th>
+                    <th className="px-6 py-3.5">Responsável (Perfil)</th>
                     <th className="px-6 py-3.5 text-right">Valor Recebido</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5 font-medium text-zinc-200">
-                  {rawOrders.filter(o => o.payment_status === 'paid').map(o => (
-                    <tr key={o.id} className="hover:bg-white/5 transition-colors">
-                      <td className="px-6 py-3.5 text-zinc-400">
-                        {format(new Date(o.created_at), 'dd/MM/yyyy HH:mm')}
-                      </td>
-                      <td className="px-6 py-3.5 font-bold text-white">
-                        Pedido #{o.order_number || o.id.slice(0, 6)} - {o.clients?.name || 'Cliente'}
-                      </td>
-                      <td className="px-6 py-3.5 text-emerald-400 font-bold">Serviço de Bordado</td>
-                      <td className="px-6 py-3.5 text-right font-black text-emerald-400">
-                        + {formatCurrency(o.total_amount, permissions?.canSeeFinancials ?? true)}
+                  {allIncomeEntries.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="px-6 py-12 text-center text-zinc-500">
+                        🎉 Nenhum recebimento ou entrada registrada até o momento!
                       </td>
                     </tr>
-                  ))}
-                  {financialTransactions.filter(t => t.type === 'income').map(tx => (
-                    <tr key={tx.id} className="hover:bg-white/5 transition-colors">
-                      <td className="px-6 py-3.5 text-zinc-400">
-                        {format(new Date(tx.created_at), 'dd/MM/yyyy HH:mm')}
-                      </td>
-                      <td className="px-6 py-3.5 font-bold text-white">{tx.description}</td>
-                      <td className="px-6 py-3.5 text-emerald-400 font-bold">{tx.category || 'Receita Direta'}</td>
-                      <td className="px-6 py-3.5 text-right font-black text-emerald-400">
-                        + {formatCurrency(tx.amount, permissions?.canSeeFinancials ?? true)}
-                      </td>
-                    </tr>
-                  ))}
+                  ) : (
+                    allIncomeEntries.map(entry => (
+                      <tr key={entry.id} className="hover:bg-white/5 transition-colors">
+                        <td className="px-6 py-3.5 text-zinc-400 font-medium">
+                          {format(entry.date, 'dd/MM/yyyy HH:mm')}
+                        </td>
+                        <td className="px-6 py-3.5 font-bold text-white">
+                          {entry.title}
+                        </td>
+                        <td className="px-6 py-3.5">
+                          <div className="flex items-center gap-1.5">
+                            {entry.isOrder && (
+                              <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase ${
+                                entry.orderStatus === 'half_paid'
+                                  ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30'
+                                  : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                              }`}>
+                                {entry.orderStatus === 'half_paid' ? '⚡ Sinal 50%' : '✅ Quitação 100%'}
+                              </span>
+                            )}
+                            <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-white/10 text-zinc-300 border border-white/10">
+                              💳 {entry.paymentMethod}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-3.5 text-zinc-400">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white/5 text-zinc-300 text-[10px] font-bold">
+                            👤 {entry.profileName}
+                          </span>
+                        </td>
+                        <td className="px-6 py-3.5 text-right font-black text-emerald-400 text-sm">
+                          + {formatCurrency(entry.amount, permissions?.canSeeFinancials ?? true)}
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
@@ -2112,14 +2307,13 @@ export const Faturamento: React.FC = () => {
       </>
       )}
 
-      {/* Modal de Envio da Fatura WhatsApp */}
+      {/* MODAIS DE DETALHES FINANCEIROS */}
       <WhatsAppBillingModal 
         isOpen={!!selectedClient}
         onClose={() => setSelectedClient(null)}
         clientData={selectedClient}
       />
 
-      {/* Modal de Lançamento de Receitas e Despesas (Caixa) */}
       <FinancialTransactionModal
         isOpen={isFinModalOpen}
         onClose={() => setIsFinModalOpen(false)}
@@ -2127,13 +2321,31 @@ export const Faturamento: React.FC = () => {
         onSubmitTransaction={handleAddFinancialTransaction}
       />
 
-      {/* Modal Inteligente de Detalhamento A Receber */}
       <ReceberDetailsModal
         isOpen={isReceberModalOpen}
         onClose={() => setIsReceberModalOpen(false)}
         pendingOrders={allTimePendingOrders}
         canSeeFinancials={permissions?.canSeeFinancials ?? true}
         onSelectClientForZap={(client) => setSelectedClient(client)}
+        onRefreshData={fetchBillingData}
+      />
+
+      <ReceitaDetailsModal
+        isOpen={isReceitaModalOpen}
+        onClose={() => setIsReceitaModalOpen(false)}
+        totalRevenue={totalRevenue}
+        paidTotal={paidTotal}
+        pendingTotal={pendingTotal}
+        avgTicket={avgTicket}
+        topClient={topClient}
+        incomeEntries={allIncomeEntries}
+        onRefreshData={fetchBillingData}
+      />
+
+      <DespesasDetailsModal
+        isOpen={isDespesasModalOpen}
+        onClose={() => setIsDespesasModalOpen(false)}
+        transactions={financialTransactions}
         onRefreshData={fetchBillingData}
       />
     </div>

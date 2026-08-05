@@ -4,7 +4,7 @@ import {
   CheckCircle2, Clock, DollarSign, User, Package, FileText, ChevronRight,
   RefreshCw, Trash2, Edit3, ArrowUpRight, ChevronDown, ChevronUp,
   AlertTriangle, Paperclip, MessageSquare, ExternalLink, Shield, Maximize2, Minimize2, Phone,
-  Zap, Sparkles, Printer, Eye
+  Zap, Sparkles, Printer, Eye, EyeOff
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useCompanySettings } from '@/contexts/CompanySettingsContext';
@@ -59,7 +59,7 @@ const formatPaymentMethod = (method?: string): string => {
 
 export const Pedidos: React.FC = () => {
   const { settings } = useCompanySettings();
-  const { isUnlocked } = useProfile();
+  const { isUnlocked, role, customProfiles } = useProfile();
 
   const [activeTab, setActiveTab] = useState<'cards' | 'kanban'>('cards');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid'); // Grid de Miniaturas (Cards) como PADRÃO PRIMÁRIO!
@@ -73,10 +73,11 @@ export const Pedidos: React.FC = () => {
   // Estado para controlar quais cards estão expandidos no modo Acordeon
   const [expandedOrderIds, setExpandedOrderIds] = useState<Record<string, boolean>>({});
 
-  // Modais de Status, Detalhes e Cobrança
+  // Modais de Status, Detalhes, Cobrança e Visibilidade
   const [selectedOrderForStatus, setSelectedOrderForStatus] = useState<Order | null>(null);
   const [selectedOrderForDetails, setSelectedOrderForDetails] = useState<Order | null>(null);
   const [selectedOrderForCobrar, setSelectedOrderForCobrar] = useState<Order | null>(null);
+  const [selectedOrderForVisibilityModal, setSelectedOrderForVisibilityModal] = useState<Order | null>(null);
   const [activePrintOption, setActivePrintOption] = useState<string | null>(null);
 
   // Background Task Store
@@ -150,7 +151,7 @@ export const Pedidos: React.FC = () => {
       const { data: ordersData, error: ordersError } = await supabase
         .from('orders')
         .select(`
-          id, order_number, client_id, status, payment_status, payment_method, total_amount, due_date, notes, created_at,
+          id, order_number, client_id, status, payment_status, payment_method, total_amount, due_date, notes, created_at, visible_profile_ids,
           clients (name, phone, company_name)
         `)
         .eq('user_id', userId)
@@ -218,6 +219,15 @@ export const Pedidos: React.FC = () => {
   };
 
   const filteredOrders = orders.filter(o => {
+    // Filtragem de Visibilidade por Perfil
+    if (role !== 'chefe') {
+      if ((o as any).visible_profile_ids && (o as any).visible_profile_ids.length > 0) {
+        if (!(o as any).visible_profile_ids.includes(role)) {
+          return false;
+        }
+      }
+    }
+
     const clientName = o.client?.name || o.client?.company_name || '';
     const matchesSearch =
       clientName.toLowerCase().includes(search.toLowerCase()) ||
@@ -393,6 +403,7 @@ export const Pedidos: React.FC = () => {
                   }}
                   onDeleteOrder={handleDeleteOrder}
                   onCobrarOrder={(o) => handleCobrarPedido(o)}
+                  onConfigureVisibility={(o) => setSelectedOrderForVisibilityModal(o)}
                   onPrintReceipt={(o) => {
                     setSelectedOrderForDetails(o);
                     setTimeout(() => window.print(), 300);
@@ -431,6 +442,8 @@ export const Pedidos: React.FC = () => {
                       isQuickEntryWithoutPrice
                         ? 'border-amber-500/40 bg-amber-500/5 dark:bg-amber-500/5'
                         : 'border-slate-200 dark:border-white/10 hover:border-purple-500/40'
+                    } ${
+                      order.visible_profile_ids && order.visible_profile_ids.length > 0 ? 'opacity-60 hover:opacity-85' : ''
                     }`}
                   >
 
@@ -455,6 +468,12 @@ export const Pedidos: React.FC = () => {
                             <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 dark:text-zinc-500">
                               {new Date(order.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
                             </span>
+
+                            {order.visible_profile_ids && order.visible_profile_ids.length > 0 && (
+                              <span className="px-2 py-0.5 rounded-md text-[9px] font-black uppercase bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/35 flex items-center gap-1">
+                                👁️ Restrito
+                              </span>
+                            )}
 
                             {/* AVISOS VISÍVEIS MESMO QUANDO ENCOLHIDO */}
                             {isQuickEntryWithoutPrice && (
@@ -660,6 +679,28 @@ export const Pedidos: React.FC = () => {
                                 <Eye className="h-4 w-4" />
                               </button>
 
+                              {role === 'chefe' && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedOrderForVisibilityModal(order);
+                                  }}
+                                  className={`p-2 rounded-lg border transition-all ${
+                                    order.visible_profile_ids && order.visible_profile_ids.length > 0
+                                      ? 'bg-amber-500/10 border-amber-500/30 text-amber-500 hover:bg-amber-500/20'
+                                      : 'border-transparent text-slate-600 dark:text-zinc-400 hover:text-purple-600 dark:hover:text-purple-400 hover:bg-white dark:hover:bg-white/10'
+                                  }`}
+                                  title="Configurar Visibilidade do Pedido"
+                                >
+                                  {order.visible_profile_ids && order.visible_profile_ids.length > 0 ? (
+                                    <EyeOff className="h-4 w-4" />
+                                  ) : (
+                                    <Eye className="h-4 w-4" />
+                                  )}
+                                </button>
+                              )}
+
                               {activePrintOption === order.id ? (
                                 <div className="flex items-center gap-1 bg-indigo-500/10 rounded-lg p-0.5 animate-in zoom-in-95 duration-200">
                                   <button
@@ -800,6 +841,155 @@ export const Pedidos: React.FC = () => {
         order={selectedOrderForCobrar}
         onMessageSent={fetchOrders}
       />
+
+      {/* Modal de Configuração de Visibilidade por Perfil */}
+      <OrderVisibilityModal
+        isOpen={!!selectedOrderForVisibilityModal}
+        onClose={() => setSelectedOrderForVisibilityModal(null)}
+        order={selectedOrderForVisibilityModal}
+        customProfiles={customProfiles}
+        onSaved={fetchOrders}
+      />
+    </div>
+  );
+};
+
+// Componente do Modal de Visibilidade (Ajustado para Modo Claro/Escuro Dinâmico)
+interface OrderVisibilityModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  order: any;
+  customProfiles: any[];
+  onSaved: () => void;
+}
+
+const OrderVisibilityModal: React.FC<OrderVisibilityModalProps> = ({
+  isOpen,
+  onClose,
+  order,
+  customProfiles,
+  onSaved
+}) => {
+  const [selectedProfiles, setSelectedProfiles] = useState<string[]>([]);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (order && isOpen) {
+      if (order.visible_profile_ids && order.visible_profile_ids.length > 0) {
+        setSelectedProfiles(order.visible_profile_ids);
+      } else {
+        // Por padrão todos têm acesso se não houver restrição configurada
+        setSelectedProfiles(customProfiles.map(p => p.id));
+      }
+    }
+  }, [order, isOpen, customProfiles]);
+
+  if (!isOpen || !order) return null;
+
+  const handleToggleProfile = (profileId: string) => {
+    setSelectedProfiles(prev =>
+      prev.includes(profileId)
+        ? prev.filter(id => id !== profileId)
+        : [...prev, profileId]
+    );
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const allSelected = customProfiles.every(p => selectedProfiles.includes(p.id));
+      const payload = allSelected ? null : selectedProfiles;
+
+      const { error } = await supabase
+        .from('orders')
+        .update({ visible_profile_ids: payload })
+        .eq('id', order.id);
+
+      if (error) throw error;
+      toast.success('Visibilidade do pedido atualizada!');
+      onSaved();
+      onClose();
+    } catch (err) {
+      console.error(err);
+      toast.error('Erro ao salvar configurações de visibilidade.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md">
+      <div className="relative w-full max-w-sm rounded-3xl border border-slate-200 dark:border-white/10 bg-white dark:bg-[#12121a] p-6 shadow-2xl space-y-4 text-slate-800 dark:text-zinc-100">
+        <div>
+          <h3 className="text-base font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+            👁️ Visibilidade do Pedido
+          </h3>
+          <p className="text-[11px] text-slate-500 dark:text-zinc-400 mt-1">
+            Selecione quais perfis podem visualizar o pedido #{order.order_number || order.id.slice(0, 4)}:
+          </p>
+        </div>
+
+        <div className="space-y-2.5 max-h-[240px] overflow-y-auto pr-1">
+          {customProfiles.map(p => {
+            const isChefe = p.id === 'chefe';
+            const isChecked = isChefe || selectedProfiles.includes(p.id);
+
+            return (
+              <div 
+                key={p.id}
+                className={`flex items-center justify-between p-3.5 rounded-2xl border transition-all ${
+                  isChecked
+                    ? 'bg-purple-500/5 dark:bg-purple-500/10 border-purple-500/40 text-purple-600 dark:text-purple-400 font-extrabold'
+                    : 'bg-slate-50 dark:bg-white/5 border-slate-200 dark:border-white/5 text-slate-600 dark:text-zinc-400'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <span className="text-sm">{p.icon || '👤'}</span>
+                  <div className="text-left">
+                    <p className="text-xs font-bold">{p.name}</p>
+                    <p className="text-[9px] text-slate-500 dark:text-zinc-500 font-medium">
+                      {isChefe ? 'Acesso Administrativo' : 'Acesso a Producao / Kanban'}
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  disabled={isChefe}
+                  onClick={() => handleToggleProfile(p.id)}
+                  className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                    isChecked ? 'bg-purple-600' : 'bg-slate-200 dark:bg-zinc-800'
+                  } ${isChefe ? 'opacity-50 cursor-not-allowed' : ''}`}
+                >
+                  <span
+                    className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
+                      isChecked ? 'translate-x-4' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="flex items-center justify-end gap-2.5 pt-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 rounded-xl text-xs font-bold bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-700 dark:text-zinc-300 transition-all cursor-pointer border border-slate-200 dark:border-transparent"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            disabled={saving}
+            onClick={handleSave}
+            className="px-4 py-2 rounded-xl text-xs font-bold bg-purple-600 hover:bg-purple-500 text-white transition-all shadow-lg shadow-purple-500/20 cursor-pointer"
+          >
+            {saving ? 'Salvando...' : 'Salvar'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 };

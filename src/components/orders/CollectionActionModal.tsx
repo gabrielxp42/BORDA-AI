@@ -7,9 +7,10 @@ import {
 import { toast } from 'sonner';
 import { useProfile } from '@/contexts/ProfileContext';
 import { formatCurrency } from '@/utils/currencyFormatter';
-import { sendEvolutionText, getWhatsAppWebLink, handleWhatsAppDispatchError } from '@/services/whatsappService';
+import { sendEvolutionText, sendEvolutionMedia, getWhatsAppWebLink, handleWhatsAppDispatchError } from '@/services/whatsappService';
 import { useBackgroundTasks } from '@/hooks/useBackgroundTasks';
 import { useCompanySettings } from '@/contexts/CompanySettingsContext';
+import { generateOrderPDFBase64 } from '@/services/pdfGenerator';
 
 const ToggleSwitch: React.FC<{ checked: boolean; onChange: (checked: boolean) => void }> = ({ checked, onChange }) => (
   <button
@@ -110,6 +111,7 @@ export const CollectionActionModal: React.FC<CollectionActionModalProps> = ({
   const [editablePhone, setEditablePhone] = useState<string>('');
   const [includePix, setIncludePix] = useState<boolean>(true);
   const [includeItems, setIncludeItems] = useState<boolean>(true);
+  const [attachPDF, setAttachPDF] = useState<boolean>(false);
   const [messageDraft, setMessageDraft] = useState<string>('');
   const [isSending, setIsSending] = useState<boolean>(false);
 
@@ -127,8 +129,17 @@ export const CollectionActionModal: React.FC<CollectionActionModalProps> = ({
   const orderCode = order.order_number ? `#${order.order_number}` : `#${order.id.slice(0, 4)}`;
   const totalFormatted = formatCurrency(order.total_amount || 0, permissions?.canSeeFinancials ?? true);
 
+  const cleanDescription = (desc: string) => {
+    return desc
+      .replace(/\s*\(\s*\d+([\.,]\d+)?\s*(pts|pontos|ponto|p)\s*,\s*\d+\s*(cores|cor|c)\s*\)/gi, '')
+      .replace(/\s*\(\s*\d+\s*(cores|cor|c)\s*,\s*\d+([\.,]\d+)?\s*(pts|pontos|ponto|p)\s*\)/gi, '')
+      .replace(/\s*\(\s*\d+([\.,]\d+)?\s*(pts|pontos|ponto|p)\s*\)/gi, '')
+      .replace(/\s*\(\s*\d+\s*(cores|cor|c)\s*\)/gi, '')
+      .trim();
+  };
+
   const items = order.order_items || order.items || [];
-  const itemsText = items.map(i => `• ${i.description} (${i.quantity}x)`).join('\n') || '• Bordado Personalizado';
+  const itemsText = items.map(i => `• ${cleanDescription(i.description)} (${i.quantity}x)`).join('\n') || '• Bordado Personalizado';
 
   // Gerador dinâmico do rascunho de cobrança
   function generateDraftMessage(selectedTone: CollectionTone, withPix: boolean, withItems: boolean) {
@@ -154,7 +165,7 @@ export const CollectionActionModal: React.FC<CollectionActionModalProps> = ({
 
       case 'firm':
         text = `*Aviso Financeiro - ${systemName}* ⚠️\n\n` +
-          `Prezado(a) *${clientName}*, consta em nosso sistema o pedido *${orderCode}* pendente de quitação no valor de *${totalFormatted}*.${itemsBlock}${pixBlock}\n\n` +
+          `Prezado(a) *${clientName}*, consta em nosso sistema o pedido *${orderCode}* pendente de quitação no valor de *${totalFormatted}*${itemsBlock}${pixBlock}\n\n` +
           `Pedimos a gentileza de regularizar o pagamento para dar continuidade ao atendimento. Obrigado!`;
         break;
 
@@ -204,7 +215,28 @@ export const CollectionActionModal: React.FC<CollectionActionModalProps> = ({
         updateStep(taskId, 'done', 'loading');
         updateTask(taskId, { progress: 70, status: 'sending' });
 
-        await sendEvolutionText(editablePhone, messageDraft);
+        if (attachPDF) {
+            const pdfBase64 = await generateOrderPDFBase64({
+                id: order.id,
+                orderNumber: order.order_number,
+                createdAt: order.created_at,
+                clientName: clientName,
+                paymentStatus: order.payment_status,
+                totalAmount: order.total_amount,
+                items: order.order_items || order.items || [],
+                companyName: settings.systemName,
+            });
+
+            await sendEvolutionMedia({
+                phone: editablePhone,
+                message: messageDraft,
+                mediaUrl: `data:application/pdf;base64,${pdfBase64}`,
+                mediaType: 'document',
+                mediaName: `OS_${orderCode.replace('#', '')}.pdf`
+            });
+        } else {
+            await sendEvolutionText(editablePhone, messageDraft);
+        }
 
         updateStep(taskId, 'done', 'completed');
         updateTask(taskId, {
@@ -319,32 +351,31 @@ export const CollectionActionModal: React.FC<CollectionActionModalProps> = ({
               />
             </div>
 
-            {/* Switch Dados PIX (Estilo DIRECT AI) */}
-            <div className="flex items-center justify-between p-3.5 rounded-2xl bg-slate-50 dark:bg-white/[0.03] border border-slate-200 dark:border-white/10">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-xl bg-amber-500/10 text-amber-500 border border-amber-500/20">
-                  <QrCode className="h-4 w-4" />
+            {/* Switches */}
+            <div className="space-y-2">
+                <div className="flex items-center justify-between p-3.5 rounded-2xl bg-slate-50 dark:bg-white/[0.03] border border-slate-200 dark:border-white/10">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-xl bg-amber-500/10 text-amber-500 border border-amber-500/20"><QrCode className="h-4 w-4" /></div>
+                    <div className="flex flex-col"><span className="text-xs font-bold text-slate-900 dark:text-white uppercase italic tracking-tight">Dados PIX</span><span className="text-[10px] text-slate-500 dark:text-zinc-400 font-medium">Incluir chave PIX</span></div>
+                  </div>
+                  <ToggleSwitch checked={includePix} onChange={setIncludePix} />
                 </div>
-                <div className="flex flex-col">
-                  <span className="text-xs font-bold text-slate-900 dark:text-white uppercase italic tracking-tight">Dados PIX</span>
-                  <span className="text-[10px] text-slate-500 dark:text-zinc-400 font-medium">Incluir chave PIX nas informações</span>
+                
+                <div className="flex items-center justify-between p-3.5 rounded-2xl bg-slate-50 dark:bg-white/[0.03] border border-slate-200 dark:border-white/10">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-xl bg-purple-500/10 text-purple-400 border border-purple-500/20"><Package className="h-4 w-4" /></div>
+                    <div className="flex flex-col"><span className="text-xs font-bold text-slate-900 dark:text-white uppercase italic tracking-tight">Resumo</span><span className="text-[10px] text-slate-500 dark:text-zinc-400 font-medium">Incluir itens</span></div>
+                  </div>
+                  <ToggleSwitch checked={includeItems} onChange={setIncludeItems} />
                 </div>
-              </div>
-              <ToggleSwitch checked={includePix} onChange={setIncludePix} />
-            </div>
 
-            {/* Switch Resumo de Itens (Estilo DIRECT AI) */}
-            <div className="flex items-center justify-between p-3.5 rounded-2xl bg-slate-50 dark:bg-white/[0.03] border border-slate-200 dark:border-white/10">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-xl bg-purple-500/10 text-purple-400 border border-purple-500/20">
-                  <Package className="h-4 w-4" />
+                <div className="flex items-center justify-between p-3.5 rounded-2xl bg-slate-50 dark:bg-white/[0.03] border border-slate-200 dark:border-white/10">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"><FileText className="h-4 w-4" /></div>
+                    <div className="flex flex-col"><span className="text-xs font-bold text-slate-900 dark:text-white uppercase italic tracking-tight">Anexar PDF</span><span className="text-[10px] text-slate-500 dark:text-zinc-400 font-medium">Enviar ficha do pedido</span></div>
+                  </div>
+                  <ToggleSwitch checked={attachPDF} onChange={setAttachPDF} />
                 </div>
-                <div className="flex flex-col">
-                  <span className="text-xs font-bold text-slate-900 dark:text-white uppercase italic tracking-tight">Resumo de Itens</span>
-                  <span className="text-[10px] text-slate-500 dark:text-zinc-400 font-medium">Incluir lista de serviços e peças</span>
-                </div>
-              </div>
-              <ToggleSwitch checked={includeItems} onChange={setIncludeItems} />
             </div>
           </div>
 
@@ -358,11 +389,11 @@ export const CollectionActionModal: React.FC<CollectionActionModalProps> = ({
                 type="button"
                 onClick={() => {
                   navigator.clipboard.writeText(messageDraft);
-                  toast.success('Texto copiado para a área de transferência!');
+                  toast.success('Texto copiado!');
                 }}
                 className="text-[10px] font-bold text-purple-500 hover:underline flex items-center gap-1"
               >
-                <Copy className="h-3 w-3" /> Copiar Texto
+                <Copy className="h-3 w-3" /> Copiar
               </button>
             </div>
             <textarea
