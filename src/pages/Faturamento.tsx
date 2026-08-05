@@ -57,7 +57,7 @@ import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
 import { formatCurrency } from '@/utils/currencyFormatter';
 import { parsePaymentMetadata, formatPaymentMethodName } from '@/utils/paymentHelper';
-import { useUniversalCloudSync } from '@/hooks/useUniversalCloudSync';
+import { syncLocalToCloud } from '@/utils/cloudSync';
 
 interface ClientBillingData {
   id: string;
@@ -72,8 +72,9 @@ interface ClientBillingData {
 
 export const Faturamento: React.FC = () => {
   const { isUnlocked, activeProfile } = useProfile();
-  const { permissions } = useCompanySettings();
-  const { syncAllLocalDataToCloud } = useUniversalCloudSync();
+  const { settings, permissions } = useCompanySettings();
+  const pc = settings?.primaryColor || '#8b5cf6';
+
   
   const [loading, setLoading] = useState(false);
   const [billingData, setBillingData] = useState<ClientBillingData[]>([]);
@@ -88,6 +89,12 @@ export const Faturamento: React.FC = () => {
   const [isDespesasModalOpen, setIsDespesasModalOpen] = useState(false);
   const [expandedCard, setExpandedCard] = useState<'receita' | 'despesas' | 'areceber' | null>(null);
   const [receberFilter, setReceberFilter] = useState<'all' | 'production' | 'delivered'>('all');
+
+  // Manual Cash Flow State (Receitas & Despesas) — Sincronizado via Supabase
+  const [financialTransactions, setFinancialTransactions] = useState<FinancialTransaction[]>([]);
+  const [isFinModalOpen, setIsFinModalOpen] = useState(false);
+  const [finModalType, setFinModalType] = useState<FinancialTransactionType>('income');
+  const [finSynced, setFinSynced] = useState(false);
 
   // Histórico Consolidado de Todas as Entradas do Caixa (Pedidos pagos/sinais + Transações Manuais)
   const allIncomeEntries = useMemo(() => {
@@ -197,12 +204,6 @@ export const Faturamento: React.FC = () => {
   // Modal State
   const [selectedClient, setSelectedClient] = useState<ClientBillingData | null>(null);
 
-  // Manual Cash Flow State (Receitas & Despesas) — Sincronizado via Supabase
-  const [financialTransactions, setFinancialTransactions] = useState<FinancialTransaction[]>([]);
-  const [isFinModalOpen, setIsFinModalOpen] = useState(false);
-  const [finModalType, setFinModalType] = useState<FinancialTransactionType>('income');
-  const [finSynced, setFinSynced] = useState(false);
-
   // Carrega transações do Supabase e migra dados locais (localStorage) se existirem
   useEffect(() => {
     if (!isUnlocked) return;
@@ -236,8 +237,11 @@ export const Faturamento: React.FC = () => {
 
             if (toMigrate.length > 0) {
               // Envia para o Supabase com o user_id
+              const isUUID = (str: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+              const ensureUUID = (str?: string) => (str && isUUID(str)) ? str : crypto.randomUUID();
+
               const rows = toMigrate.map(t => ({
-                id: t.id,
+                id: ensureUUID(t.id),
                 user_id: userId,
                 type: t.type,
                 amount: t.amount,
@@ -255,7 +259,7 @@ export const Faturamento: React.FC = () => {
 
               const { error: insertError } = await supabase
                 .from('financial_transactions')
-                .insert(rows);
+                .upsert(rows, { onConflict: 'id' });
 
               if (!insertError) {
                 toast.success(`${toMigrate.length} lançamento(s) sincronizado(s) com a nuvem! ☁️`, { duration: 4000 });
@@ -311,7 +315,7 @@ export const Faturamento: React.FC = () => {
     
     const created: any = {
       ...newTx,
-      id: Date.now().toString(),
+      id: crypto.randomUUID(),
       created_at: new Date().toISOString(),
       created_by_profile: profileName
     };
@@ -334,13 +338,8 @@ export const Faturamento: React.FC = () => {
           category: created.category,
           payment_method: created.payment_method || 'other',
           date: created.date || created.created_at,
-          expense_type: created.expense_type || null,
-          due_date: created.due_date || null,
           status: created.status || 'paid',
-          order_id: created.order_id || null,
-          notes: created.notes || null,
-          created_at: created.created_at,
-          created_by_profile: profileName
+          created_at: created.created_at
         });
       }
     } catch (err) {
@@ -387,7 +386,7 @@ export const Faturamento: React.FC = () => {
         return;
       }
 
-      await syncAllLocalDataToCloud(true);
+      await syncLocalToCloud(true);
 
       const { data: orders, error: ordersError } = await supabase
         .from('orders')

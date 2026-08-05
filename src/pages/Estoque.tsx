@@ -14,6 +14,7 @@ import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
 import { useProfile } from '@/contexts/ProfileContext';
 import { formatCurrency } from '@/utils/currencyFormatter';
+import { syncLocalToCloud } from '@/utils/cloudSync';
 
 // Sem insumos de exemplo — cada conta começa com estoque zerado e cadastra os seus próprios
 
@@ -88,7 +89,7 @@ export const Estoque: React.FC = () => {
         if (!userId) return;
 
         // Auto-sincroniza registros locais retidos antes de buscar da nuvem
-        await syncAllLocalDataToCloud(true);
+        await syncLocalToCloud(true);
 
         localStorage.removeItem('borda_stock_items');
 

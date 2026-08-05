@@ -26,6 +26,12 @@ import {
   Cloud
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { LogOut, ShieldCheck, Crown } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
+import { useCompanySettings } from '@/contexts/CompanySettingsContext';
+import { useProfile } from '@/contexts/ProfileContext';
+import { useNavigate } from 'react-router-dom';
+import { supabase } from '@/integrations/supabase/client';
 
 import { CreateOrderModal } from '../orders/CreateOrderModal';
 import { ProfileSwitcher } from './ProfileSwitcher';
@@ -70,11 +76,7 @@ const navItems: NavItem[] = [
   { label: 'GABI Automações', path: '/gabi', icon: Sparkles, badge: <Zap className="h-3 w-3 fill-current text-amber-400" /> },
 ];
 
-import { LogOut, ShieldCheck, Crown } from 'lucide-react';
-import { useAuth } from '@/contexts/AuthContext';
-import { useCompanySettings } from '@/contexts/CompanySettingsContext';
-import { useProfile } from '@/contexts/ProfileContext';
-import { useNavigate } from 'react-router-dom';
+
 
 // Subcomponente otimizado e memorizado para isolar o estado de hover da Sidebar
 // Isso previne que a tela principal (Kanban, Faturamento, etc) sofra re-renderizações desnecessárias
@@ -198,10 +200,7 @@ const DesktopSidebar: React.FC<{
   );
 });
 
-import { useUniversalCloudSync } from '@/hooks/useUniversalCloudSync';
-
 export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  useUniversalCloudSync();
   const { settings } = useCompanySettings();
   const { isUnlocked, permissions } = useProfile();
   const { user, profile: authProfile, signOut } = useAuth();

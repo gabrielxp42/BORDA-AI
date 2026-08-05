@@ -36,10 +36,14 @@ export function useUniversalCloudSync() {
               updated_at: new Date().toISOString()
             }));
 
-            const { error } = await supabase.from('stock_items').upsert(stockPayload);
+            const { error } = await supabase
+              .from('stock_items')
+              .upsert(stockPayload, { onConflict: 'id' });
             if (!error) {
               itemsSyncedCount += stockPayload.length;
               localStorage.removeItem('borda_stock_items');
+            } else {
+              console.warn('Erro upsert stock_items:', error.message);
             }
           }
         } catch (e) {
@@ -65,11 +69,15 @@ export function useUniversalCloudSync() {
               created_at: m.created_at || new Date().toISOString()
             }));
 
-            const { error } = await supabase.from('stock_movements').upsert(movPayload);
+            const { error } = await supabase
+              .from('stock_movements')
+              .upsert(movPayload, { onConflict: 'id' });
             if (!error) {
               itemsSyncedCount += movPayload.length;
               localStorage.removeItem('borda_stock_movements');
               localStorage.removeItem('borda_stock_movements_migrated');
+            } else {
+              console.warn('Erro upsert stock_movements:', error.message);
             }
           }
         } catch (e) {
@@ -78,6 +86,7 @@ export function useUniversalCloudSync() {
       }
 
       // 3. Sincronizar Transações Financeiras (borda_financial_transactions)
+      // Apenas colunas garantidas no schema do Supabase
       const savedFinRaw = localStorage.getItem('borda_financial_transactions');
       if (savedFinRaw) {
         try {
@@ -92,18 +101,19 @@ export function useUniversalCloudSync() {
               category: t.category || 'Geral',
               payment_method: t.payment_method || 'other',
               date: t.date || t.created_at || new Date().toISOString(),
-              expense_type: t.expense_type || null,
-              due_date: t.due_date || null,
               status: t.status || 'paid',
               created_at: t.created_at || new Date().toISOString(),
-              created_by_profile: t.created_by_profile || null
             }));
 
-            const { error } = await supabase.from('financial_transactions').upsert(finPayload);
+            const { error } = await supabase
+              .from('financial_transactions')
+              .upsert(finPayload, { onConflict: 'id' });
             if (!error) {
               itemsSyncedCount += finPayload.length;
               localStorage.removeItem('borda_financial_transactions');
               localStorage.removeItem('borda_fin_migrated_to_cloud');
+            } else {
+              console.warn('Erro upsert financial_transactions:', error.message);
             }
           }
         } catch (e) {
@@ -112,7 +122,7 @@ export function useUniversalCloudSync() {
       }
 
       if (itemsSyncedCount > 0 && !silent) {
-        toast.success(`☁️ ${itemsSyncedCount} registro(s) de estoque e caixa foram sincronizados com a nuvem e já aparecem nos seus outros dispositivos!`);
+        toast.success(`☁️ ${itemsSyncedCount} registro(s) de estoque e caixa sincronizados com a nuvem!`);
       }
 
       return itemsSyncedCount;
