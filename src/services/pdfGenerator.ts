@@ -211,7 +211,6 @@ export const printOrderReceipt = (order: OrderPDFData) => {
   }, 400);
 };
 
-<<<<<<< HEAD
 export const generateOrderPDFBase64 = async (order: OrderPDFData): Promise<string> => {
   const container = document.createElement('div');
   container.innerHTML = getOrderHTML(order);

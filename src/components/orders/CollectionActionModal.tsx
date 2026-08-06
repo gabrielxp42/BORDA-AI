@@ -190,12 +190,20 @@ export const CollectionActionModal: React.FC<CollectionActionModalProps> = ({
       return;
     }
 
-    // Fecha o modal IMEDIATAMENTE (0ms de atraso) para não prender o usuário!
+    setIsSending(true);
+
+    // Salva variáveis locais antes de fechar o modal
+    const targetPhone = editablePhone.trim();
+    const draftText = messageDraft;
+    const isPdfAttached = attachPDF;
+    const targetOrder = order;
+
+    // Fecha o modal IMEDIATAMENTE (0ms) no ciclo de render do React
     onClose();
     toast.info(`⚡ Enviando cobrança de ${clientName} em segundo plano...`);
 
-    // Executa o disparo assíncrono com rastreio no TaskDock de tarefas
-    (async () => {
+    // Adia o trabalho pesado (PDF + API) para o próximo tick do Event Loop para dar 0ms de congelamento no DOM
+    setTimeout(async () => {
       const taskId = addTask({
         title: `Cobrança (${clientName})`,
         description: `Disparando cobrança no WhatsApp de ${clientName}...`,
@@ -215,27 +223,27 @@ export const CollectionActionModal: React.FC<CollectionActionModalProps> = ({
         updateStep(taskId, 'done', 'loading');
         updateTask(taskId, { progress: 70, status: 'sending' });
 
-        if (attachPDF) {
-            const pdfBase64 = await generateOrderPDFBase64({
-                id: order.id,
-                orderNumber: order.order_number,
-                createdAt: order.created_at,
-                clientName: clientName,
-                paymentStatus: order.payment_status,
-                totalAmount: order.total_amount,
-                items: order.order_items || order.items || [],
-                companyName: settings.systemName,
-            });
+        if (isPdfAttached && targetOrder) {
+          const pdfBase64 = await generateOrderPDFBase64({
+            id: targetOrder.id,
+            orderNumber: targetOrder.order_number,
+            createdAt: targetOrder.created_at,
+            clientName: clientName,
+            paymentStatus: targetOrder.payment_status,
+            totalAmount: targetOrder.total_amount,
+            items: targetOrder.order_items || targetOrder.items || [],
+            companyName: settings.systemName,
+          });
 
-            await sendEvolutionMedia({
-                phone: editablePhone,
-                message: messageDraft,
-                mediaUrl: `data:application/pdf;base64,${pdfBase64}`,
-                mediaType: 'document',
-                mediaName: `OS_${orderCode.replace('#', '')}.pdf`
-            });
+          await sendEvolutionMedia({
+            phone: targetPhone,
+            message: draftText,
+            mediaUrl: `data:application/pdf;base64,${pdfBase64}`,
+            mediaType: 'document',
+            mediaName: `OS_${orderCode.replace('#', '')}.pdf`
+          });
         } else {
-            await sendEvolutionText(editablePhone, messageDraft);
+          await sendEvolutionText(targetPhone, draftText);
         }
 
         updateStep(taskId, 'done', 'completed');
@@ -255,9 +263,11 @@ export const CollectionActionModal: React.FC<CollectionActionModalProps> = ({
           error: err.message || 'Falha no envio direto'
         });
 
-        handleWhatsAppDispatchError(err, editablePhone, messageDraft, toastId);
+        handleWhatsAppDispatchError(err, targetPhone, draftText, toastId);
+      } finally {
+        setIsSending(false);
       }
-    })();
+    }, 50);
   };
 
   // Abrir no WhatsApp Web

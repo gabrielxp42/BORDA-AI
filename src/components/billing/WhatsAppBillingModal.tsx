@@ -58,53 +58,58 @@ export const WhatsAppBillingModal: React.FC<WhatsAppBillingModalProps> = ({ isOp
 
   const isEvolutionConnected = profile?.whatsapp_status === 'connected';
 
-  const handleSendEvolution = async () => {
-    if (!phoneNumber) {
+  const handleSendEvolution = () => {
+    if (!phoneNumber || !phoneNumber.trim()) {
       toast.error("Por favor, informe um número de WhatsApp válido.");
       return;
     }
 
+    const targetPhone = phoneNumber.trim();
+    const msgText = message;
+    const isPdfAttached = attachPDF;
+    const cData = clientData;
+
     setIsSending(true);
-    try {
-      if (attachPDF) {
-        // Need to pick the 'first' order to generate a sample PDF if multiple exist, or adjust generator
-        // Assuming clientData.orders[0] is the base for the PDF
-        const latestOrder = clientData.orders[clientData.orders.length - 1];
-        if (!latestOrder) throw new Error("Pedido não encontrado para gerar PDF.");
-        
-        const pdfBase64 = await generateOrderPDFBase64({
+    onClose();
+    toast.info(`⚡ Enviando cobrança de ${cData.name} em segundo plano...`);
+
+    setTimeout(async () => {
+      const toastId = toast.loading(`Enviando cobrança para ${cData.name}...`);
+      try {
+        if (isPdfAttached) {
+          const latestOrder = cData.orders[cData.orders.length - 1];
+          if (!latestOrder) throw new Error("Pedido não encontrado para gerar PDF.");
+          
+          const pdfBase64 = await generateOrderPDFBase64({
             id: latestOrder.id,
             orderNumber: latestOrder.order_number,
             createdAt: latestOrder.created_at,
-            clientName: clientData.name,
+            clientName: cData.name,
             paymentStatus: 'pending',
             totalAmount: latestOrder.total_amount,
             items: latestOrder.items || [],
             companyName: settings.systemName,
-        });
+          });
 
-        await sendEvolutionMedia({
-            phone: phoneNumber,
-            message: message,
+          await sendEvolutionMedia({
+            phone: targetPhone,
+            message: msgText,
             mediaUrl: `data:application/pdf;base64,${pdfBase64}`,
             mediaType: 'document',
-            mediaName: `Fechamento_${clientData.name.replace(/\s+/g, '_')}.pdf`
-        });
-      } else {
-        await sendEvolutionText(phoneNumber, message);
+            mediaName: `Fechamento_${cData.name.replace(/\s+/g, '_')}.pdf`
+          });
+        } else {
+          await sendEvolutionText(targetPhone, msgText);
+        }
+
+        toast.success(`⚡ Cobrança enviada com sucesso para ${cData.name}!`, { id: toastId });
+      } catch (err: any) {
+        console.warn("Falha no disparo via API:", err);
+        handleWhatsAppDispatchError(err, targetPhone, msgText, toastId);
+      } finally {
+        setIsSending(false);
       }
-      
-      setIsSending(false);
-      setSendSuccess(true);
-      toast.success("Cobrança enviada com sucesso!");
-      setTimeout(() => {
-        setSendSuccess(false);
-        onClose();
-      }, 2000);
-    } catch (err: any) {
-      setIsSending(false);
-      handleWhatsAppDispatchError(err, phoneNumber, message);
-    }
+    }, 50);
   };
 
   const handleOpenWebWhatsApp = () => {
