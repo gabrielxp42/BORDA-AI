@@ -211,6 +211,7 @@ export const printOrderReceipt = (order: OrderPDFData) => {
   }, 400);
 };
 
+<<<<<<< HEAD
 export const generateOrderPDFBase64 = async (order: OrderPDFData): Promise<string> => {
   const container = document.createElement('div');
   container.innerHTML = getOrderHTML(order);
@@ -228,4 +229,155 @@ export const generateOrderPDFBase64 = async (order: OrderPDFData): Promise<strin
   pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
   document.body.removeChild(container);
   return pdf.output('datauristring').split(',')[1];
+};
+
+export interface ClientStatementPDFData {
+  clientName: string;
+  clientPhone?: string;
+  clientCompany?: string;
+  orders: Array<{
+    id: string;
+    orderNumber?: string | number;
+    createdAt: string;
+    dueDate?: string;
+    totalAmount: number;
+    paymentStatus: string;
+    pendingAmount: number;
+  }>;
+  grandPending: number;
+  companyName?: string;
+  companyColor?: string;
+  pixKey?: string;
+}
+
+export const printClientStatementPDF = (data: ClientStatementPDFData) => {
+  const companyName = data.companyName || 'GUAÇU BORDADOS';
+  const brandColor = data.companyColor || '#8B5CF6';
+  const formattedDate = new Date().toLocaleDateString('pt-BR');
+  const formattedGrandPending = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(data.grandPending);
+
+  const existingFrame = document.getElementById('borda-print-iframe');
+  if (existingFrame) existingFrame.remove();
+
+  const iframe = document.createElement('iframe');
+  iframe.id = 'borda-print-iframe';
+  iframe.style.position = 'fixed';
+  iframe.style.right = '0';
+  iframe.style.bottom = '0';
+  iframe.style.width = '0';
+  iframe.style.height = '0';
+  iframe.style.border = '0';
+  iframe.style.visibility = 'hidden';
+  document.body.appendChild(iframe);
+
+  const frameDoc = iframe.contentWindow?.document;
+  if (!frameDoc) return;
+
+  const html = `
+    <!DOCTYPE html>
+    <html lang="pt-BR">
+    <head>
+      <meta charset="UTF-8">
+      <title>Extrato de Débitos - ${data.clientName}</title>
+      <style>
+        * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { margin: 0; padding: 24px; color: #1e293b; font-size: 13px; }
+        .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 3px solid ${brandColor}; padding-bottom: 16px; margin-bottom: 20px; }
+        .title { font-size: 20px; font-weight: 900; color: #0f172a; text-transform: uppercase; }
+        .subtitle { font-size: 11px; color: #64748b; font-weight: 600; }
+        .client-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px; margin-bottom: 20px; }
+        .client-title { font-size: 11px; font-weight: 800; text-transform: uppercase; color: #64748b; margin-bottom: 4px; }
+        .client-name { font-size: 16px; font-weight: 800; color: #0f172a; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 24px; }
+        th { background: #f1f5f9; text-align: left; padding: 10px 12px; font-size: 11px; font-weight: 800; uppercase; color: #475569; border-bottom: 2px solid #cbd5e1; }
+        td { padding: 12px; border-bottom: 1px solid #e2e8f0; }
+        .text-right { text-align: right; }
+        .text-center { text-align: center; }
+        .font-bold { font-weight: 700; }
+        .pending-tag { background: #fef2f2; color: #dc2626; padding: 4px 8px; border-radius: 6px; font-weight: 800; font-size: 10px; }
+        .half-tag { background: #eff6ff; color: #2563eb; padding: 4px 8px; border-radius: 6px; font-weight: 800; font-size: 10px; }
+        .total-container { display: flex; justify-content: space-between; align-items: center; background: #0f172a; color: white; padding: 16px 20px; border-radius: 12px; }
+        .total-val { font-size: 22px; font-weight: 900; color: #f59e0b; }
+        .pix-box { margin-top: 16px; padding: 12px; background: #fffbeb; border: 1px solid #fde68a; border-radius: 10px; color: #92400e; font-size: 12px; }
+      </style>
+    </head>
+    <body>
+      <div class="header">
+        <div>
+          <div class="title">${companyName}</div>
+          <div class="subtitle">Extrato Detalhado de Faturas & Débitos em Aberto</div>
+        </div>
+        <div style="text-align: right;">
+          <div style="font-weight: 800; font-size: 11px; color: #64748b;">EMISSÃO</div>
+          <div style="font-weight: 700;">${formattedDate}</div>
+        </div>
+      </div>
+
+      <div class="client-box">
+        <div class="client-title">Cliente</div>
+        <div class="client-name">${data.clientName} ${data.clientCompany ? `(${data.clientCompany})` : ''}</div>
+        ${data.clientPhone ? `<div style="font-size: 11px; color: #64748b; margin-top: 2px;">Telefone / WhatsApp: ${data.clientPhone}</div>` : ''}
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Pedido #</th>
+            <th>Data de Entrada</th>
+            <th>Prazo Combinado</th>
+            <th class="text-center">Status</th>
+            <th class="text-right">Valor Total</th>
+            <th class="text-right">Saldo Pendente</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${data.orders.map(o => `
+            <tr>
+              <td class="font-bold">#${o.orderNumber || o.id.slice(0, 4)}</td>
+              <td>${new Date(o.createdAt).toLocaleDateString('pt-BR')}</td>
+              <td>${o.dueDate ? new Date(o.dueDate).toLocaleDateString('pt-BR') : 'A combinar'}</td>
+              <td class="text-center">
+                ${o.paymentStatus === 'half_paid' ? '<span class="half-tag">SINAL 50%</span>' : '<span class="pending-tag">100% PENDENTE</span>'}
+              </td>
+              <td class="text-right">${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(o.totalAmount)}</td>
+              <td class="text-right font-bold" style="color: #dc2626;">${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(o.pendingAmount)}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+
+      <div class="total-container">
+        <div>
+          <div style="font-size: 11px; font-weight: 800; text-transform: uppercase; color: #94a3b8;">Total Geral a Pagar</div>
+          <div style="font-size: 11px; color: #cbd5e1;">Sumatório de todas as faturas pendentes</div>
+        </div>
+        <div class="total-val">${formattedGrandPending}</div>
+      </div>
+
+      ${data.pixKey ? `
+        <div class="pix-box">
+          🔑 <strong>Chave PIX para Pagamento:</strong> ${data.pixKey}<br/>
+          Por favor, envie o comprovante de pagamento para este mesmo número de WhatsApp.
+        </div>
+      ` : ''}
+
+      <div style="margin-top: 30px; text-align: center; font-size: 10px; color: #94a3b8;">
+        ${companyName} • Gestão Inteligente de Bordados
+      </div>
+    </body>
+    </html>
+  `;
+
+  frameDoc.open();
+  frameDoc.write(html);
+  frameDoc.close();
+
+  setTimeout(() => {
+    try {
+      iframe.contentWindow?.focus();
+      iframe.contentWindow?.print();
+    } catch (err) {
+      console.error('Erro ao imprimir extrato:', err);
+    }
+  }, 400);
 };

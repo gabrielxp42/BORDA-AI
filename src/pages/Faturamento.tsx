@@ -51,6 +51,7 @@ import { FinancialTransactionModal } from '@/components/billing/FinancialTransac
 import { ReceberDetailsModal } from '@/components/billing/ReceberDetailsModal';
 import { ReceitaDetailsModal } from '@/components/billing/ReceitaDetailsModal';
 import { DespesasDetailsModal } from '@/components/billing/DespesasDetailsModal';
+import { CreateReceivableModal } from '@/components/billing/CreateReceivableModal';
 import { FinancialTransaction, FinancialTransactionType } from '@/types/stockTypes';
 import { format, startOfMonth, endOfMonth, subMonths, eachMonthOfInterval, eachDayOfInterval, isSameDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -87,6 +88,7 @@ export const Faturamento: React.FC = () => {
   const [isReceberModalOpen, setIsReceberModalOpen] = useState(false);
   const [isReceitaModalOpen, setIsReceitaModalOpen] = useState(false);
   const [isDespesasModalOpen, setIsDespesasModalOpen] = useState(false);
+  const [isCreateReceivableOpen, setIsCreateReceivableOpen] = useState(false);
   const [expandedCard, setExpandedCard] = useState<'receita' | 'despesas' | 'areceber' | null>(null);
   const [receberFilter, setReceberFilter] = useState<'all' | 'production' | 'delivered'>('all');
 
@@ -421,18 +423,36 @@ export const Faturamento: React.FC = () => {
     }
   };
 
-  // Cálculo das despesas manuais no período selecionado
-  const manualExpenses = useMemo(() => {
-    return financialTransactions
-      .filter(t => t.type === 'expense')
-      .reduce((sum, t) => sum + Number(t.amount || 0), 0);
-  }, [financialTransactions]);
+  // Cálculo das despesas e receitas manuais no período selecionado (Regime de Caixa)
+  const targetDate = subMonths(new Date(), selectedMonthOffset);
+  const targetMonthStart = startOfMonth(targetDate);
+  const targetMonthEnd = endOfMonth(targetDate);
 
-  const manualIncomes = useMemo(() => {
-    return financialTransactions
-      .filter(t => t.type === 'income')
-      .reduce((sum, t) => sum + Number(t.amount || 0), 0);
-  }, [financialTransactions]);
+  const { manualExpenses, manualIncomes, manualIncomesPaid } = useMemo(() => {
+    let expSum = 0;
+    let incSum = 0;
+    let incPaidSum = 0;
+
+    financialTransactions.forEach(t => {
+      const txDate = t.date ? new Date(t.date) : new Date(t.created_at);
+      if (txDate >= targetMonthStart && txDate <= targetMonthEnd) {
+        if (t.type === 'expense') {
+          expSum += Number(t.amount || 0);
+        } else if (t.type === 'income') {
+          const amt = Number(t.amount || 0);
+          incSum += amt;
+          if (!t.status || t.status === 'paid') {
+            incPaidSum += amt;
+          }
+        }
+      }
+    });
+
+    return { manualExpenses: expSum, manualIncomes: incSum, manualIncomesPaid: incPaidSum };
+  }, [financialTransactions, selectedMonthOffset]);
+
+  // Total Recebido em Caixa Unificado (Pedidos Pagos + Entradas Manuais Quitadas no mês)
+  const effectivePaidTotal = paidTotal + manualIncomesPaid;
 
   // DRE Sintético do Mês
   const totalRevenue = grandTotal + manualIncomes;
@@ -777,7 +797,7 @@ export const Faturamento: React.FC = () => {
             </h2>
             <div className="flex items-center justify-between text-xs mt-2 pt-2 border-t border-white/5 text-zinc-400">
               <span>Recebido em caixa:</span>
-              <span className="font-bold text-emerald-400">{formatCurrency(paidTotal, permissions?.canSeeFinancials ?? true)}</span>
+              <span className="font-bold text-emerald-400">{formatCurrency(effectivePaidTotal, permissions?.canSeeFinancials ?? true)}</span>
             </div>
             <p className="text-[10px] text-emerald-400/70 font-medium pt-1 flex items-center gap-1">
               ✨ Toque para ver mais detalhes
@@ -847,7 +867,7 @@ export const Faturamento: React.FC = () => {
               <h3 className="text-2xl font-black text-amber-400 tracking-tight mt-0.5">
                 {formatCurrency(
                   allTimePendingOrders
-                    .filter(o => o.status !== 'entregue')
+                    .filter(o => o.status !== 'entregue' && o.status !== 'completed')
                     .reduce((sum, o) => {
                       const total = Number(o.total_amount || 0);
                       if (o.payment_status === 'half_paid') return sum + (total * 0.5);
@@ -858,7 +878,7 @@ export const Faturamento: React.FC = () => {
               </h3>
               <div className="flex items-center justify-between text-[10px] mt-1.5 pt-1.5 border-t border-white/5 text-zinc-500">
                 <span>Pedidos Pendentes:</span>
-                <span className="font-bold text-amber-300">{allTimePendingOrders.filter(o => o.status !== 'entregue').length} un.</span>
+                <span className="font-bold text-amber-300">{allTimePendingOrders.filter(o => o.status !== 'entregue' && o.status !== 'completed').length} un.</span>
               </div>
             </div>
           </div>
@@ -884,7 +904,7 @@ export const Faturamento: React.FC = () => {
               <h3 className="text-2xl font-black text-indigo-400 tracking-tight mt-0.5">
                 {formatCurrency(
                   allTimePendingOrders
-                    .filter(o => o.status === 'entregue')
+                    .filter(o => o.status === 'entregue' || o.status === 'completed')
                     .reduce((sum, o) => {
                       const total = Number(o.total_amount || 0);
                       if (o.payment_status === 'half_paid') return sum + (total * 0.5);
@@ -895,7 +915,7 @@ export const Faturamento: React.FC = () => {
               </h3>
               <div className="flex items-center justify-between text-[10px] mt-1.5 pt-1.5 border-t border-white/5 text-zinc-500">
                 <span>Faturamentos a Receber:</span>
-                <span className="font-bold text-indigo-300">{allTimePendingOrders.filter(o => o.status === 'entregue').length} un.</span>
+                <span className="font-bold text-indigo-300">{allTimePendingOrders.filter(o => o.status === 'entregue' || o.status === 'completed').length} un.</span>
               </div>
             </div>
           </div>
@@ -1151,6 +1171,13 @@ export const Faturamento: React.FC = () => {
                   </button>
                 ))}
               </div>
+
+              <button
+                onClick={() => setIsCreateReceivableOpen(true)}
+                className="px-4 py-2 rounded-2xl bg-gradient-to-r from-amber-500 to-amber-600 hover:brightness-110 text-black text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shadow-lg shadow-amber-500/20 active:scale-95 transition-all cursor-pointer whitespace-nowrap"
+              >
+                <Plus className="h-4 w-4" /> Nova Entrada Futura
+              </button>
 
               <div className="relative w-full sm:w-56">
                 <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-500" />
@@ -2277,6 +2304,13 @@ export const Faturamento: React.FC = () => {
         onClose={() => setIsDespesasModalOpen(false)}
         transactions={financialTransactions}
         onRefreshData={fetchBillingData}
+      />
+
+      {/* Modal de Criação Manual de Entrada Futura (A Receber) */}
+      <CreateReceivableModal
+        isOpen={isCreateReceivableOpen}
+        onClose={() => setIsCreateReceivableOpen(false)}
+        onSuccess={fetchBillingData}
       />
     </div>
   );

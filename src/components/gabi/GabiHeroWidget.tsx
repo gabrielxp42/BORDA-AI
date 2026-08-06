@@ -366,6 +366,66 @@ export const GabiHeroWidget: React.FC = () => {
     setSendingId(null);
   };
 
+  const handleGenerateWeeklyReport = async () => {
+    try {
+      toast.loading('📊 Gabi está compilando seu Relatório Semanal...', { id: 'gabi-report' });
+      
+      const { data: authData } = await supabase.auth.getUser();
+      const userId = authData?.user?.id;
+      if (!userId) return;
+
+      const { data: orders } = await supabase
+        .from('orders')
+        .select('total_amount, payment_status, status')
+        .eq('user_id', userId);
+
+      const { data: txs } = await supabase
+        .from('financial_transactions')
+        .select('amount, type, status')
+        .eq('user_id', userId);
+
+      let paidOrdersTotal = 0;
+      let pendingOrdersTotal = 0;
+
+      (orders || []).forEach((o: any) => {
+        const amt = Number(o.total_amount || 0);
+        if (o.payment_status === 'paid') paidOrdersTotal += amt;
+        else if (o.payment_status === 'half_paid') {
+          paidOrdersTotal += amt * 0.5;
+          pendingOrdersTotal += amt * 0.5;
+        } else {
+          pendingOrdersTotal += amt;
+        }
+      });
+
+      let manualIncomesTotal = 0;
+      let manualExpensesTotal = 0;
+
+      (txs || []).forEach((t: any) => {
+        const amt = Number(t.amount || 0);
+        if (t.type === 'income' && (!t.status || t.status === 'paid')) manualIncomesTotal += amt;
+        if (t.type === 'expense') manualExpensesTotal += amt;
+      });
+
+      const totalReceived = paidOrdersTotal + manualIncomesTotal;
+      const netEstimate = totalReceived - manualExpensesTotal;
+
+      const reportText = `🤖 *RELATÓRIO FINANCEIRO SEMANAL — GABI IA*\n` +
+        `🏢 *Oficina:* ${settings.systemName}\n` +
+        `📅 *Data:* ${format(new Date(), "dd/MM/yyyy 'às' HH:mm")}\n\n` +
+        `📥 *Total Recebido em Caixa:* R$ ${totalReceived.toFixed(2)}\n` +
+        `🔴 *Total de Despesas:* R$ ${manualExpensesTotal.toFixed(2)}\n` +
+        `💵 *Resultado Líquido:* R$ ${netEstimate.toFixed(2)}\n` +
+        `⏳ *Saldo Pendente a Receber:* R$ ${pendingOrdersTotal.toFixed(2)}\n\n` +
+        `✅ *Dica da Gabi:* Mantenha o acompanhamento constante dos pedidos a receber no Hub de Cobranças!`;
+
+      navigator.clipboard.writeText(reportText);
+      toast.success('📋 Relatório Financeiro copiado para a área de transferência! Cole no WhatsApp.', { id: 'gabi-report' });
+    } catch (err) {
+      toast.error('Erro ao gerar relatório semanal.', { id: 'gabi-report' });
+    }
+  };
+
   const handleOperadorReport = async (type: 'agulha' | 'peca') => {
     const alertMembers = (settings.teamMembers || []).filter(m => m.receiveAlerts);
     if (alertMembers.length === 0) {
@@ -439,6 +499,18 @@ export const GabiHeroWidget: React.FC = () => {
               {isChefe ? '📊 Veja seus alertas.' : '🏭 Modo Produção ativo.'}
             </p>
           </div>
+
+          {isChefe && (
+            <button
+              type="button"
+              onClick={handleGenerateWeeklyReport}
+              className="px-3 py-1.5 rounded-xl bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 border border-purple-500/30 text-xs font-bold flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer whitespace-nowrap"
+              title="Gerar e copiar Relatório Financeiro Semanal"
+            >
+              <Activity className="h-3.5 w-3.5" />
+              <span>Relatório Semanal</span>
+            </button>
+          )}
 
           <button
             onClick={() => setRefreshKey(k => k + 1)}

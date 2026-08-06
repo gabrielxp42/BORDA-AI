@@ -24,6 +24,7 @@ import { Login } from '@/pages/Login';
 
 import { Toaster } from 'sonner';
 import { TaskDock } from '@/components/TaskDock';
+import { CloudSyncModal } from '@/components/ui/CloudSyncModal';
 
 export const App: React.FC = () => {
   return (
@@ -44,6 +45,7 @@ export const App: React.FC = () => {
                   element={
                     <ProtectedRoute>
                       <AppLayout>
+                        <CloudSyncModal />
                         <TaskDock />
                         <Routes>
                           <Route path="/" element={<Dashboard />} />

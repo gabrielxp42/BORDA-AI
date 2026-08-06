@@ -8,16 +8,16 @@ import { supabase } from '@/integrations/supabase/client';
 import { useProfile } from '@/contexts/ProfileContext';
 import { useCompanySettings } from '@/contexts/CompanySettingsContext';
 import { useAuth } from '@/contexts/AuthContext';
-import { parsePaymentMetadata, formatOrderPaymentBadgeDetails, getDueDateAlertInfo } from '@/utils/paymentHelper';
 import { printOrderReceipt } from '@/services/pdfGenerator';
 import { printThermalReceipt } from '@/services/thermalPrinter';
 import { sendEvolutionText, getWhatsAppWebLink, handleWhatsAppDispatchError } from '@/services/whatsappService';
 import { useBackgroundTasks } from '@/hooks/useBackgroundTasks';
 import { KanbanAddOrderModal } from '@/components/orders/KanbanAddOrderModal';
 import { PaymentStatusModal } from '@/components/orders/PaymentStatusModal';
-import { format } from 'date-fns';
+import { KanbanCard } from '@/components/orders/KanbanCard';
+import { KanbanColumn } from '@/components/orders/KanbanColumn';
 import { toast } from 'sonner';
-import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
+import { DragDropContext, Droppable, DropResult } from '@hello-pangea/dnd';
 
 interface OrderItem {
   id: string;
@@ -321,13 +321,41 @@ export const PedidosKanban: React.FC<PedidosKanbanProps> = ({
 
     if (!destination) return;
     
-    // Se soltou no mesmo lugar (mesma coluna e mesma posição)
+    // Se soltou no mesmo lugar
     if (destination.droppableId === source.droppableId && destination.index === source.index) {
       return;
     }
 
+    // Se mudou de coluna
     if (destination.droppableId !== source.droppableId) {
       moveOrder(draggableId, destination.droppableId);
+    } else {
+      // Reordenação intra-coluna local pura
+      const filtered = orders.filter(o => o.status === source.droppableId);
+      const reorderedItem = filtered[source.index];
+      
+      const newOrders = Array.from(orders);
+      const itemIdx = newOrders.findIndex(o => o.id === draggableId);
+      
+      // Move visualmente no index local
+      newOrders.splice(itemIdx, 1);
+      
+      // Localiza a posição de destino em relação a mesma coluna
+      let targetAbsoluteIndex = 0;
+      let colItemsCount = 0;
+      
+      for (let i = 0; i < newOrders.length; i++) {
+        if (newOrders[i].status === destination.droppableId) {
+          if (colItemsCount === destination.index) {
+            targetAbsoluteIndex = i;
+            break;
+          }
+          colItemsCount++;
+        }
+      }
+      
+      newOrders.splice(targetAbsoluteIndex, 0, reorderedItem);
+      setOrders(newOrders);
     }
   };
 
@@ -360,326 +388,84 @@ export const PedidosKanban: React.FC<PedidosKanbanProps> = ({
             {columns.map((col) => {
               const colOrders = orders.filter((o) => {
                 if (o.status !== col.id) return false;
-                // O Chefe sempre visualiza todos os pedidos
                 if (role === 'chefe') return true;
-                // Se o pedido tiver restrição de visibilidade e o subperfil atual não estiver incluído, oculta
                 if (o.visible_profile_ids && o.visible_profile_ids.length > 0) {
                   return o.visible_profile_ids.includes(role);
                 }
                 return true;
               });
+              const limit = visibleLimits[col.id] || 10;
+              const visibleOrders = colOrders.slice(0, limit);
+
               return (
                 <Droppable droppableId={col.id} key={col.id}>
                   {(provided: any, snapshot: any) => (
-                    <div 
-                      ref={provided.innerRef}
-                      {...provided.droppableProps}
-                      className={`glass-panel p-3 md:p-4 rounded-3xl space-y-3 flex flex-col min-h-[200px] md:min-h-[520px] transition-colors w-[300px] min-w-[300px] md:flex-1 md:min-w-[260px] md:max-w-[380px] ${snapshot.isDraggingOver ? 'bg-white/5 border-purple-500/30' : ''}`}
+                    <KanbanColumn
+                      id={col.id}
+                      title={col.title}
+                      colorClass={col.color}
+                      ordersCount={colOrders.length}
+                      notificationsEnabled={!!kanbanNotificationsEnabled[col.id]}
+                      onToggleNotifications={() => {
+                        const newState = { ...kanbanNotificationsEnabled, [col.id]: !kanbanNotificationsEnabled[col.id] };
+                        setKanbanNotificationsEnabled(newState);
+                        localStorage.setItem('kanban_notifications_enabled', JSON.stringify(newState));
+                      }}
+                      onAddOrderClick={() => setAddModalColumn({ id: col.id, title: col.title })}
+                      isDraggingOver={snapshot.isDraggingOver}
                     >
-                      {/* Disjuntor de Automação WhatsApp (não renderiza na coluna Pendente) */}
-                      {col.id !== 'pending' && (
-                      <div className="flex items-center justify-between mb-3 px-3 py-2 bg-black/40 rounded-xl border border-white/5">
-                        <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Automação Zap</span>
-                        <button
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                const newState = { ...kanbanNotificationsEnabled, [col.id]: !kanbanNotificationsEnabled[col.id] };
-                                setKanbanNotificationsEnabled(newState);
-                            }}
-                            className={`relative inline-flex h-5 w-10 items-center rounded-full transition-colors duration-300 focus:outline-none ${
-                                kanbanNotificationsEnabled[col.id] ? 'bg-emerald-500' : 'bg-zinc-600'
-                            }`}
-                        >
-                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-300 ${
-                                kanbanNotificationsEnabled[col.id] ? 'translate-x-5.5' : 'translate-x-0.5'
-                            }`} />
-                        </button>
-                      </div>
-                      )}
-
-                      {/* Cabeçalho da Coluna com Botão + */}
-                      <div className={`p-2.5 rounded-2xl border text-xs font-black uppercase tracking-wider flex items-center justify-between transition-colors ${col.color} ${snapshot.isDraggingOver ? 'shadow-lg shadow-purple-500/10' : ''}`}>
-                        <div className="flex items-center gap-2">
-                          <span>{col.title}</span>
-                          <span className="h-5 w-5 rounded-full bg-white/10 flex items-center justify-center text-[10px]">
-                            {colOrders.length}
-                          </span>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => setAddModalColumn({ id: col.id, title: col.title })}
-                          className="h-6 w-6 rounded-lg bg-white/10 hover:bg-white/20 text-current flex items-center justify-center transition-all active:scale-95 cursor-pointer"
-                          title={`Adicionar pedido em ${col.title}`}
-                        >
-                          <Plus className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-
-                      <div className="space-y-3 flex-1 overflow-y-auto custom-scrollbar pt-1 pb-4 pr-1">
+                      <div 
+                        ref={provided.innerRef}
+                        {...provided.droppableProps}
+                        className="space-y-4 min-h-[150px] pb-8"
+                      >
                         {loading ? (
-                          <div className="h-32 flex items-center justify-center text-zinc-500 text-xs font-medium">Carregando...</div>
+                          <div className="h-32 flex items-center justify-center text-zinc-500 text-xs font-semibold">Carregando...</div>
                         ) : colOrders.length === 0 ? (
-                          <div className="h-32 flex flex-col items-center justify-center text-center p-3 border border-dashed border-white/10 rounded-2xl space-y-2">
+                          <div className="h-36 flex flex-col items-center justify-center text-center p-4 border border-dashed border-white/5 rounded-2xl space-y-2.5">
                             <span className="text-xs text-zinc-500 italic">Nenhum pedido nesta etapa</span>
-                            <button
-                              type="button"
-                              onClick={() => setAddModalColumn({ id: col.id, title: col.title })}
-                              className="px-3 py-1.5 rounded-xl bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 border border-purple-500/30 text-[11px] font-bold flex items-center gap-1.5 transition-all cursor-pointer"
-                            >
-                              <Plus className="h-3.5 w-3.5" /> Adicionar Pedido
-                            </button>
                           </div>
                         ) : (
-                        (() => {
-                          const limit = visibleLimits[col.id] || 10;
-                          const visibleOrders = colOrders.slice(0, limit);
-                          return (
-                            <>
-                              {visibleOrders.map((ord, index) => {
-                                const { cleanNotes, metadata } = parsePaymentMetadata(ord.notes);
-                          const isUnpriced = metadata.isQuickEntry || ord.total_amount === 0;
-
-                          // O pedido fica semi-transparente para o Chefe se tiver visibilidade restrita
-                          const isRestricted = ord.visible_profile_ids && ord.visible_profile_ids.length > 0;
-
-                          return (
-                            <Draggable key={ord.id} draggableId={ord.id} index={index}>
-                              {(provided: any, snapshot: any) => (
-                                <div
-                                  ref={provided.innerRef}
-                                  {...provided.draggableProps}
-                                  {...provided.dragHandleProps}
-                                  onClick={() => onOpenDetails && onOpenDetails(ord)}
-                                  className={`glass-card p-4 rounded-2xl space-y-3 relative group border border-white/10 cursor-pointer transition-all select-none ${
-                                    isRestricted ? 'opacity-60 hover:opacity-85' : ''
-                                  } ${
-                                    snapshot.isDragging 
-                                      ? 'shadow-[0_30px_80px_rgba(139,92,246,0.25)] scale-105 border-purple-500/50 rotate-1 z-50 ring-2 ring-purple-500/30' 
-                                      : 'hover:border-purple-500/40 hover:scale-[1.01] hover:shadow-lg hover:shadow-purple-500/5 shadow-md'
-                                  }`}
-                                  style={{
-                                    ...provided.draggableProps.style,
-                                    touchAction: 'none',
-                                  }}
-                                >
-                        {/* Header do Card no Kanban */}
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex items-center gap-2 flex-1 min-w-0">
-                            <div className={`h-8 w-8 rounded-xl border flex items-center justify-center shrink-0 font-black text-[11px] ${
-                              isUnpriced
-                                ? 'bg-amber-500/20 border-amber-500/30 text-amber-400'
-                                : 'bg-white/5 border-white/10 text-white'
-                            }`}>
-                              #{ord.order_number || ord.id.slice(0, 4)}
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <h4 className="text-xs font-bold text-white truncate" title={ord.client?.name}>
-                                {ord.client?.name || 'Cliente'}
-                              </h4>
-                              <p className="text-[10px] text-zinc-400 truncate flex items-center gap-1">
-                                <Building className="h-2.5 w-2.5 shrink-0" /> <span className="truncate">{ord.client?.company_name || 'Particular'}</span>
-                              </p>
-                              {(() => {
-                                const dueDateInfo = getDueDateAlertInfo(ord.due_date, ord.status);
-                                if (!dueDateInfo) return null;
-                                return (
-                                  <div className="mt-1">
-                                    <span className={`inline-block px-1.5 py-0.5 rounded text-[8px] uppercase border ${dueDateInfo.badgeClass}`}>
-                                      {dueDateInfo.label}
-                                    </span>
-                                  </div>
-                                );
-                              })()}
-                            </div>
-                          </div>
-
-                          {/* Preço / Tag de Pagamento */}
-                          <div className="text-right shrink-0 ml-1">
-                            {isUnlocked ? (
-                              ord.total_amount > 0 ? (
-                                <span className="text-xs font-black text-emerald-400 block">
-                                  {formatPrice(ord.total_amount)}
-                                </span>
-                              ) : (
-                                <span className="text-[10px] font-bold text-amber-400 block">Aguardando</span>
-                              )
-                            ) : null}
-
-                            {/* Badge de Status de Pagamento (CLICÁVEL COM DETALHES DE VALOR E MÉTODO) */}
-                            {(() => {
-                              if (isUnpriced) {
-                                return (
-                                  <span 
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setSelectedOrderForPaymentModal(ord);
-                                    }}
-                                    className="inline-block mt-0.5 animate-pulse px-1.5 py-0.5 rounded-md text-[8px] font-black uppercase bg-amber-500/20 text-amber-400 border border-amber-500/30 cursor-pointer hover:scale-105 transition-transform"
-                                    title="Clique para lançar orçamento/pagamento"
-                                  >
-                                    ⚠️ Sem Orçamento
-                                  </span>
-                                );
-                              }
-
-                              const details = formatOrderPaymentBadgeDetails(ord.payment_status, ord.total_amount, ord.notes, ord.payment_method);
-
-                              if (details.status === 'paid') {
-                                return (
-                                  <span 
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setSelectedOrderForPaymentModal(ord);
-                                    }}
-                                    className="inline-block mt-0.5 px-1.5 py-0.5 rounded-md text-[8px] font-bold uppercase bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 cursor-pointer hover:scale-105 transition-transform"
-                                    title={`${details.fullLabel}. Clique para alterar.`}
-                                  >
-                                    {details.shortLabel}
-                                  </span>
-                                );
-                              }
-
-                              if (details.status === 'half_paid') {
-                                return (
-                                  <span 
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setSelectedOrderForPaymentModal(ord);
-                                    }}
-                                    className="inline-block mt-0.5 px-1.5 py-0.5 rounded-md text-[8px] font-bold uppercase bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 cursor-pointer hover:scale-105 transition-transform"
-                                    title={`${details.fullLabel}. Clique para alterar.`}
-                                  >
-                                    {details.shortLabel}
-                                  </span>
-                                );
-                              }
-
-                              return (
-                                <span 
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setSelectedOrderForPaymentModal(ord);
-                                  }}
-                                  className="inline-block mt-0.5 px-1.5 py-0.5 rounded-md text-[8px] font-bold uppercase bg-orange-500/20 text-orange-400 border border-orange-500/30 cursor-pointer hover:scale-105 transition-transform"
-                                  title="Aguardando pagamento. Clique para lançar."
-                                >
-                                  {details.shortLabel}
-                                </span>
-                              );
-                            })()}
-                          </div>
-                        </div>
-
-                        {/* Itens do Bordado */}
-                        {ord.items && ord.items.length > 0 && (
-                          <div className="bg-black/30 p-2 rounded-xl space-y-1 border border-white/5">
-                            {ord.items.slice(0, 2).map((item, idx) => (
-                              <div key={idx} className="flex items-center gap-1.5 text-[10px] text-zinc-300">
-                                <Package className="h-3 w-3 text-purple-400 shrink-0" />
-                                <span className="font-bold text-white shrink-0">{item.quantity}x</span>
-                                <span className="truncate text-zinc-300">{item.description}</span>
-                              </div>
-                            ))}
-                            {ord.items.length > 2 && (
-                              <div className="text-[9px] text-zinc-500 italic pl-4">
-                                + {ord.items.length - 2} itens adicionais
-                              </div>
-                            )}
-                          </div>
-                        )}
-
-                        {/* Observações / Descrição da Matriz */}
-                        {cleanNotes && (
-                          <p className="text-[10px] text-zinc-400 italic border-l-2 border-purple-500/40 pl-2 line-clamp-2">
-                            "{cleanNotes}"
-                          </p>
-                        )}
-
-                        {/* Botão de Orçar em Destaque (Salto Sutil) */}
-                        {isUnpriced && onQuickPrice && (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onQuickPrice(ord);
-                            }}
-                            className="w-full py-1.5 px-3 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-[11px] font-bold flex items-center justify-center gap-1.5 transition-all animate-subtle-bounce active:scale-95 cursor-pointer"
-                          >
-                            ⚡ Orçar Pedido Agora
-                          </button>
-                        )}
-
-                        {/* BARRA DE ATALHOS RÁPIDOS DO CARD DO KANBAN */}
-                        <div className="pt-2 border-t border-white/10 flex flex-wrap items-center justify-between gap-2">
-                          <div className="flex flex-wrap items-center gap-1">
-                            {/* Atalho 1: Ficha / Detalhes */}
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onOpenDetails && onOpenDetails(ord);
-                              }}
-                              title="Abrir Ficha do Pedido & Detalhes"
-                              className="p-1.5 rounded-lg bg-white/5 hover:bg-white/15 text-zinc-300 hover:text-white border border-white/10 transition-colors"
-                            >
-                              <FileText className="h-3.5 w-3.5" />
-                            </button>
-
-                            {/* Atalho 2: Imprimir Recibo */}
-                            {activePrintOption === ord.id ? (
-                              <div className="flex items-center gap-1 bg-white/10 rounded-lg p-0.5 animate-in zoom-in-95 duration-200">
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handlePrintPDF(ord);
-                                    setActivePrintOption(null);
-                                  }}
-                                  className="px-1.5 py-1 rounded-md text-zinc-300 hover:bg-white/20 hover:text-white text-[9px] font-bold flex items-center gap-1 transition-colors"
-                                  title="Imprimir A4 (PDF)"
-                                >
-                                  <FileText className="h-2.5 w-2.5" /> A4
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handlePrintThermal(ord);
-                                    setActivePrintOption(null);
-                                  }}
-                                  className="px-1.5 py-1 rounded-md text-zinc-300 hover:bg-white/20 hover:text-white text-[9px] font-bold flex items-center gap-1 transition-colors"
-                                  title="Imprimir Cupom Térmico (80mm)"
-                                >
-                                  <Printer className="h-2.5 w-2.5" /> Bobina
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setActivePrintOption(null);
-                                  }}
-                                  className="px-1 text-zinc-500 hover:text-zinc-300 transition-colors"
-                                >
-                                  ×
-                                </button>
-                              </div>
-                            ) : (
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setActivePrintOption(ord.id);
+                          <>
+                            {visibleOrders.map((ord, index) => (
+                              <KanbanCard
+                                key={ord.id}
+                                order={ord}
+                                index={index}
+                                canViewPrices={canViewPrices}
+                                formatPrice={formatPrice}
+                                onOpenDetails={(o) => onOpenDetails && onOpenDetails(o)}
+                                onQuickPrice={(o) => onQuickPrice && onQuickPrice(o)}
+                                onSelectPayment={(o) => setSelectedOrderForPaymentModal(o)}
+                                onPrintPDF={handlePrintPDF}
+                                onPrintThermal={handlePrintThermal}
+                                onSendWhatsApp={handleSendWhatsApp}
+                                onAdvanceStatus={(o) => {
+                                  const nextStatusMap: Record<string, string> = {
+                                    pending: 'design',
+                                    design: 'embroidering',
+                                    embroidering: 'finishing',
+                                    finishing: 'completed',
+                                    completed: 'pending',
+                                  };
+                                  moveOrder(o.id, nextStatusMap[o.status]);
                                 }}
-                                title="Imprimir Recibo do Pedido"
-                                className="p-1.5 rounded-lg bg-white/5 hover:bg-white/15 text-zinc-300 hover:text-white border border-white/10 transition-colors"
+                                activePrintOption={activePrintOption}
+                                setActivePrintOption={setActivePrintOption}
+                                columnColor={col.color}
+                                columnTitle={col.title}
+                              />
+                            ))}
+
+                            {colOrders.length > limit && (
+                              <button 
+                                type="button"
+                                onClick={() => setVisibleLimits(prev => ({ ...prev, [col.id]: (prev[col.id] || 10) + 10 }))}
+                                className="w-full py-2.5 mt-2 text-xs font-black text-zinc-400 hover:text-white bg-white/5 hover:bg-white/10 border border-white/5 rounded-xl transition-colors cursor-pointer"
                               >
-                                <Printer className="h-3.5 w-3.5" />
+                                Ver mais {colOrders.length - limit} pedidos
                               </button>
                             )}
-
-                            {/* Atalho 3: Enviar WhatsApp */}
-                            <button
-                              type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 handleSendWhatsApp(ord);
@@ -766,23 +552,22 @@ export const PedidosKanban: React.FC<PedidosKanbanProps> = ({
                           >
                             Ver mais {colOrders.length - (visibleLimits[col.id] || 10)} pedidos
                           </button>
+=======
+                          </>
+>>>>>>> 03cebbd (feat: reestruturacao financeira por regime de caixa, modal a receber futuro, extrato PDF via whatsapp e alertas kanban)
                         )}
-                        </>
-                      );
-                      })()
-                    )}
-                    {provided.placeholder}
-                  </div>
-                </div>
-                )}
-              </Droppable>
-            );
-          })}
+                        {provided.placeholder}
+                      </div>
+                    </KanbanColumn>
+                  )}
+                </Droppable>
+              );
+            })}
+          </div>
         </div>
-      </div>
       </DragDropContext>
 
-      {/* Modal Reutilizável de Status de Pagamento (PIX, Dinheiro, Cartão + Notificação Zap) */}
+      {/* Modal Reutilizável de Status de Pagamento */}
       <PaymentStatusModal
         isOpen={!!selectedOrderForPaymentModal}
         onClose={() => setSelectedOrderForPaymentModal(null)}
@@ -801,7 +586,6 @@ export const PedidosKanban: React.FC<PedidosKanbanProps> = ({
     </>
   );
 };
-
 // Componente do Modal de Visibilidade
 interface OrderVisibilityModalProps {
   isOpen: boolean;

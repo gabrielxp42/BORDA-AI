@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Users, Plus, Search, Phone, Mail, Building, Repeat, Trash2, ChevronRight, Pencil, Clock, CheckCircle2 } from 'lucide-react';
+import { Users, Plus, Search, Phone, Mail, Building, Repeat, Trash2, ChevronRight, Pencil, Clock, CheckCircle2, FileText, Send, AlertTriangle } from 'lucide-react';
 import { Client } from '@/types/borda';
 import { supabase } from '@/integrations/supabase/client';
 import { useCompanySettings } from '@/contexts/CompanySettingsContext';
@@ -8,6 +8,8 @@ import { ClientDetailsModal } from '@/components/clients/ClientDetailsModal';
 import { toast } from 'sonner';
 import { useProfile } from '@/contexts/ProfileContext';
 import { formatCurrency } from '@/utils/currencyFormatter';
+import { printClientStatementPDF } from '@/services/pdfGenerator';
+import { sendEvolutionText, getWhatsAppWebLink } from '@/services/whatsappService';
 
 export const Clientes: React.FC = () => {
   const { permissions } = useProfile();
@@ -17,9 +19,86 @@ export const Clientes: React.FC = () => {
   const [clientPendingMap, setClientPendingMap] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [filterPendingOnly, setFilterPendingOnly] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [clientToEdit, setClientToEdit] = useState<Client | null>(null);
   const [selectedClientForDetails, setSelectedClientForDetails] = useState<Client | null>(null);
+
+  const handleGenerateAndSendStatement = async (client: Client) => {
+    try {
+      toast.loading('📄 Gerando extrato detalhado de débitos...', { id: 'statement-toast' });
+      
+      const { data: authData } = await supabase.auth.getUser();
+      const userId = authData?.user?.id;
+      if (!userId) return;
+
+      const { data: pendingOrders, error } = await supabase
+        .from('orders')
+        .select('id, order_number, total_amount, payment_status, due_date, created_at')
+        .eq('user_id', userId)
+        .eq('client_id', client.id)
+        .neq('payment_status', 'paid')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      if (!pendingOrders || pendingOrders.length === 0) {
+        toast.info(`O cliente ${client.name} está com todas as contas em dia!`, { id: 'statement-toast' });
+        return;
+      }
+
+      const formattedOrders = pendingOrders.map((o: any) => {
+        const total = Number(o.total_amount || 0);
+        const pendingVal = o.payment_status === 'half_paid' ? total * 0.5 : total;
+        return {
+          id: o.id,
+          orderNumber: o.order_number,
+          createdAt: o.created_at,
+          dueDate: o.due_date,
+          totalAmount: total,
+          paymentStatus: o.payment_status,
+          pendingAmount: pendingVal
+        };
+      });
+
+      const grandPending = formattedOrders.reduce((sum, o) => sum + o.pendingAmount, 0);
+
+      // 1. Gera e aciona o PDF de Extrato de Débitos do Cliente
+      printClientStatementPDF({
+        clientName: client.name,
+        clientPhone: client.phone,
+        clientCompany: client.company_name,
+        orders: formattedOrders,
+        grandPending,
+        companyName: settings.systemName,
+        companyColor: settings.primaryColor,
+        pixKey: settings.pixKey
+      });
+
+      toast.success('Extrato PDF gerado com sucesso!', { id: 'statement-toast' });
+
+      // 2. Dispara notificação via WhatsApp se tiver telefone
+      if (client.phone) {
+        const msg = `*${settings.systemName || 'BORDA AI'}* — Extrato de Débitos em Aberto\n\n` +
+          `Olá ${client.name}!\n` +
+          `Segue seu extrato de débitos em aberto referente a *${formattedOrders.length} pedido(s)*:\n\n` +
+          `💰 *Total Pendente: ${formatCurrency(grandPending, true)}*\n` +
+          (settings.pixKey ? `🔑 *Chave PIX:* ${settings.pixKey}\n\n` : '\n') +
+          `Acabamos de emitir o extrato em PDF detalhado. Qualquer dúvida, estamos à disposição!`;
+
+        try {
+          await sendEvolutionText(client.phone, msg);
+          toast.success('📲 Notificação de extrato enviada pelo WhatsApp!');
+        } catch (e) {
+          const webUrl = getWhatsAppWebLink(client.phone, msg);
+          window.open(webUrl, '_blank');
+        }
+      }
+    } catch (err: any) {
+      console.error('Erro ao gerar extrato:', err);
+      toast.error('Erro ao gerar extrato do cliente.', { id: 'statement-toast' });
+    }
+  };
 
   useEffect(() => {
     fetchClients();
@@ -133,16 +212,31 @@ export const Clientes: React.FC = () => {
         </button>
       </div>
 
-      {/* Busca */}
-      <div className="relative">
-        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
-        <input
-          type="text"
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          placeholder="Buscar por nome do cliente, empresa ou telefone..."
-          className="w-full bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl pl-10 pr-4 py-2.5 text-xs text-slate-900 dark:text-zinc-200 placeholder:text-zinc-500 focus:outline-none"
-        />
+      {/* Busca & Filtro de Inadimplentes */}
+      <div className="flex flex-col sm:flex-row items-center gap-3">
+        <div className="relative flex-1 w-full">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="Buscar por nome do cliente, empresa ou telefone..."
+            className="w-full bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl pl-10 pr-4 py-2.5 text-xs text-slate-900 dark:text-zinc-200 placeholder:text-zinc-500 focus:outline-none"
+          />
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setFilterPendingOnly(prev => !prev)}
+          className={`px-4 py-2.5 rounded-2xl text-xs font-black uppercase tracking-wider flex items-center gap-2 border transition-all cursor-pointer whitespace-nowrap ${
+            filterPendingOnly
+              ? 'bg-amber-500/20 text-amber-400 border-amber-500/40 shadow-lg shadow-amber-500/10'
+              : 'bg-slate-100 dark:bg-white/5 text-zinc-400 border-slate-200 dark:border-white/10 hover:text-white'
+          }`}
+        >
+          <AlertTriangle className="h-4 w-4 text-amber-400" />
+          {filterPendingOnly ? '✓ Apenas Inadimplentes' : 'Filtrar Inadimplentes'}
+        </button>
       </div>
 
       {/* States */}
@@ -254,17 +348,31 @@ export const Clientes: React.FC = () => {
                   Saldo Financeiro:
                 </span>
                 {clientPendingMap[c.id] && clientPendingMap[c.id] > 0 ? (
-                  <span 
-                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black border shadow-sm animate-pulse"
-                    style={{
-                      backgroundColor: `${settings.primaryColor}15`,
-                      borderColor: `${settings.primaryColor}50`,
-                      color: settings.primaryColor,
-                    }}
-                  >
-                    <Clock className="h-3.5 w-3.5 stroke-[2.5]" />
-                    Pendente: {formatCurrency(clientPendingMap[c.id], permissions?.canSeeFinancials ?? true)}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span 
+                      className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black border shadow-sm animate-pulse"
+                      style={{
+                        backgroundColor: `${settings.primaryColor}15`,
+                        borderColor: `${settings.primaryColor}50`,
+                        color: settings.primaryColor,
+                      }}
+                    >
+                      <Clock className="h-3.5 w-3.5 stroke-[2.5]" />
+                      Pendente: {formatCurrency(clientPendingMap[c.id], permissions?.canSeeFinancials ?? true)}
+                    </span>
+
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleGenerateAndSendStatement(c);
+                      }}
+                      className="px-2.5 py-1 rounded-xl text-[10px] font-black uppercase bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-500/30 flex items-center gap-1 transition-all active:scale-95 cursor-pointer"
+                      title="Gerar Extrato PDF e Enviar Cobrança via WhatsApp"
+                    >
+                      <FileText className="h-3 w-3" /> Extrato PDF
+                    </button>
+                  </div>
                 ) : (
                   <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold text-emerald-500 bg-emerald-500/10 border border-emerald-500/20">
                     <CheckCircle2 className="h-3 w-3" /> Conta em Dia
