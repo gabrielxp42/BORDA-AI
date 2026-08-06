@@ -27,7 +27,8 @@ import {
   TrendingDown,
   Trash2,
   Filter,
-  Zap
+  Zap,
+  Plus
 } from 'lucide-react';
 import {
   BarChart, 
