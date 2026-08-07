@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { useCompanySettings } from '@/contexts/CompanySettingsContext';
 import {
-  WhatsAppTemplate, EMBROIDERY_VARIABLES, getStoredTemplates,
+  WhatsAppTemplate, EMBROIDERY_VARIABLES, getStoredTemplates, fetchCloudTemplates,
   saveStoredTemplates, resetStoredTemplates, formatEmbroideryTemplate
 } from '@/services/whatsappTemplatesService';
 import { sendEvolutionText, formatWhatsAppNumber } from '@/services/whatsappService';
@@ -19,6 +19,12 @@ export const GabiAutomations: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState<'templates' | 'triggers' | 'connection'>('templates');
   const [templates, setTemplates] = useState<WhatsAppTemplate[]>(getStoredTemplates);
+
+  React.useEffect(() => {
+    fetchCloudTemplates().then(cloudTpls => {
+      setTemplates(cloudTpls);
+    });
+  }, []);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>(templates[0]?.id || '');
   const [categoryFilter, setCategoryFilter] = useState<'todos' | 'cliente' | 'equipe' | 'cobranca'>('todos');
 

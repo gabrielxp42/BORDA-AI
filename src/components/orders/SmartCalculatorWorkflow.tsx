@@ -809,10 +809,11 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
         const validItems = orderItemsList.filter(it => it.matrixName && it.matrixName.trim() !== '');
         
         if (validItems.length > 0) {
+          const sanitizeDesc = (name: string) => name.replace(/^(bordado:\s*|entrada:\s*)+/gi, '').trim();
           const itemsPayload = validItems.map(it => ({
             order_id: order.id,
             matrix_id: it.matrixId || null,
-            description: `Bordado: ${it.matrixName} (${it.stitchCount.toLocaleString()} pts, ${it.colorCount} cores)`,
+            description: `Bordado: ${sanitizeDesc(it.matrixName)} (${it.stitchCount.toLocaleString()} pts, ${it.colorCount} cores)`,
             quantity: it.quantity,
             unit_price: isQuick ? 0 : it.unitPrice,
             total_price: isQuick ? 0 : it.totalPrice
@@ -827,14 +828,17 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
           }
         } else if (matrixName.trim()) {
           // Fallback para item único configurado nos inputs
+          const cleanName = matrixName.replace(/^(bordado:\s*|entrada:\s*)+/gi, '').trim();
+          const descText = isQuick 
+            ? `Entrada: ${cleanName}`
+            : `Bordado: ${cleanName} (${stitchCount.toLocaleString()} pts, ${colorCount || 1} cores)`;
+
           const { error: itemError } = await supabase
             .from('order_items')
             .insert({
               order_id: order.id,
               matrix_id: selectedMatrixId || null,
-              description: isQuick 
-                ? `Entrada: ${matrixName}`
-                : `Bordado: ${matrixName} (${stitchCount.toLocaleString()} pts, ${colorCount || 1} cores)`,
+              description: descText,
               quantity: Number(quantity) || 1,
               unit_price: isQuick ? 0 : calculation.unitPrice,
               total_price: isQuick ? 0 : calculation.totalPrice
@@ -843,7 +847,7 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
           if (itemError) {
             await supabase.from('order_items').insert({
               order_id: order.id,
-              description: isQuick ? `Entrada: ${matrixName}` : `Bordado: ${matrixName} (${stitchCount.toLocaleString()} pts, ${colorCount || 1} cores)`,
+              description: descText,
               quantity: Number(quantity) || 1,
               unit_price: isQuick ? 0 : calculation.unitPrice,
               total_price: isQuick ? 0 : calculation.totalPrice
