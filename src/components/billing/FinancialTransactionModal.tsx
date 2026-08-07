@@ -29,10 +29,11 @@ export const FinancialTransactionModal: React.FC<FinancialTransactionModalProps>
   const [dueDate, setDueDate] = useState<string>('');
   const [status, setStatus] = useState<'pending' | 'paid'>('paid');
   const [notes, setNotes] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!description.trim()) {
       toast.error('Informe a descrição do lançamento.');
@@ -44,24 +45,29 @@ export const FinancialTransactionModal: React.FC<FinancialTransactionModalProps>
       return;
     }
 
-    onSubmitTransaction({
-      type,
-      amount: val,
-      description: description.trim(),
-      category,
-      payment_method: paymentMethod,
-      date: new Date().toISOString(),
-      expense_type: isIncome ? undefined : expenseType,
-      due_date: (!isIncome && expenseType === 'fixed' && dueDate) ? dueDate : undefined,
-      status: !isIncome ? status : undefined,
-      notes: notes.trim() || undefined,
-    });
+    setIsSubmitting(true);
+    try {
+      await onSubmitTransaction({
+        type,
+        amount: val,
+        description: description.trim(),
+        category,
+        payment_method: paymentMethod,
+        date: new Date().toISOString(),
+        expense_type: isIncome ? undefined : expenseType,
+        due_date: (!isIncome && expenseType === 'fixed' && dueDate) ? dueDate : undefined,
+        status: !isIncome ? status : undefined,
+        notes: notes.trim() || undefined,
+      });
 
-    toast.success(isIncome ? 'Receita lançada no caixa!' : 'Despesa registrada no caixa!');
-    onClose();
-    setDescription('');
-    setAmount('');
-    setNotes('');
+      toast.success(isIncome ? 'Receita lançada no caixa!' : 'Despesa registrada no caixa!');
+      onClose();
+      setDescription('');
+      setAmount('');
+      setNotes('');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -247,14 +253,15 @@ export const FinancialTransactionModal: React.FC<FinancialTransactionModalProps>
           <div className="pt-2">
             <button
               type="submit"
-              className={`w-full py-3.5 rounded-2xl font-black text-sm text-white shadow-xl transition-all active:scale-[0.98] flex items-center justify-center gap-2 ${
+              disabled={isSubmitting}
+              className={`w-full py-3.5 rounded-2xl font-black text-sm text-white shadow-xl transition-all active:scale-[0.98] flex items-center justify-center gap-2 disabled:opacity-50 ${
                 isIncome
                   ? 'bg-gradient-to-r from-emerald-600 to-teal-500 hover:brightness-110 shadow-emerald-500/25'
                   : 'bg-gradient-to-r from-rose-600 to-amber-600 hover:brightness-110 shadow-rose-500/25'
               }`}
             >
               <Check className="h-4 w-4" />
-              <span>{isIncome ? 'Lançar Receita no Caixa' : 'Lançar Despesa no Caixa'}</span>
+              <span>{isSubmitting ? 'Salvando...' : isIncome ? 'Lançar Receita no Caixa' : 'Lançar Despesa no Caixa'}</span>
             </button>
           </div>
         </form>

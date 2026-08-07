@@ -162,13 +162,17 @@ const getOrderHTML = (order: OrderPDFData) => {
         <table>
           <thead><tr><th>Descrição do Serviço / Matriz</th><th class="text-center">Quantidade</th>${canSee ? '<th class="text-right">Valor Unitário</th><th class="text-right">Total</th>' : ''}</tr></thead>
           <tbody>
-            ${order.items.map(item => `
+            ${order.items.map(item => {
+              const uPrice = Number(item.unitPrice ?? (item as any).unit_price ?? 0);
+              const tPrice = Number(item.totalPrice ?? (item as any).total_price ?? (uPrice * (item.quantity || 1)));
+              return `
               <tr>
                 <td class="font-bold">${item.description}</td>
                 <td class="text-center">${item.quantity} un</td>
-                ${canSee ? `<td class="text-right">${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.unitPrice)}</td><td class="text-right font-bold">${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.totalPrice)}</td>` : ''}
+                ${canSee ? `<td class="text-right">${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(uPrice)}</td><td class="text-right font-bold">${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(tPrice)}</td>` : ''}
               </tr>
-            `).join('')}
+            `;
+            }).join('')}
           </tbody>
         </table>
       </div>
@@ -214,18 +218,54 @@ export const printOrderReceipt = (order: OrderPDFData) => {
 export const generateOrderPDFBase64 = async (order: OrderPDFData): Promise<string> => {
   const container = document.createElement('div');
   container.innerHTML = getOrderHTML(order);
-  container.style.position = 'absolute';
+  container.style.position = 'fixed';
+  container.style.top = '0';
   container.style.left = '-9999px';
   container.style.background = 'white';
-  container.style.width = '210mm';
+  container.style.width = '794px'; // 210mm a 96DPI
+  container.style.padding = '20px';
+  container.style.boxSizing = 'border-box';
   document.body.appendChild(container);
-  const canvas = await html2canvas(container, { scale: 2 });
-  const imgData = canvas.toDataURL('image/jpeg');
+
+  // Aguarda 100ms para carregar quaisquer fontes ou imagens
+  await new Promise(r => setTimeout(r, 100));
+
+  const canvas = await html2canvas(container, {
+    scale: 2,
+    useCORS: true,
+    logging: false,
+    y: 0,
+    scrollY: 0,
+    windowWidth: 800
+  });
+
+  const imgData = canvas.toDataURL('image/jpeg', 0.95);
   const pdf = new jsPDF('p', 'mm', 'a4');
-  const imgProps = pdf.getImageProperties(imgData);
   const pdfWidth = pdf.internal.pageSize.getWidth();
-  const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
-  pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+  const pdfHeight = pdf.internal.pageSize.getHeight();
+  
+  const imgProps = pdf.getImageProperties(imgData);
+  const calculatedHeight = (imgProps.height * pdfWidth) / imgProps.width;
+
+  // Se a altura couber na página A4, centraliza levemente com margem
+  if (calculatedHeight <= pdfHeight) {
+    pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, calculatedHeight);
+  } else {
+    // Se for maior que 1 página, adiciona com proporção
+    let heightLeft = calculatedHeight;
+    let position = 0;
+
+    pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, calculatedHeight);
+    heightLeft -= pdfHeight;
+
+    while (heightLeft >= 0) {
+      position = heightLeft - calculatedHeight;
+      pdf.addPage();
+      pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, calculatedHeight);
+      heightLeft -= pdfHeight;
+    }
+  }
+
   document.body.removeChild(container);
   return pdf.output('datauristring').split(',')[1];
 };

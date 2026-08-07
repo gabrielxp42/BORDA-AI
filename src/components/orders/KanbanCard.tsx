@@ -179,7 +179,7 @@ export const KanbanCard: React.FC<KanbanCardProps> = ({
                   );
                 }
 
-                const details = formatOrderPaymentBadgeDetails(order.payment_status, order.total_amount, order.notes, order.payment_method);
+                const details = formatOrderPaymentBadgeDetails(order.payment_status, order.total_amount, order.notes, order.payment_method, canViewPrices);
                 const badgeColors: Record<string, string> = {
                   paid: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
                   half_paid: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30',

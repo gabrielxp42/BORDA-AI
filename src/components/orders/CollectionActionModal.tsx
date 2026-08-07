@@ -102,7 +102,8 @@ export const CollectionActionModal: React.FC<CollectionActionModalProps> = ({
   onMessageSent
 }) => {
   const { settings } = useCompanySettings();
-  const { permissions } = useProfile();
+  const { permissions, isUnlocked } = useProfile();
+  const canSeeFinancials = isUnlocked || (permissions?.canSeeFinancials === true);
   const addTask = useBackgroundTasks(state => state.addTask);
   const updateTask = useBackgroundTasks(state => state.updateTask);
   const updateStep = useBackgroundTasks(state => state.updateStep);
@@ -127,7 +128,7 @@ export const CollectionActionModal: React.FC<CollectionActionModalProps> = ({
 
   const clientName = order.clients?.name || order.client?.name || 'Cliente';
   const orderCode = order.order_number ? `#${order.order_number}` : `#${order.id.slice(0, 4)}`;
-  const totalFormatted = formatCurrency(order.total_amount || 0, permissions?.canSeeFinancials ?? true);
+  const totalFormatted = formatCurrency(order.total_amount || 0, canSeeFinancials);
 
   const cleanDescription = (desc: string) => {
     return desc
@@ -202,38 +203,67 @@ export const CollectionActionModal: React.FC<CollectionActionModalProps> = ({
     onClose();
     toast.info(`⚡ Enviando cobrança de ${clientName} em segundo plano...`);
 
-    // Adia o trabalho pesado (PDF + API) para o próximo tick do Event Loop para dar 0ms de congelamento no DOM
+    // Adia o trabalho pesado (PDF + API) para o próximo tick do Event Loop para dar tempo do DOM re-renderizar e fechar o modal
     setTimeout(async () => {
+      const baseSteps = [
+        { id: 'prep', label: 'Montando Texto do Tom', status: 'completed' }
+      ];
+      if (isPdfAttached) {
+        baseSteps.push({ id: 'pdf', label: 'Gerando PDF da Ficha', status: 'loading' });
+      }
+      baseSteps.push({ id: 'send', label: 'Conectando Evolution API', status: isPdfAttached ? 'pending' : 'loading' });
+      baseSteps.push({ id: 'done', label: 'Entrega no WhatsApp', status: 'pending' });
+
       const taskId = addTask({
         title: `Cobrança (${clientName})`,
         description: `Disparando cobrança no WhatsApp de ${clientName}...`,
         status: 'processing',
         progress: 30,
-        steps: [
-          { id: 'prep', label: 'Montando Texto do Tom', status: 'completed' },
-          { id: 'send', label: 'Conectando Evolution API', status: 'loading' },
-          { id: 'done', label: 'Entrega no WhatsApp', status: 'pending' },
-        ]
+        steps: baseSteps as any
       });
 
       const toastId = toast.loading(`Enviando cobrança para ${clientName}...`);
 
       try {
-        updateStep(taskId, 'send', 'completed');
-        updateStep(taskId, 'done', 'loading');
-        updateTask(taskId, { progress: 70, status: 'sending' });
+        updateTask(taskId, { progress: 60, status: 'sending' });
 
         if (isPdfAttached && targetOrder) {
+          const rawItems = targetOrder.order_items || targetOrder.items || [];
+          const mappedItems = rawItems.map((i: any) => ({
+            description: i.description,
+            quantity: i.quantity,
+            unitPrice: Number(i.unitPrice ?? i.unit_price ?? 0),
+            totalPrice: Number(i.totalPrice ?? i.total_price ?? ((i.unitPrice ?? i.unit_price ?? 0) * i.quantity))
+          }));
+
           const pdfBase64 = await generateOrderPDFBase64({
             id: targetOrder.id,
             orderNumber: targetOrder.order_number,
             createdAt: targetOrder.created_at,
+            dueDate: targetOrder.due_date,
             clientName: clientName,
+            clientCompany: targetOrder.client?.company_name || targetOrder.clients?.company_name,
+            clientPhone: targetOrder.client?.phone || targetOrder.clients?.phone,
             paymentStatus: targetOrder.payment_status,
+            paymentMethod: targetOrder.payment_method,
             totalAmount: targetOrder.total_amount,
-            items: targetOrder.order_items || targetOrder.items || [],
+            notes: targetOrder.notes,
+            items: mappedItems,
             companyName: settings.systemName,
+            companySubtitle: settings.systemSubtitle,
+            companyLogo: settings.logoUrl,
+            companyColor: settings.primaryColor,
+            companyPhone: settings.phone,
+            companyEmail: settings.email,
+            companyAddress: settings.address,
+            companyDocument: settings.document,
+            pixKey: settings.pixKey,
+            workingHours: settings.workingHours,
+            canSeeFinancials: true
           });
+
+          updateStep(taskId, 'pdf', 'completed');
+          updateStep(taskId, 'send', 'loading');
 
           await sendEvolutionMedia({
             phone: targetPhone,
@@ -243,9 +273,12 @@ export const CollectionActionModal: React.FC<CollectionActionModalProps> = ({
             mediaName: `OS_${orderCode.replace('#', '')}.pdf`
           });
         } else {
+          updateStep(taskId, 'send', 'completed');
+          updateStep(taskId, 'done', 'loading');
           await sendEvolutionText(targetPhone, draftText);
         }
 
+        updateStep(taskId, 'send', 'completed');
         updateStep(taskId, 'done', 'completed');
         updateTask(taskId, {
           progress: 100,
@@ -257,9 +290,14 @@ export const CollectionActionModal: React.FC<CollectionActionModalProps> = ({
         if (onMessageSent) onMessageSent();
       } catch (err: any) {
         console.warn("Falha no disparo via API:", err);
+        updateStep(taskId, 'send', 'error');
+        updateStep(taskId, 'done', 'error');
+        if (isPdfAttached) updateStep(taskId, 'pdf', 'error');
+
         updateTask(taskId, {
           status: 'error',
           progress: 100,
+          description: `Falha no envio: ${err.message || 'Erro no WhatsApp'}`,
           error: err.message || 'Falha no envio direto'
         });
 
@@ -267,7 +305,7 @@ export const CollectionActionModal: React.FC<CollectionActionModalProps> = ({
       } finally {
         setIsSending(false);
       }
-    }, 50);
+    }, 500);
   };
 
   // Abrir no WhatsApp Web

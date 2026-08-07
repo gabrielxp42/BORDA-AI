@@ -49,6 +49,7 @@ export const ClientDetailsModal: React.FC<ClientDetailsModalProps> = ({
 }) => {
   const { settings } = useCompanySettings();
   const { isUnlocked, permissions } = useProfile();
+  const canSeeFinancials = isUnlocked || (permissions?.canSeeFinancials === true);
   const pc = settings.primaryColor;
 
   const [activeTab, setActiveTab] = useState<'overview' | 'pending' | 'history'>('overview');
@@ -244,12 +245,12 @@ export const ClientDetailsModal: React.FC<ClientDetailsModalProps> = ({
             <div className="space-y-4 animate-in fade-in duration-200">
               
               {/* Métricas Financeiras */}
-              {isUnlocked ? (
+              {canSeeFinancials ? (
                 <div className="grid grid-cols-2 gap-3">
                   <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 space-y-1">
                     <span className="text-[10px] font-bold uppercase text-emerald-400 tracking-wider">Total Quitado</span>
                     <h3 className="text-xl font-bold text-white">
-                      {formatCurrency(totalPago, permissions?.canSeeFinancials ?? true)}
+                      {formatCurrency(totalPago, canSeeFinancials)}
                     </h3>
                     <p className="text-[10px] text-emerald-300/80">{completedOrders.length} pedido(s) pagos</p>
                   </div>
@@ -257,7 +258,7 @@ export const ClientDetailsModal: React.FC<ClientDetailsModalProps> = ({
                   <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 space-y-1">
                     <span className="text-[10px] font-bold uppercase text-amber-400 tracking-wider">Em Aberto</span>
                     <h3 className="text-xl font-bold text-white">
-                      {formatCurrency(totalPendente, permissions?.canSeeFinancials ?? true)}
+                      {formatCurrency(totalPendente, canSeeFinancials)}
                     </h3>
                     <p className="text-[10px] text-amber-300/80">{openOrders.length} pedido(s) pendentes</p>
                   </div>
@@ -398,9 +399,9 @@ export const ClientDetailsModal: React.FC<ClientDetailsModalProps> = ({
 
                         <div className="text-right flex items-center gap-3">
                           <div>
-                            {isUnlocked ? (
+                            {canSeeFinancials ? (
                               <span className="text-xs font-bold text-white block">
-                                {formatCurrency(order.total_amount || 0, permissions?.canSeeFinancials ?? true)}
+                                {formatCurrency(order.total_amount || 0, canSeeFinancials)}
                               </span>
                             ) : (
                               <span className="text-xs font-medium text-emerald-400 block">
@@ -450,9 +451,9 @@ export const ClientDetailsModal: React.FC<ClientDetailsModalProps> = ({
                       </div>
 
                       <div className="text-right">
-                        {isUnlocked && (
+                        {canSeeFinancials && (
                           <span className="font-bold text-white block">
-                            {formatCurrency(order.total_amount || 0, permissions?.canSeeFinancials ?? true)}
+                            {formatCurrency(order.total_amount || 0, canSeeFinancials)}
                           </span>
                         )}
                         <span className={`inline-block px-2 py-0.5 rounded-full text-[9px] font-medium ${
@@ -481,7 +482,7 @@ export const ClientDetailsModal: React.FC<ClientDetailsModalProps> = ({
                   {selectedOrderIds.length > 0 ? `${selectedOrderIds.length} selecionado(s)` : 'Todas as pendências'}
                 </span>
                 <span className="text-base font-bold text-white">
-                  {formatCurrency(effectiveTotal, permissions?.canSeeFinancials ?? true)}
+                  {formatCurrency(effectiveTotal, canSeeFinancials)}
                 </span>
               </div>
 

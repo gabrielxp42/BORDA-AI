@@ -127,7 +127,8 @@ export function formatOrderPaymentBadgeDetails(
   paymentStatus: string | undefined,
   totalAmount: number,
   notes: string | null | undefined,
-  paymentMethodDb?: string
+  paymentMethodDb?: string,
+  canViewPrices: boolean = true
 ): {
   status: 'pending' | 'half_paid' | 'paid';
   shortLabel: string;
@@ -167,15 +168,18 @@ export function formatOrderPaymentBadgeDetails(
     const remainingVal = Math.max(0, totalAmount - depositVal);
     const methodSuffix = methodLabel ? ` • ${methodLabel}` : '';
     const noteSuffix = paymentNote ? ` ("${paymentNote}")` : '';
+    const depositFormatted = canViewPrices ? `R$ ${depositVal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'R$ ***';
+    const remainingFormatted = canViewPrices ? `R$ ${remainingVal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'R$ ***';
+
     return {
       status: 'half_paid',
       shortLabel: '⚡ Sinal 50%',
-      badgeSubtext: `Sinal R$ ${depositVal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${noteSuffix}`,
-      fullLabel: `⚡ Sinal 50%${methodSuffix} (Restam R$ ${remainingVal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})${noteSuffix}`,
+      badgeSubtext: `Sinal ${depositFormatted}${noteSuffix}`,
+      fullLabel: `⚡ Sinal 50%${methodSuffix} (Restam ${remainingFormatted})${noteSuffix}`,
       methodLabel,
       paymentNote,
-      depositVal,
-      remainingVal
+      depositVal: canViewPrices ? depositVal : 0,
+      remainingVal: canViewPrices ? remainingVal : 0
     };
   }
 

@@ -58,8 +58,9 @@ const formatPaymentMethod = (method?: string): string => {
 };
 
 export const Pedidos: React.FC = () => {
+  const { isUnlocked, role, customProfiles, permissions } = useProfile();
   const { settings } = useCompanySettings();
-  const { isUnlocked, role, customProfiles } = useProfile();
+  const canSeeFinancials = isUnlocked || (permissions?.canSeeFinancials === true);
 
   const [activeTab, setActiveTab] = useState<'cards' | 'kanban'>('cards');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid'); // Grid de Miniaturas (Cards) como PADRÃO PRIMÁRIO!
@@ -544,9 +545,9 @@ export const Pedidos: React.FC = () => {
                             ⚡ Cobrar
                           </button>
 
-                          {/* Valor do Pedido (Visível se unlocked/chefe) */}
+                          {/* Valor do Pedido (Visível se canSeeFinancials) */}
                           <div className="text-right">
-                            {isUnlocked ? (
+                            {canSeeFinancials ? (
                               <p className="text-sm sm:text-base font-black text-slate-900 dark:text-white" style={{ color: settings.primaryColor }}>
                                 R$ {Number(order.total_amount || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                               </p>
@@ -586,7 +587,7 @@ export const Pedidos: React.FC = () => {
                                     <span className="px-2 py-0.5 rounded-lg bg-slate-200 dark:bg-white/10 text-[11px] font-bold text-slate-700 dark:text-zinc-300">
                                       {item.quantity}x
                                     </span>
-                                    {isUnlocked && (
+                                    {canSeeFinancials && (
                                       <span className="font-bold text-slate-900 dark:text-white">
                                         R$ {Number(item.total_price || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                                       </span>

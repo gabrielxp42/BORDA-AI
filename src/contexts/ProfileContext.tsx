@@ -157,19 +157,15 @@ export const ProfileProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const [isProfileModalOpen, setIsProfileModalOpen] = useState<boolean>(false);
 
-  // Carrega perfis customizados e PIN mestre do Supabase na inicialização
+  // Carrega perfis customizados e PIN mestre do Supabase na inicialização (Compartilhado entre todas as máquinas)
   useEffect(() => {
     const fetchCloudProfiles = async () => {
       try {
-        const { data: authData } = await supabase.auth.getUser();
-        const userId = authData?.user?.id;
-        
-        if (!userId) return; // Se não tem usuário logado, não busca nada da nuvem
-
         const { data } = await supabase
           .from('company_settings')
           .select('custom_profiles, master_pin')
-          .eq('id', userId)
+          .order('updated_at', { ascending: false })
+          .limit(1)
           .maybeSingle();
 
         if (data) {

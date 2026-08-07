@@ -33,8 +33,9 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
   onEditOrder,
   onOrderUpdated
 }) => {
-  const { settings } = useCompanySettings();
   const { isUnlocked, permissions } = useProfile();
+  const { settings } = useCompanySettings();
+  const canSeeFinancials = isUnlocked || (permissions?.canSeeFinancials === true);
 
   const [matrixUrls, setMatrixUrls] = useState<Record<string, string>>({});
   const [matrixPreviews, setMatrixPreviews] = useState<Record<string, string>>({});
@@ -153,7 +154,7 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
       companyDocument: settings.document || undefined,
       pixKey: settings.pixKey || undefined,
       workingHours: settings.workingHours || undefined,
-      canSeeFinancials: permissions?.canSeeFinancials ?? true,
+      canSeeFinancials: canSeeFinancials,
     };
   };
 
@@ -164,7 +165,7 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
 
   const handlePrintThermal = () => {
     const data = getPrintData();
-    printThermalReceipt(data, permissions?.canSeeFinancials ?? true);
+    printThermalReceipt(data, canSeeFinancials);
   };
 
   const handleSendWhatsApp = async () => {
@@ -579,15 +580,15 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                                     onClick={(e) => { e.stopPropagation(); handleStartQuickEdit(); }}
                                     className="group flex items-center justify-end gap-1.5 w-full hover:text-purple-400 transition-colors"
                                   >
-                                    {formatCurrency(item.unit_price || 0, permissions?.canSeeFinancials ?? true)}
+                                    {formatCurrency(item.unit_price || 0, canSeeFinancials)}
                                     <Edit2 className="h-3 w-3 text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity" />
                                   </button>
                                 )}
                               </td>
                               <td className="p-3 text-right font-black">
                                 {isQuickEditing
-                                  ? formatCurrency((item.quantity || 1) * (item.unit_price || 0), permissions?.canSeeFinancials ?? true)
-                                  : formatCurrency(item.total_price || 0, permissions?.canSeeFinancials ?? true)
+                                  ? formatCurrency((item.quantity || 1) * (item.unit_price || 0), canSeeFinancials)
+                                  : formatCurrency(item.total_price || 0, canSeeFinancials)
                                 }
                               </td>
                             </>
@@ -716,8 +717,8 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                         ? tempItems.reduce((acc, item) => acc + (Number(item.quantity) || 1) * (Number(item.unit_price) || 0), 0)
                         : (order.total_amount || 0);
 
-                      return isUnlocked ? (
-                        formatCurrency(currentTotalAmount, permissions?.canSeeFinancials ?? true)
+                      return canSeeFinancials ? (
+                        formatCurrency(currentTotalAmount, canSeeFinancials)
                       ) : (
                         `${currentTotalPieces} Peça(s) no Lote`
                       );
@@ -726,31 +727,31 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                 </div>
                 <div className="text-right">
                   <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">
-                    {isUnlocked ? 'Forma Registrada' : 'Status da Oficina'}
+                    {canSeeFinancials ? 'Forma Registrada' : 'Status da Oficina'}
                   </span>
                   <p className="text-xs font-bold text-purple-400 uppercase">
-                    {isUnlocked
+                    {canSeeFinancials
                       ? (order.payment_method ? `⚡ ${paymentLabels[order.payment_method] || order.payment_method.toUpperCase()}` : 'Não informada')
                       : '⚡ Produção Ativa'}
                   </p>
                 </div>
               </div>
 
-              {/* Financial Metadata Details (Apenas para Chefe) */}
-              {isUnlocked && (order.payment_status === 'half_paid' || order.payment_status === 'paid' || (metadata?.depositAmount || 0) > 0) && (
+              {/* Financial Metadata Details (Apenas para Financeiro / Chefe) */}
+              {canSeeFinancials && (order.payment_status === 'half_paid' || order.payment_status === 'paid' || (metadata?.depositAmount || 0) > 0) && (
                 <div className="p-4 rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 space-y-3 text-xs">
                   {order.payment_status === 'half_paid' && (
                     <div className="space-y-2">
                       <div className="flex justify-between items-center text-slate-600 dark:text-zinc-400">
                         <span>Sinal Recebido:</span>
                         <strong className="text-blue-500 dark:text-blue-400">
-                          {formatCurrency(metadata?.depositAmount || 0, permissions?.canSeeFinancials ?? true)}
+                          {formatCurrency(metadata?.depositAmount || 0, canSeeFinancials)}
                         </strong>
                       </div>
                       <div className="flex justify-between items-center text-slate-600 dark:text-zinc-400">
                         <span>Restante a Pagar:</span>
                         <strong className="text-slate-900 dark:text-white font-black">
-                          {formatCurrency(Math.max(0, (order.total_amount || 0) - (metadata?.depositAmount || 0)), permissions?.canSeeFinancials ?? true)}
+                          {formatCurrency(Math.max(0, (order.total_amount || 0) - (metadata?.depositAmount || 0)), canSeeFinancials)}
                         </strong>
                       </div>
                     </div>
@@ -778,7 +779,7 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                             {h.status === 'half_paid' ? 'Sinal' : h.status === 'paid' ? 'Quitação' : 'Pendente'} ({paymentLabels[h.method] || String(h.method).toUpperCase()})
                           </span>
                           <span>
-                            {formatCurrency(h.amount, permissions?.canSeeFinancials ?? true)} - {format(new Date(h.timestamp), "dd/MM/yy HH:mm")}
+                            {formatCurrency(h.amount, canSeeFinancials)} - {format(new Date(h.timestamp), "dd/MM/yy HH:mm")}
                           </span>
                         </div>
                       ))}

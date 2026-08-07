@@ -75,6 +75,7 @@ export const PedidosKanban: React.FC<PedidosKanbanProps> = ({
     const saved = localStorage.getItem('kanban_notifications_enabled');
     return saved ? JSON.parse(saved) : { design: false, embroidering: false, finishing: false, completed: true };
   });
+  const notificationsEnabledRef = useRef(kanbanNotificationsEnabled);
 
   // Mantém ref atualizada para evitar estado obsoleto no envio de notificações
   useEffect(() => {
@@ -82,13 +83,14 @@ export const PedidosKanban: React.FC<PedidosKanbanProps> = ({
   }, [orders]);
 
   useEffect(() => {
+    notificationsEnabledRef.current = kanbanNotificationsEnabled;
     localStorage.setItem('kanban_notifications_enabled', JSON.stringify(kanbanNotificationsEnabled));
   }, [kanbanNotificationsEnabled]);
-  const { isUnlocked, role, customProfiles } = useProfile();
+  const { isUnlocked, role, customProfiles, permissions: profilePermissions } = useProfile();
   const { settings } = useCompanySettings();
   const { profile } = useAuth();
   
-  const canViewPrices = profile?.can_view_prices !== false;
+  const canViewPrices = isUnlocked || (profilePermissions?.canSeeFinancials === true);
   const formatPrice = (val: number) => canViewPrices ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val) : 'R$ ***';
 
   useEffect(() => {
@@ -169,7 +171,9 @@ export const PedidosKanban: React.FC<PedidosKanbanProps> = ({
       const clientName = orderToNotify?.client?.name || 'Cliente';
       const orderCode = orderToNotify?.order_number || orderToNotify?.id?.slice(0, 4) || '';
       
-      if (phone && newStatus !== 'pending' && kanbanNotificationsEnabled[newStatus]) {
+      const isNotificationEnabled = notificationsEnabledRef.current[newStatus];
+
+      if (phone && newStatus !== 'pending' && isNotificationEnabled) {
         const templates: Record<string, string> = {
             design: `Olá, ${clientName}! Seu pedido #${orderCode} entrou em fase de Criação de Matriz. 🎨`,
             embroidering: `Boas notícias, ${clientName}! Seu pedido #${orderCode} está na Máquina sendo bordado. 🧵`,
@@ -306,9 +310,13 @@ export const PedidosKanban: React.FC<PedidosKanbanProps> = ({
       });
     } catch (evoErr: any) {
       console.warn('Falha no envio direto via Evolution API:', evoErr);
+      updateStep(taskId, 'send', 'error');
+      updateStep(taskId, 'done', 'error');
+
       updateTask(taskId, {
         status: 'error',
         progress: 100,
+        description: `Falha no envio: ${evoErr.message || 'Erro no WhatsApp'}`,
         error: evoErr.message || 'Falha no envio direto'
       });
 
