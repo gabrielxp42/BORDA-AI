@@ -10,6 +10,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useProfile } from '@/contexts/ProfileContext';
 import { formatCurrency } from '@/utils/currencyFormatter';
 import { generateOrderPDFBase64 } from '@/services/pdfGenerator';
+import { useBackgroundTasks } from '@/hooks/useBackgroundTasks';
 
 interface WhatsAppBillingModalProps {
   isOpen: boolean;
@@ -28,6 +29,9 @@ export const WhatsAppBillingModal: React.FC<WhatsAppBillingModalProps> = ({ isOp
   const { profile } = useAuth();
   const { permissions } = useProfile();
   const { settings } = useCompanySettings();
+  const addTask = useBackgroundTasks(state => state.addTask);
+  const updateTask = useBackgroundTasks(state => state.updateTask);
+  const updateStep = useBackgroundTasks(state => state.updateStep);
   const [phoneNumber, setPhoneNumber] = useState(clientData?.phone || '');
   const [isSending, setIsSending] = useState(false);
   const [sendSuccess, setSendSuccess] = useState(false);
@@ -58,53 +62,95 @@ export const WhatsAppBillingModal: React.FC<WhatsAppBillingModalProps> = ({ isOp
 
   const isEvolutionConnected = profile?.whatsapp_status === 'connected';
 
-  const handleSendEvolution = async () => {
-    if (!phoneNumber) {
+  const handleSendEvolution = () => {
+    if (!phoneNumber || !phoneNumber.trim()) {
       toast.error("Por favor, informe um número de WhatsApp válido.");
       return;
     }
 
+    const targetPhone = phoneNumber.trim();
+    const msgText = message;
+    const isPdfAttached = attachPDF;
+    const cData = clientData;
+
     setIsSending(true);
-    try {
-      if (attachPDF) {
-        // Need to pick the 'first' order to generate a sample PDF if multiple exist, or adjust generator
-        // Assuming clientData.orders[0] is the base for the PDF
-        const latestOrder = clientData.orders[clientData.orders.length - 1];
-        if (!latestOrder) throw new Error("Pedido não encontrado para gerar PDF.");
-        
-        const pdfBase64 = await generateOrderPDFBase64({
+    onClose();
+    toast.info(`⚡ Enviando cobrança de ${cData.name} em segundo plano...`);
+
+    setTimeout(async () => {
+      const baseSteps = [
+        { id: 'prep', label: 'Preparando Dados da Cobrança', status: 'completed' }
+      ];
+      if (isPdfAttached) {
+        baseSteps.push({ id: 'pdf', label: 'Gerando PDF da Ficha', status: 'loading' });
+      }
+      baseSteps.push({ id: 'send', label: 'Conectando Evolution API', status: isPdfAttached ? 'pending' : 'loading' });
+      baseSteps.push({ id: 'done', label: 'Entrega no WhatsApp', status: 'pending' });
+
+      const taskId = addTask({
+        title: `Cobrança de Faturas (${cData.name})`,
+        description: `Enviando resumo financeiro para ${cData.name}...`,
+        status: 'processing',
+        progress: 30,
+        steps: baseSteps as any
+      });
+
+      const toastId = toast.loading(`Enviando cobrança para ${cData.name}...`);
+      try {
+        updateTask(taskId, { progress: 60, status: 'sending' });
+
+        if (isPdfAttached) {
+          const latestOrder = cData.orders[cData.orders.length - 1];
+          if (!latestOrder) throw new Error("Pedido não encontrado para gerar PDF.");
+          
+          const pdfBase64 = await generateOrderPDFBase64({
             id: latestOrder.id,
             orderNumber: latestOrder.order_number,
             createdAt: latestOrder.created_at,
-            clientName: clientData.name,
+            clientName: cData.name,
             paymentStatus: 'pending',
             totalAmount: latestOrder.total_amount,
             items: latestOrder.items || [],
             companyName: settings.systemName,
-        });
+          });
 
-        await sendEvolutionMedia({
-            phone: phoneNumber,
-            message: message,
+          updateStep(taskId, 'pdf', 'completed');
+          updateStep(taskId, 'send', 'loading');
+
+          await sendEvolutionMedia({
+            phone: targetPhone,
+            message: msgText,
             mediaUrl: `data:application/pdf;base64,${pdfBase64}`,
             mediaType: 'document',
-            mediaName: `Fechamento_${clientData.name.replace(/\s+/g, '_')}.pdf`
+            mediaName: `Fechamento_${cData.name.replace(/\s+/g, '_')}.pdf`
+          });
+        } else {
+          updateStep(taskId, 'send', 'completed');
+          updateStep(taskId, 'done', 'loading');
+          await sendEvolutionText(targetPhone, msgText);
+        }
+
+        updateStep(taskId, 'send', 'completed');
+        updateStep(taskId, 'done', 'completed');
+        updateTask(taskId, {
+          progress: 100,
+          status: 'completed',
+          description: `Cobrança entregue com sucesso para ${cData.name}!`
         });
-      } else {
-        await sendEvolutionText(phoneNumber, message);
+
+        toast.success(`⚡ Cobrança enviada com sucesso para ${cData.name}!`, { id: toastId });
+      } catch (err: any) {
+        console.warn("Falha no disparo via API:", err);
+        updateTask(taskId, {
+          status: 'error',
+          progress: 100,
+          error: err.message || 'Falha no envio direto'
+        });
+        handleWhatsAppDispatchError(err, targetPhone, msgText, toastId);
+      } finally {
+        setIsSending(false);
       }
-      
-      setIsSending(false);
-      setSendSuccess(true);
-      toast.success("Cobrança enviada com sucesso!");
-      setTimeout(() => {
-        setSendSuccess(false);
-        onClose();
-      }, 2000);
-    } catch (err: any) {
-      setIsSending(false);
-      handleWhatsAppDispatchError(err, phoneNumber, message);
-    }
+    }, 500);
   };
 
   const handleOpenWebWhatsApp = () => {

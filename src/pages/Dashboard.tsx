@@ -39,7 +39,8 @@ interface OrderRecord {
 
 export const Dashboard: React.FC = () => {
   const { settings } = useCompanySettings();
-  const { permissions } = useProfile();
+  const { permissions, isUnlocked } = useProfile();
+  const canSeeFinancials = isUnlocked || (permissions?.canSeeFinancials === true);
   const pc = settings.primaryColor;
 
   const [orders, setOrders] = useState<OrderRecord[]>([]);
@@ -276,7 +277,7 @@ export const Dashboard: React.FC = () => {
             </div>
           </div>
           <p className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white leading-none">
-            {loading ? '—' : formatCurrency(metrics.totalBilledAllTime, permissions?.canSeeFinancials ?? true)}
+            {loading ? '—' : formatCurrency(metrics.totalBilledAllTime, canSeeFinancials)}
           </p>
           <p className="text-[11px] text-emerald-500 font-bold mt-2.5 flex items-center gap-1">
             <TrendingUp className="h-3.5 w-3.5" /> Total histórico recebido
@@ -292,7 +293,7 @@ export const Dashboard: React.FC = () => {
             </div>
           </div>
           <p className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white leading-none">
-            {loading ? '—' : formatCurrency(metrics.averageTicket, permissions?.canSeeFinancials ?? true)}
+            {loading ? '—' : formatCurrency(metrics.averageTicket, canSeeFinancials)}
           </p>
           <p className="text-[11px] text-slate-500 dark:text-zinc-400 font-medium mt-2.5">
             Média por pedido finalizado
@@ -419,7 +420,7 @@ export const Dashboard: React.FC = () => {
 
                   <div className="text-right shrink-0">
                     <p className="text-xs font-black text-slate-900 dark:text-white">
-                      {formatCurrency(client.totalSpent, permissions?.canSeeFinancials ?? true)}
+                      {formatCurrency(client.totalSpent, canSeeFinancials)}
                     </p>
                     {client.phone && (
                       <a
@@ -483,7 +484,7 @@ export const Dashboard: React.FC = () => {
                   minute: '2-digit'
                 });
 
-                const badgeDetails = formatOrderPaymentBadgeDetails(ord.payment_status, ord.total_amount, ord.notes, ord.payment_method);
+                const badgeDetails = formatOrderPaymentBadgeDetails(ord.payment_status, ord.total_amount, ord.notes, ord.payment_method, canSeeFinancials);
 
                 return (
                   <div
@@ -508,7 +509,7 @@ export const Dashboard: React.FC = () => {
                     <div className="flex items-center gap-3 shrink-0">
                       <div className="text-right hidden sm:block">
                         <p className="text-sm font-extrabold text-slate-900 dark:text-white">
-                          {formatCurrency(ord.total_amount || 0, permissions?.canSeeFinancials ?? true)}
+                          {formatCurrency(ord.total_amount || 0, canSeeFinancials)}
                         </p>
                       </div>
                       

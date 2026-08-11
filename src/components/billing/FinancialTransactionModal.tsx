@@ -34,10 +34,11 @@ export const FinancialTransactionModal: React.FC<FinancialTransactionModalProps>
     return d.toISOString().slice(0, 16);
   });
   const [notes, setNotes] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!description.trim()) {
       toast.error('Informe a descrição do lançamento.');
@@ -49,30 +50,39 @@ export const FinancialTransactionModal: React.FC<FinancialTransactionModalProps>
       return;
     }
 
+    // Data escolhida pelo usuário — permite lançar algo que aconteceu semana passada.
     const launchDate = customDate ? new Date(customDate).toISOString() : new Date().toISOString();
 
-    onSubmitTransaction({
-      type,
-      amount: val,
-      description: description.trim(),
-      category,
-      payment_method: paymentMethod,
-      date: launchDate,
-      expense_type: isIncome ? undefined : expenseType,
-      due_date: dueDate || undefined,
-      status: status,
-      notes: notes.trim() || undefined,
-    });
+    setIsSubmitting(true);
+    try {
+      await onSubmitTransaction({
+        type,
+        amount: val,
+        description: description.trim(),
+        category,
+        payment_method: paymentMethod,
+        date: launchDate,
+        expense_type: isIncome ? undefined : expenseType,
+        // Vale também para receita: entrada futura precisa de data marcada.
+        due_date: dueDate || undefined,
+        // Mantido para receita também — é o que segura a entrada em "A Receber"
+        // em vez de já cair no caixa.
+        status: status,
+        notes: notes.trim() || undefined,
+      });
 
-    toast.success(
-      isIncome
-        ? (status === 'paid' ? 'Receita quitada lançada no caixa!' : 'Entrada futura (A Receber) registrada com sucesso!')
-        : 'Despesa registrada com sucesso!'
-    );
-    onClose();
-    setDescription('');
-    setAmount('');
-    setNotes('');
+      toast.success(
+        isIncome
+          ? (status === 'paid' ? 'Receita quitada lançada no caixa!' : 'Entrada futura (A Receber) registrada com sucesso!')
+          : 'Despesa registrada com sucesso!'
+      );
+      onClose();
+      setDescription('');
+      setAmount('');
+      setNotes('');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -287,14 +297,15 @@ export const FinancialTransactionModal: React.FC<FinancialTransactionModalProps>
           <div className="pt-2">
             <button
               type="submit"
-              className={`w-full py-3.5 rounded-2xl font-black text-sm text-white shadow-xl transition-all active:scale-[0.98] flex items-center justify-center gap-2 ${
+              disabled={isSubmitting}
+              className={`w-full py-3.5 rounded-2xl font-black text-sm text-white shadow-xl transition-all active:scale-[0.98] flex items-center justify-center gap-2 disabled:opacity-50 ${
                 isIncome
                   ? 'bg-gradient-to-r from-emerald-600 to-teal-500 hover:brightness-110 shadow-emerald-500/25'
                   : 'bg-gradient-to-r from-rose-600 to-amber-600 hover:brightness-110 shadow-rose-500/25'
               }`}
             >
               <Check className="h-4 w-4" />
-              <span>{isIncome ? 'Lançar Receita no Caixa' : 'Lançar Despesa no Caixa'}</span>
+              <span>{isSubmitting ? 'Salvando...' : isIncome ? 'Lançar Receita no Caixa' : 'Lançar Despesa no Caixa'}</span>
             </button>
           </div>
         </form>

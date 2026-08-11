@@ -65,7 +65,8 @@ const PedidoGridCardComponent: React.FC<PedidoGridCardProps> = ({
   onConfigureVisibility,
 }) => {
   const { settings } = useCompanySettings();
-  const { permissions, role } = useProfile();
+  const { permissions, role, isUnlocked } = useProfile();
+  const canSeeFinancials = isUnlocked || (permissions?.canSeeFinancials === true);
   const [activeLightbox, setActiveLightbox] = useState<string | null>(null);
   const [showFiscalModal, setShowFiscalModal] = useState(false);
   const [showPrintOptions, setShowPrintOptions] = useState(false);
@@ -103,8 +104,8 @@ const PedidoGridCardComponent: React.FC<PedidoGridCardProps> = ({
 
   // Badge de Pagamento com Detalhes Limpos no Topo
   const paymentDetails = useMemo(() => {
-    return formatOrderPaymentBadgeDetails(order.payment_status, order.total_amount, order.notes, order.payment_method);
-  }, [order.payment_status, order.total_amount, order.notes, order.payment_method]);
+    return formatOrderPaymentBadgeDetails(order.payment_status, order.total_amount, order.notes, order.payment_method, canSeeFinancials);
+  }, [order.payment_status, order.total_amount, order.notes, order.payment_method, canSeeFinancials]);
 
   const paymentBadge = useMemo(() => {
     if (paymentDetails.status === 'paid') {
@@ -173,7 +174,7 @@ const PedidoGridCardComponent: React.FC<PedidoGridCardProps> = ({
     companyDocument: settings.document || undefined,
     pixKey: settings.pixKey || undefined,
     workingHours: settings.workingHours || undefined,
-    canSeeFinancials: permissions?.canSeeFinancials ?? true,
+    canSeeFinancials: canSeeFinancials,
   });
 
   const handlePrintPDF = (e: React.MouseEvent) => {
@@ -190,7 +191,7 @@ const PedidoGridCardComponent: React.FC<PedidoGridCardProps> = ({
   const handlePrintThermal = (e: React.MouseEvent) => {
     e.stopPropagation();
     try {
-      printThermalReceipt(getPrintData(), permissions?.canSeeFinancials ?? true);
+      printThermalReceipt(getPrintData(), canSeeFinancials);
       toast.success(`🖨️ Imprimindo Cupom (80mm) ${orderCode}...`);
     } catch (err) {
       console.error("Erro ao gerar Cupom:", err);
@@ -198,12 +199,10 @@ const PedidoGridCardComponent: React.FC<PedidoGridCardProps> = ({
     }
   };
 
-
-
   // Handler para Copiar Resumo Limpo
   const handleCopySummary = (e: React.MouseEvent) => {
     e.stopPropagation();
-    const canSee = permissions?.canSeeFinancials ?? true;
+    const canSee = canSeeFinancials;
     const summary = `*Pedido ${orderCode} - ${clientName}*\n` +
       `📋 *Descrição:* ${itemDesc}\n` +
       (canSee ? `💵 *Total:* R$ ${order.total_amount.toFixed(2)}\n` : '') +
@@ -426,7 +425,7 @@ const PedidoGridCardComponent: React.FC<PedidoGridCardProps> = ({
               ) : (
                 <>
                   <span className="text-lg font-black text-slate-900 dark:text-white tracking-tight">
-                    {formatCurrency(order.total_amount || 0, permissions?.canSeeFinancials ?? true)}
+                    {formatCurrency(order.total_amount || 0, canSeeFinancials)}
                   </span>
                   {paymentBadge.subtext && (
                     <p className={`text-[10px] font-bold mt-0.5 ${
@@ -603,7 +602,7 @@ const PedidoGridCardComponent: React.FC<PedidoGridCardProps> = ({
                 <div className="flex justify-between pt-2 border-t border-white/10 text-sm">
                   <span className="font-bold text-zinc-300">Valor Total da Nota:</span>
                   <span className="font-black text-emerald-400">
-                    {formatCurrency(order.total_amount || 0, permissions?.canSeeFinancials ?? true)}
+                    {formatCurrency(order.total_amount || 0, canSeeFinancials)}
                   </span>
                 </div>
               </div>
@@ -646,7 +645,7 @@ const PedidoGridCardComponent: React.FC<PedidoGridCardProps> = ({
                     {clientPhone && (
                       <button
                         onClick={() => {
-                          const msg = `Olá ${clientName}, segue a sua Nota Fiscal (NFS-e nº ${issuedNfeResult.nfeNumber}) referente ao pedido ${orderCode} no valor de ${formatCurrency(order.total_amount || 0, permissions?.canSeeFinancials ?? true)}.`;
+                          const msg = `Olá ${clientName}, segue a sua Nota Fiscal (NFS-e nº ${issuedNfeResult.nfeNumber}) referente ao pedido ${orderCode} no valor de ${formatCurrency(order.total_amount || 0, canSeeFinancials)}.`;
                           const link = getWhatsAppWebLink(clientPhone, msg);
                           window.open(link, '_blank');
                         }}

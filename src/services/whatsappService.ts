@@ -58,52 +58,69 @@ export function getWhatsAppWebLink(phone: string, message: string): string {
   return `https://wa.me/${cleanPhone}?text=${encodedText}`;
 }
 
+export interface WhatsAppCredentials {
+  apiUrl: string;
+  apiKey: string;
+  instanceId: string;
+}
+
 /**
- * Recupera as credenciais da Evolution API configuradas no perfil do usuário
+ * Recupera as credenciais da Evolution API, na ordem: perfil do usuário,
+ * configurações da empresa, perfil admin e por fim o cache local.
+ *
+ * Sem isso o envio direto por REST nunca acontece e tudo depende da Edge
+ * Function — que é justamente o caminho que não confirmava o envio do PDF.
  */
-async function getEvolutionCredentials() {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return null;
-
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('whatsapp_api_url, whatsapp_api_key, whatsapp_instance_id')
-    .eq('id', user.id)
-    .single();
-
-  const defaultInstanceId = `borda_${user.id.replace(/-/g, '').substring(0, 10)}`;
-
-  if (profile?.whatsapp_api_url && profile?.whatsapp_api_key) {
-    return {
-      apiUrl: profile.whatsapp_api_url.replace(/\/$/, ''),
-      apiKey: profile.whatsapp_api_key,
-      instanceId: profile.whatsapp_instance_id || defaultInstanceId
-    };
-  }
-
-  // 2. Busca em company_settings (tabela global acessível por todos os usuários)
+export async function getEvolutionCredentials(): Promise<WhatsAppCredentials | null> {
   try {
-    const { data: compSettings } = await supabase
-      .from('company_settings')
-      .select('whatsapp_api_url, whatsapp_api_key')
-      .maybeSingle();
+    const { data: { user } } = await supabase.auth.getUser();
 
-    if ((compSettings as any)?.whatsapp_api_url && (compSettings as any)?.whatsapp_api_key) {
+    // 1. Perfil do usuário atual
+    let userProfile: any = null;
+    if (user?.id) {
+      const { data: prof } = await supabase
+        .from('profiles')
+        .select('whatsapp_api_url, whatsapp_api_key, whatsapp_instance_id')
+        .eq('id', user.id)
+        .maybeSingle();
+      userProfile = prof;
+    }
+
+    const defaultInstanceId = user?.id
+      ? `borda_${user.id.replace(/-/g, '').substring(0, 10)}`
+      : '';
+    const instanceId = userProfile?.whatsapp_instance_id || defaultInstanceId;
+
+    if (userProfile?.whatsapp_api_url && userProfile?.whatsapp_api_key) {
       return {
-        apiUrl: (compSettings as any).whatsapp_api_url.replace(/\/$/, ''),
-        apiKey: (compSettings as any).whatsapp_api_key,
-        instanceId: profile?.whatsapp_instance_id || defaultInstanceId
+        apiUrl: String(userProfile.whatsapp_api_url).replace(/\/$/, ''),
+        apiKey: userProfile.whatsapp_api_key,
+        instanceId,
       };
     }
-  } catch (e) {
-    console.warn('[WhatsApp Credentials] Falha ao consultar company_settings:', e);
-  }
 
-  // 3. Fallback: busca em admin profiles
-  try {
+    // 2. Configurações da empresa (tabela global)
+    try {
+      const { data: comp } = await supabase
+        .from('company_settings')
+        .select('whatsapp_api_url, whatsapp_api_key')
+        .maybeSingle();
+
+      if ((comp as any)?.whatsapp_api_url && (comp as any)?.whatsapp_api_key) {
+        return {
+          apiUrl: String((comp as any).whatsapp_api_url).replace(/\/$/, ''),
+          apiKey: (comp as any).whatsapp_api_key,
+          instanceId,
+        };
+      }
+    } catch (e) {
+      console.warn('[WhatsApp Credentials] company_settings indisponível:', e);
+    }
+
+    // 3. Perfil admin que já tenha as credenciais preenchidas
     const { data: adminProfile } = await supabase
       .from('profiles')
-      .select('id, whatsapp_api_url, whatsapp_api_key, whatsapp_instance_id')
+      .select('whatsapp_api_url, whatsapp_api_key, whatsapp_instance_id')
       .not('whatsapp_api_url', 'is', null)
       .not('whatsapp_api_key', 'is', null)
       .limit(1)
@@ -111,27 +128,25 @@ async function getEvolutionCredentials() {
 
     if (adminProfile?.whatsapp_api_url && adminProfile?.whatsapp_api_key) {
       return {
-        apiUrl: adminProfile.whatsapp_api_url.replace(/\/$/, ''),
+        apiUrl: String(adminProfile.whatsapp_api_url).replace(/\/$/, ''),
         apiKey: adminProfile.whatsapp_api_key,
-        instanceId: profile?.whatsapp_instance_id || defaultInstanceId
+        instanceId,
       };
     }
-  } catch (e) {
-    console.warn('[WhatsApp Credentials] RLS bloqueou consulta a admin profiles:', e);
-  }
 
-  // 4. Fallback final: localStorage
-  try {
+    // 4. Cache local
     const localUrl = localStorage.getItem('borda_whatsapp_api_url');
     const localKey = localStorage.getItem('borda_whatsapp_api_key');
     if (localUrl && localKey) {
       return {
         apiUrl: localUrl.replace(/\/$/, ''),
         apiKey: localKey,
-        instanceId: profile?.whatsapp_instance_id || defaultInstanceId
+        instanceId,
       };
     }
-  } catch (e) {}
+  } catch (e) {
+    console.warn('[WhatsApp Credentials] Falha ao recuperar credenciais:', e);
+  }
 
   return null;
 }
@@ -432,10 +447,20 @@ export async function sendEvolutionText(phone: string, message: string): Promise
       const resData = await resp.json().catch(() => ({}));
       console.log('📲 [WhatsApp REST Direto Response]:', { status: resp.status, resData });
 
-      if (resp.ok && (resData.key || resData.status === 'PENDING' || resData.status === 'SUCCESS' || resData.status === 'SERVER_ACK')) {
+      if (resp.ok && (resData.key || resData.id || resData.messageId || resData.status === 'PENDING' || resData.status === 'SUCCESS' || resData.status === 'SERVER_ACK')) {
         return resData;
       }
+
+      if (resData.error || resData.message || resData.status === 'ERROR' || resData.status === 'close' || resData.state === 'close') {
+        const errMsg = typeof resData.message === 'string'
+          ? resData.message
+          : (Array.isArray(resData.message) ? resData.message.join(', ') : (resData.message?.message || resData.error || `Erro Evolution API (${resp.status})`));
+        throw new Error(errMsg);
+      }
     } catch (restErr) {
+      if (restErr instanceof Error && !restErr.message.includes('fetch')) {
+        throw restErr; // Re-throw erros lógicos de conexão/rejeição da Evolution
+      }
       console.warn('⚠️ [WhatsApp REST Direto Falhou]:', restErr);
     }
   }
@@ -458,24 +483,68 @@ export async function sendEvolutionText(phone: string, message: string): Promise
 
   if (error) {
     console.error('[WhatsApp] Erro de comunicação com a Edge Function:', error);
-    throw new Error(error.message || 'Erro de rede na Edge Function');
+    throw new Error(error.message || 'Falha na conexão com o servidor de mensagens WhatsApp.');
   }
 
   // Erros explícitos da Evolution API
-  if (data && (data.error || data.status === 'ERROR' || data.status === 'close' || data.state === 'close')) {
+  if (data && (data.error || data.status === 'ERROR' || data.status === 'close' || data.state === 'close' || data.status === 'DISCONNECTED')) {
     console.error('[WhatsApp] Erro retornado pela Evolution API:', data);
     const errMsg = typeof data.message === 'string'
       ? data.message
-      : (Array.isArray(data.message) ? data.message.join(', ') : (data.message?.message || data.error || 'Erro ao enviar no WhatsApp.'));
+      : (Array.isArray(data.message) ? data.message.join(', ') : (data.message?.message || data.error || 'WhatsApp Desconectado ou Erro no Servidor.'));
     throw new Error(errMsg);
   }
 
-  if (data && (data.key?.id || data.key || data.status === 'PENDING' || data.status === 'SERVER_ACK' || data.status === 'SUCCESS' || data.id)) {
+  if (data && (data.key?.id || data.key || data.id || data.messageId || data.status === 'PENDING' || data.status === 'SERVER_ACK' || data.status === 'SUCCESS')) {
     console.log('✅ [WhatsApp] Mensagem entregue ao socket da Evolution API com sucesso!', data);
     return data;
   }
 
-  return data || { success: true };
+  throw new Error(data?.message || 'Servidor WhatsApp não confirmou a entrega da mensagem. Verifique a conexão com a Evolution API.');
+}
+
+/**
+ * Converte Base64 para Uint8Array e faz upload temporário para o Supabase Storage
+ * obtendo uma URL assinada (Signed URL) idêntica à estratégia do DIRECT-AI-GB.
+ * Retorna a URL e o caminho temporário para a faxina/exclusão do arquivo.
+ */
+export async function uploadPdfToStorageAndGetUrl(base64Data: string, fileName: string): Promise<{ url: string; tempPath: string } | null> {
+  try {
+    const rawBase64 = base64Data.replace(/^data:application\/pdf;base64,/, '');
+    const binaryString = window.atob(rawBase64);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+
+    const tempPath = `temp_${Date.now()}_${fileName.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+    const { data: uploadData, error: uploadError } = await supabase.storage
+      .from('order-pdfs')
+      .upload(tempPath, bytes, { contentType: 'application/pdf', upsert: true });
+
+    if (uploadError) {
+      console.warn('[WhatsApp Storage Upload Warning]:', uploadError);
+      return null;
+    }
+
+    const { data: signedData } = await supabase.storage
+      .from('order-pdfs')
+      .createSignedUrl(tempPath, 3600);
+
+    let finalUrl = signedData?.signedUrl;
+
+    if (!finalUrl) {
+      const { data: publicData } = supabase.storage
+        .from('order-pdfs')
+        .getPublicUrl(tempPath);
+      finalUrl = publicData?.publicUrl;
+    }
+
+    return finalUrl ? { url: finalUrl, tempPath } : null;
+  } catch (err) {
+    console.warn('[WhatsApp Storage Error]:', err);
+    return null;
+  }
 }
 
 /**
@@ -511,55 +580,95 @@ export async function sendEvolutionMedia(options: WhatsAppSendOptions): Promise<
   const fileName = options.mediaName || (isImage ? 'imagem.jpg' : 'Orcamento.pdf');
   const mimetype = isImage ? 'image/jpeg' : 'application/pdf';
 
-  // A Evolution API v2 não aceita Data URI ("data:application/pdf;base64,...").
-  // Ela espera OU uma URL pública OU o base64 puro. Removemos o prefixo se existir.
-  const rawMedia = options.mediaUrl || '';
-  const media = rawMedia.startsWith('data:') ? rawMedia.split(',')[1] || '' : rawMedia;
-  if (!media) {
-    throw new Error('Arquivo PDF não foi gerado corretamente. Tente novamente.');
-  }
+  // Tenta gerar Signed URL via Supabase Storage (igual ao DIRECT-AI-GB) se for base64.
+  // Mandar URL em vez de megabytes de base64 é mais leve e mais confiável.
+  let finalMediaUrl = options.mediaUrl || '';
+  let tempPathToClean: string | null = null;
 
-  let lastApiMessage = '';
-
-  // 1. Envio REST direto (mesmo caminho que funciona no envio de texto)
-  if (creds?.apiUrl && creds?.apiKey) {
-    try {
-      console.log(`📄 [WhatsApp Mídia REST Direto] Enviando "${fileName}" para ${formattedPhone} via [${targetInstance}]...`);
-      const resp = await fetch(`${creds.apiUrl}/message/sendMedia/${targetInstance}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', apikey: creds.apiKey },
-        body: JSON.stringify({
-          number: formattedPhone,
-          mediatype: isImage ? 'image' : 'document',
-          mimetype,
-          fileName,
-          caption: options.message,
-          media
-        })
-      });
-
-      const resData = await resp.json().catch(() => ({}));
-      console.log('📄 [WhatsApp Mídia REST Response]:', { status: resp.status, resData });
-
-      if (resp.ok && !resData?.error) {
-        return resData;
-      }
-      lastApiMessage = extractEvolutionError(resData) || `Evolution API respondeu ${resp.status}.`;
-    } catch (restErr: any) {
-      console.warn('⚠️ [WhatsApp Mídia REST Falhou]:', restErr);
-      lastApiMessage = restErr?.message || '';
+  if (finalMediaUrl.startsWith('data:') || finalMediaUrl.length > 500) {
+    const uploadResult = await uploadPdfToStorageAndGetUrl(finalMediaUrl, fileName);
+    if (uploadResult) {
+      finalMediaUrl = uploadResult.url;
+      tempPathToClean = uploadResult.tempPath;
+      console.log('📄 [WhatsApp PDF] Signed URL gerada com sucesso:', finalMediaUrl);
+    } else if (finalMediaUrl.startsWith('data:')) {
+      // Sem Storage, cai para base64 puro — a Evolution não aceita Data URI.
+      finalMediaUrl = finalMediaUrl.split(',')[1] || '';
     }
   }
 
-  // 2. Fallback via Edge Function whatsapp-proxy
+  if (!finalMediaUrl) {
+    throw new Error('Arquivo PDF não foi gerado corretamente. Tente novamente.');
+  }
+
+  const scheduleCleanup = () => {
+    if (tempPathToClean) {
+      const pathToRemove = tempPathToClean;
+      tempPathToClean = null;
+      setTimeout(() => {
+        supabase.storage
+          .from('order-pdfs')
+          .remove([pathToRemove])
+          .then(() => console.log(`🧹 [WhatsApp Storage] PDF temporário limpo com sucesso: ${pathToRemove}`))
+          .catch(() => {});
+      }, 60000); // 60s: o servidor da Evolution precisa baixar o arquivo antes de sumir
+    }
+  };
+
+  let lastApiMessage = '';
+
   try {
+    // 1. Tenta envio via REST direto se houver credenciais
+    if (creds && creds.apiUrl && creds.apiKey) {
+      const inst = targetInstance;
+      try {
+        // Payload no formato plano da Evolution API v2 — o mesmo que o envio de
+        // texto usa e que funciona. Antes ia junto um bloco `mediaMessage`
+        // aninhado (formato v1); com os dois no mesmo corpo a v2 rejeita.
+        const payload = {
+          number: formattedPhone,
+          media: finalMediaUrl,
+          mediatype: isImage ? 'image' : 'document',
+          mimetype,
+          fileName,
+          caption: options.message
+        };
+
+        console.log('📲 [WhatsApp Media REST Direct Payload]:', { url: `${creds.apiUrl}/message/sendMedia/${inst}`, payload });
+
+        const resp = await fetch(`${creds.apiUrl}/message/sendMedia/${inst}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', apikey: creds.apiKey },
+          body: JSON.stringify(payload)
+        });
+
+        const resData = await resp.json().catch(() => ({}));
+        console.log('📲 [WhatsApp Media REST Direct Response]:', { status: resp.status, resData });
+
+        // Aceita qualquer 2xx sem erro explícito. Exigir key/id/messageId era o
+        // que fazia um envio bem-sucedido cair no "não confirmou o envio".
+        if (resp.ok && !resData?.error && resData?.status !== 'ERROR') {
+          scheduleCleanup();
+          return resData;
+        }
+
+        lastApiMessage = extractEvolutionError(resData)
+          || `Evolution API respondeu ${resp.status} ${resp.statusText}.`;
+      } catch (err: any) {
+        console.warn('[WhatsApp] Envio REST direto de mídia falhou, tentando proxy...', err);
+        lastApiMessage = err?.message || lastApiMessage;
+      }
+    }
+
+    // 2. Fallback via Edge Function
     const { data, error } = await supabase.functions.invoke('whatsapp-proxy', {
       body: {
         action: 'send-media',
         phone: formattedPhone,
         message: options.message,
-        mediaUrl: options.mediaUrl,
-        media,
+        mediaUrl: finalMediaUrl,
+        media: finalMediaUrl,
+        mediaBase64: options.mediaUrl,
         mimetype,
         mediaType: isImage ? 'image' : 'document',
         mediaName: fileName,
@@ -569,20 +678,24 @@ export async function sendEvolutionMedia(options: WhatsAppSendOptions): Promise<
 
     if (error) {
       lastApiMessage = error.message || lastApiMessage;
-    } else if (data && !data.error && data.status !== 'ERROR') {
+    } else if (data && !data.error && data.status !== 'ERROR' && data.state !== 'close') {
+      scheduleCleanup();
       return data;
     } else if (data) {
       lastApiMessage = extractEvolutionError(data) || lastApiMessage;
     }
-  } catch (proxyErr: any) {
-    lastApiMessage = proxyErr?.message || lastApiMessage;
-  }
 
-  throw new Error(
-    lastApiMessage
-      ? `Falha ao enviar o PDF: ${lastApiMessage}`
-      : 'Não foi possível enviar o PDF pelo servidor WhatsApp. Tente novamente em instantes.'
-  );
+    // Chegou aqui: nem o REST direto nem o proxy confirmaram. Mostra o erro real
+    // da API em vez do genérico "verifique se o celular está conectado", que
+    // acusava desconexão mesmo com o WhatsApp pareado.
+    throw new Error(
+      lastApiMessage
+        ? `Falha ao enviar o PDF: ${lastApiMessage}`
+        : 'Não foi possível enviar o PDF pelo servidor WhatsApp. Tente novamente em instantes.'
+    );
+  } finally {
+    scheduleCleanup();
+  }
 }
 
 /**

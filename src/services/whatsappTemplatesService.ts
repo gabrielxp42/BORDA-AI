@@ -1,4 +1,5 @@
 import { formatWhatsAppNumber, sendEvolutionText } from './whatsappService';
+import { supabase } from '@/integrations/supabase/client';
 
 export interface WhatsAppTemplate {
   id: string;
@@ -143,12 +144,53 @@ export function getStoredTemplates(): WhatsAppTemplate[] {
   return DEFAULT_TEMPLATES;
 }
 
-export function saveStoredTemplates(templates: WhatsAppTemplate[]): void {
-  localStorage.setItem(STORAGE_TEMPLATES_KEY, JSON.stringify(templates));
+export async function fetchCloudTemplates(): Promise<WhatsAppTemplate[]> {
+  try {
+    const { data } = await supabase
+      .from('company_settings')
+      .select('whatsapp_templates')
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (data?.whatsapp_templates && Array.isArray(data.whatsapp_templates) && data.whatsapp_templates.length > 0) {
+      localStorage.setItem(STORAGE_TEMPLATES_KEY, JSON.stringify(data.whatsapp_templates));
+      return data.whatsapp_templates as WhatsAppTemplate[];
+    }
+  } catch (err) {
+    console.warn('[WhatsApp Templates] Erro ao buscar templates da nuvem:', err);
+  }
+  return getStoredTemplates();
 }
 
-export function resetStoredTemplates(): WhatsAppTemplate[] {
+export async function saveStoredTemplates(templates: WhatsAppTemplate[]): Promise<void> {
+  localStorage.setItem(STORAGE_TEMPLATES_KEY, JSON.stringify(templates));
+
+  try {
+    const { data } = await supabase
+      .from('company_settings')
+      .select('id')
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (data?.id) {
+      await supabase
+        .from('company_settings')
+        .update({
+          whatsapp_templates: templates,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', data.id);
+    }
+  } catch (err) {
+    console.warn('[WhatsApp Templates] Erro ao salvar templates na nuvem:', err);
+  }
+}
+
+export async function resetStoredTemplates(): Promise<WhatsAppTemplate[]> {
   localStorage.setItem(STORAGE_TEMPLATES_KEY, JSON.stringify(DEFAULT_TEMPLATES));
+  await saveStoredTemplates(DEFAULT_TEMPLATES);
   return DEFAULT_TEMPLATES;
 }
 

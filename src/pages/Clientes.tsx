@@ -12,7 +12,8 @@ import { printClientStatementPDF } from '@/services/pdfGenerator';
 import { sendEvolutionText, getWhatsAppWebLink } from '@/services/whatsappService';
 
 export const Clientes: React.FC = () => {
-  const { permissions } = useProfile();
+  const { permissions, isUnlocked } = useProfile();
+  const canSeeFinancials = isUnlocked || (permissions?.canSeeFinancials === true);
 
   const { settings } = useCompanySettings();
   const [clients, setClients] = useState<Client[]>([]);
@@ -358,7 +359,7 @@ export const Clientes: React.FC = () => {
                       }}
                     >
                       <Clock className="h-3.5 w-3.5 stroke-[2.5]" />
-                      Pendente: {formatCurrency(clientPendingMap[c.id], permissions?.canSeeFinancials ?? true)}
+                      Pendente: {formatCurrency(clientPendingMap[c.id], canSeeFinancials)}
                     </span>
 
                     <button

@@ -157,10 +157,12 @@ export const CompanySettingsProvider: React.FC<{ children: React.ReactNode }> = 
 
     const fetchUserSettings = async (userId: string) => {
     try {
+      // Busca as configurações principais da empresa (compartilhadas entre todas as máquinas do estabelecimento)
       let { data } = await supabase
         .from('company_settings')
         .select('*')
-        .eq('id', userId)
+        .order('updated_at', { ascending: false })
+        .limit(1)
         .maybeSingle();
 
       if (data) {
