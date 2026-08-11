@@ -1,5 +1,5 @@
 import React from 'react';
-import { Plus, MessageCircle } from 'lucide-react';
+import { Plus, MessageCircle, Pencil, Check } from 'lucide-react';
 import { Droppable } from '@hello-pangea/dnd';
 
 interface KanbanColumnProps {
@@ -12,6 +12,14 @@ interface KanbanColumnProps {
   onAddOrderClick: () => void;
   isDraggingOver: boolean;
   children: React.ReactNode;
+  /** Renome da fila — só o chefe enxerga o lápis. */
+  canRename?: boolean;
+  isEditing?: boolean;
+  editingValue?: string;
+  onStartRename?: () => void;
+  onChangeRename?: (value: string) => void;
+  onConfirmRename?: () => void;
+  onCancelRename?: () => void;
 }
 
 export const KanbanColumn: React.FC<KanbanColumnProps> = ({
@@ -23,7 +31,14 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
   onToggleNotifications,
   onAddOrderClick,
   isDraggingOver,
-  children
+  children,
+  canRename = false,
+  isEditing = false,
+  editingValue = '',
+  onStartRename,
+  onChangeRename,
+  onConfirmRename,
+  onCancelRename
 }) => {
   return (
     <div className={`glass-panel p-3 sm:p-4 rounded-3xl space-y-3 flex flex-col min-h-[300px] md:min-h-[580px] transition-all duration-200 border border-slate-200/80 dark:border-white/10 bg-slate-100/40 dark:bg-white/[0.02] min-w-[270px] sm:min-w-[300px] flex-1 ${
@@ -37,7 +52,46 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
             <span className="h-5.5 w-5.5 rounded-full bg-black/10 dark:bg-white/10 flex items-center justify-center text-[10px] font-black shrink-0">
               {ordersCount}
             </span>
-            <span className="font-extrabold text-xs uppercase tracking-widest truncate">{title}</span>
+
+            {isEditing ? (
+              <div className="flex items-center gap-1 min-w-0">
+                <input
+                  autoFocus
+                  value={editingValue}
+                  onChange={(e) => onChangeRename?.(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') onConfirmRename?.();
+                    if (e.key === 'Escape') onCancelRename?.();
+                  }}
+                  onBlur={() => onConfirmRename?.()}
+                  maxLength={28}
+                  className="w-32 sm:w-36 bg-white/80 dark:bg-black/50 border border-black/20 dark:border-white/25 rounded-lg px-2 py-1 text-[11px] font-black tracking-wide text-slate-900 dark:text-white outline-none focus:border-purple-500"
+                />
+                <button
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => onConfirmRename?.()}
+                  title="Salvar nome da fila"
+                  className="p-1 rounded-lg bg-black/10 dark:bg-white/15 hover:bg-black/20 dark:hover:bg-white/25 transition-colors shrink-0"
+                >
+                  <Check className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ) : (
+              <span className="flex items-center gap-1 min-w-0 group/title">
+                <span className="font-extrabold text-xs uppercase tracking-widest truncate">{title}</span>
+                {canRename && (
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); onStartRename?.(); }}
+                    title="Renomear esta fila"
+                    className="p-1 rounded-md shrink-0 opacity-0 group-hover/title:opacity-100 focus:opacity-100 hover:bg-black/10 dark:hover:bg-white/20 transition-all"
+                  >
+                    <Pencil className="h-3 w-3" />
+                  </button>
+                )}
+              </span>
+            )}
           </div>
           <button
             type="button"

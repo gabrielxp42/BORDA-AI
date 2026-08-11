@@ -61,9 +61,9 @@ export const GabiAutomations: React.FC = () => {
     toast.success('Todos os modelos de mensagens salvos com sucesso!');
   };
 
-  const handleResetDefaults = () => {
+  const handleResetDefaults = async () => {
     if (window.confirm('Deseja restaurar os modelos de mensagens padrão da oficina?')) {
-      const reseted = resetStoredTemplates();
+      const reseted = await resetStoredTemplates();
       setTemplates(reseted);
       toast.info('Modelos restaurados para o padrão.');
     }

@@ -116,11 +116,14 @@ export const CloudSyncModal: React.FC = () => {
             created_at: t.created_at,
           }));
 
+          // Upsert idempotente: se o lançamento já existe na nuvem (mesmo id),
+          // ele é ignorado em vez de estourar 409 e re-tentar a migração para sempre.
           const { error } = await supabase
             .from('financial_transactions')
-            .insert(rows);
+            .upsert(rows, { onConflict: 'id', ignoreDuplicates: true });
 
           if (error) {
+            console.error('[CloudSync] Falha ao migrar lote de lançamentos:', error);
             errors += batch.length;
           } else {
             uploaded += batch.length;

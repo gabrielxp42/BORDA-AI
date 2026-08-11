@@ -253,12 +253,12 @@ export const CollectionActionModal: React.FC<CollectionActionModalProps> = ({
             companySubtitle: settings.systemSubtitle,
             companyLogo: settings.logoUrl,
             companyColor: settings.primaryColor,
-            companyPhone: settings.phone,
-            companyEmail: settings.email,
-            companyAddress: settings.address,
-            companyDocument: settings.document,
-            pixKey: settings.pixKey,
-            workingHours: settings.workingHours,
+            companyPhone: settings.phone ?? undefined,
+            companyEmail: settings.email ?? undefined,
+            companyAddress: settings.address ?? undefined,
+            companyDocument: settings.document ?? undefined,
+            pixKey: settings.pixKey ?? undefined,
+            workingHours: settings.workingHours ?? undefined,
             canSeeFinancials: true
           });
 

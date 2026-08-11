@@ -45,6 +45,8 @@ interface Order {
   clients?: { name: string; phone?: string; company_name?: string };
   items?: OrderItem[];
   order_items?: OrderItem[];
+  /** Perfis autorizados a ver o pedido; vazio/ausente = visível para todos. */
+  visible_profile_ids?: string[];
 }
 
 const formatPaymentMethod = (method?: string): string => {

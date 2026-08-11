@@ -38,6 +38,8 @@ interface Order {
   clients?: { name: string; phone?: string; company_name?: string };
   items?: OrderItem[];
   order_items?: OrderItem[];
+  /** Perfis autorizados a ver o pedido; vazio/ausente = visível para todos. */
+  visible_profile_ids?: string[];
 }
 
 interface PedidoGridCardProps {
@@ -109,6 +111,7 @@ const PedidoGridCardComponent: React.FC<PedidoGridCardProps> = ({
     if (paymentDetails.status === 'paid') {
       return {
         label: paymentDetails.shortLabel,
+        subtext: paymentDetails.badgeSubtext,
         className: 'border-emerald-500/40 bg-emerald-500/10 text-emerald-400 shadow-sm shadow-emerald-500/10',
         icon: CheckCircle2
       };
@@ -116,16 +119,31 @@ const PedidoGridCardComponent: React.FC<PedidoGridCardProps> = ({
     if (paymentDetails.status === 'half_paid') {
       return {
         label: paymentDetails.shortLabel,
+        subtext: paymentDetails.badgeSubtext,
         className: 'border-blue-500/40 bg-blue-500/10 text-blue-400 shadow-sm shadow-blue-500/10',
         icon: HandCoins
       };
     }
     return {
       label: paymentDetails.shortLabel,
+      subtext: paymentDetails.badgeSubtext,
       className: 'border-rose-500/40 bg-rose-500/10 text-rose-400 shadow-sm shadow-rose-500/10',
       icon: AlertCircle
     };
   }, [paymentDetails]);
+
+  // Badge da Etapa no Kanban do Pedido
+  const kanbanStepBadge = useMemo(() => {
+    const statusMap: Record<string, { label: string; className: string }> = {
+      pending: { label: '📌 Pendente', className: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30' },
+      design: { label: '🎨 Pronto p/ Produção', className: 'bg-blue-500/10 text-blue-400 border-blue-500/30' },
+      embroidering: { label: '🧵 Na Máquina', className: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30' },
+      finishing: { label: '✂️ Acabamento', className: 'bg-purple-500/10 text-purple-400 border-purple-500/30' },
+      completed: { label: '📦 Pronto p/ Retirada', className: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' },
+      delivered: { label: '✅ Entregue', className: 'bg-zinc-500/10 text-zinc-300 border-zinc-500/30' },
+    };
+    return statusMap[order.status] || { label: `📍 ${order.status}`, className: 'bg-white/5 text-zinc-300 border-white/10' };
+  }, [order.status]);
 
   // Gerador Impressão Direta PDF Ordem de Serviço com Identidade Visual Total
   const getPrintData = () => ({
@@ -257,6 +275,14 @@ const PedidoGridCardComponent: React.FC<PedidoGridCardProps> = ({
                   <Eye className="h-3.5 w-3.5" />
                 </button>
               )}
+
+              {/* Badge da Etapa do Kanban */}
+              <div 
+                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-wider border ${kanbanStepBadge.className}`}
+                title="Etapa atual da produção no Kanban"
+              >
+                <span>{kanbanStepBadge.label}</span>
+              </div>
 
               {/* Badge de Status Financeiro (Pill de 1 Linha Limpa) */}
               <div 

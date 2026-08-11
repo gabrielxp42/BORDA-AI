@@ -420,3 +420,154 @@ export const printClientStatementPDF = (data: ClientStatementPDFData) => {
     }
   }, 400);
 };
+
+export interface PeriodFinancialReportData {
+  startDate: string;
+  endDate: string;
+  totalIncome: number;
+  totalExpense: number;
+  netProfit: number;
+  companyName?: string;
+  companyColor?: string;
+  dailyEntries: Array<{
+    date: string;
+    description: string;
+    category: string;
+    type: 'income' | 'expense';
+    amount: number;
+    paymentMethod?: string;
+  }>;
+}
+
+export const printPeriodFinancialReportPDF = (data: PeriodFinancialReportData) => {
+  const companyName = data.companyName || 'BORDA AI';
+  const brandColor = data.companyColor || '#8B5CF6';
+  const formattedEmissao = new Date().toLocaleDateString('pt-BR');
+  const fmt = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
+
+  const existingFrame = document.getElementById('borda-print-iframe');
+  if (existingFrame) existingFrame.remove();
+
+  const iframe = document.createElement('iframe');
+  iframe.id = 'borda-print-iframe';
+  iframe.style.position = 'fixed';
+  iframe.style.right = '0';
+  iframe.style.bottom = '0';
+  iframe.style.width = '0';
+  iframe.style.height = '0';
+  iframe.style.border = '0';
+  iframe.style.visibility = 'hidden';
+  document.body.appendChild(iframe);
+
+  const frameDoc = iframe.contentWindow?.document;
+  if (!frameDoc) return;
+
+  const html = `
+    <!DOCTYPE html>
+    <html lang="pt-BR">
+    <head>
+      <meta charset="UTF-8">
+      <title>Relatório Financeiro - ${data.startDate} até ${data.endDate}</title>
+      <style>
+        * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { margin: 0; padding: 24px; color: #1e293b; font-size: 12px; }
+        .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 3px solid ${brandColor}; padding-bottom: 14px; margin-bottom: 18px; }
+        .title { font-size: 18px; font-weight: 900; color: #0f172a; text-transform: uppercase; }
+        .subtitle { font-size: 11px; color: #64748b; font-weight: 600; }
+        
+        .kpi-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px; }
+        .kpi-card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px; }
+        .kpi-label { font-size: 10px; font-weight: 800; text-transform: uppercase; color: #64748b; }
+        .kpi-val { font-size: 16px; font-weight: 900; margin-top: 4px; }
+        
+        table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+        th { background: #f1f5f9; text-align: left; padding: 8px 10px; font-size: 10px; font-weight: 800; text-transform: uppercase; color: #475569; border-bottom: 2px solid #cbd5e1; }
+        td { padding: 8px 10px; border-bottom: 1px solid #e2e8f0; font-size: 11px; }
+        .text-right { text-align: right; }
+        .text-center { text-align: center; }
+        .font-bold { font-weight: 700; }
+        .income-tag { color: #16a34a; font-weight: 800; }
+        .expense-tag { color: #dc2626; font-weight: 800; }
+        .footer { margin-top: 24px; text-align: center; font-size: 10px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 12px; }
+      </style>
+    </head>
+    <body>
+      <div class="header">
+        <div>
+          <div class="title">${companyName} — Relatório Financeiro Geral</div>
+          <div class="subtitle">Período Selecionado: <strong>${data.startDate}</strong> até <strong>${data.endDate}</strong></div>
+        </div>
+        <div style="text-align: right;">
+          <div style="font-weight: 800; font-size: 10px; color: #64748b;">DATA DE EMISSÃO</div>
+          <div style="font-weight: 700;">${formattedEmissao}</div>
+        </div>
+      </div>
+
+      <div class="kpi-grid">
+        <div class="kpi-card" style="border-left: 4px solid #16a34a;">
+          <div class="kpi-label">Total de Entradas</div>
+          <div class="kpi-val" style="color: #16a34a;">${fmt(data.totalIncome)}</div>
+        </div>
+        <div class="kpi-card" style="border-left: 4px solid #dc2626;">
+          <div class="kpi-label">Total de Saídas / Custos</div>
+          <div class="kpi-val" style="color: #dc2626;">${fmt(data.totalExpense)}</div>
+        </div>
+        <div class="kpi-card" style="border-left: 4px solid ${brandColor};">
+          <div class="kpi-label">Resultado Líquido do Período</div>
+          <div class="kpi-val" style="color: ${data.netProfit >= 0 ? '#0284c7' : '#dc2626'};">${fmt(data.netProfit)}</div>
+        </div>
+      </div>
+
+      <h4 style="font-size: 12px; font-weight: 900; text-transform: uppercase; color: #334155; margin-bottom: 8px;">
+        📋 Histórico Detalhado de Lançamentos do Período (${data.dailyEntries.length} itens)
+      </h4>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Data/Hora</th>
+            <th>Descrição do Lançamento</th>
+            <th>Categoria</th>
+            <th>Método</th>
+            <th class="text-right">Tipo</th>
+            <th class="text-right">Valor</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${data.dailyEntries.map(e => `
+            <tr>
+              <td>${new Date(e.date).toLocaleDateString('pt-BR')} ${new Date(e.date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</td>
+              <td class="font-bold">${e.description}</td>
+              <td>${e.category}</td>
+              <td>${e.paymentMethod ? e.paymentMethod.toUpperCase() : 'N/A'}</td>
+              <td class="text-right ${e.type === 'income' ? 'income-tag' : 'expense-tag'}">
+                ${e.type === 'income' ? '+ ENTRADA' : '- SAÍDA'}
+              </td>
+              <td class="text-right font-bold ${e.type === 'income' ? 'income-tag' : 'expense-tag'}">
+                ${fmt(e.amount)}
+              </td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+
+      <div class="footer">
+        ${companyName} • Documento Financeiro Consolidado Gerado via BORDA AI
+      </div>
+    </body>
+    </html>
+  `;
+
+  frameDoc.open();
+  frameDoc.write(html);
+  frameDoc.close();
+
+  setTimeout(() => {
+    try {
+      iframe.contentWindow?.focus();
+      iframe.contentWindow?.print();
+    } catch (err) {
+      console.error('Erro ao imprimir relatório financeiro:', err);
+    }
+  }, 400);
+};

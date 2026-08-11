@@ -44,5 +44,6 @@ export interface FinancialTransaction {
   status?: 'pending' | 'paid' | 'overdue';
   order_id?: string;
   notes?: string;
+  created_by_profile?: string;
   created_at: string;
 }

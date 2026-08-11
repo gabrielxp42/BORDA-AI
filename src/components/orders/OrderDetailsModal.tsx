@@ -91,7 +91,7 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                 .select('id')
                 .ilike('name', `%${matrixName}%`)
                 .limit(1)
-                .single();
+                .maybeSingle();
               if (mx?.id) {
                 const { data: ver } = await supabase
                   .from('matrix_versions')
@@ -766,6 +766,24 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                           : format(new Date(order.updated_at || order.created_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })
                         }
                       </strong>
+                    </div>
+                  )}
+
+                  {/* Quando a baixa foi dada no sistema e por quem — o cliente pode
+                      ter pago na sexta e a baixa só ter saído na segunda. */}
+                  {metadata?.registeredAt && (
+                    <div className="flex justify-between items-center text-slate-600 dark:text-zinc-400">
+                      <span>Baixa registrada em:</span>
+                      <strong className="text-slate-900 dark:text-zinc-200">
+                        {format(new Date(metadata.registeredAt), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
+                      </strong>
+                    </div>
+                  )}
+
+                  {metadata?.paidByOperator && (
+                    <div className="flex justify-between items-center text-slate-600 dark:text-zinc-400">
+                      <span>Registrado por:</span>
+                      <strong className="text-slate-900 dark:text-zinc-200">{metadata.paidByOperator}</strong>
                     </div>
                   )}
 

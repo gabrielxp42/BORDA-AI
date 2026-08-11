@@ -125,7 +125,7 @@ export const WhatsAppConnectionCard: React.FC = () => {
           stopPolling();
         } else if (typeof res.qrcode === 'string' && res.qrcode.length > 50) {
           setQrCode(res.qrcode);
-        } else if (res.qrcode?.base64) {
+        } else if (typeof res.qrcode === 'object' && res.qrcode?.base64) {
           setQrCode(res.qrcode.base64);
         }
       } catch (err) {

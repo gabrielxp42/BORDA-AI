@@ -1,4 +1,5 @@
 import { formatWhatsAppNumber, sendEvolutionText } from './whatsappService';
+import { supabase } from '@/integrations/supabase/client';
 
 export interface WhatsAppTemplate {
   id: string;
