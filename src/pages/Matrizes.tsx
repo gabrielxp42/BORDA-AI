@@ -85,7 +85,7 @@ export const Matrizes: React.FC = () => {
       });
 
       const sorted = formatted.sort((a: any, b: any) =>
-        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        (a.name || '').localeCompare(b.name || '')
       );
 
       setMatrices(sorted);
@@ -239,6 +239,16 @@ export const Matrizes: React.FC = () => {
 
         toast.success('Matriz atualizada com sucesso!', { id: 'upload-toast' });
       } else {
+        // Barreira contra duplicidade de matrizes pelo nome
+        const isDuplicate = matrices.some(
+          m => m.name.trim().toLowerCase() === name.trim().toLowerCase()
+        );
+        if (isDuplicate) {
+          setIsSaving(false);
+          toast.error(`⚠️ Já existe uma matriz cadastrada com o nome "${name.trim()}". Escolha um nome único.`);
+          return;
+        }
+
         const uniqueSuffix = Math.random().toString(36).substring(2, 6).toUpperCase();
         const { data: matrixData, error: matrixError } = await supabase
           .from('matrices')

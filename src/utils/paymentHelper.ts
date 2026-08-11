@@ -13,10 +13,16 @@ export interface PaymentMetadata {
   paymentMethod?: string;
   paymentNote?: string;
   paidAt?: string;
+  /** Quem deu a baixa no sistema (perfil ativo no momento do registro). */
+  paidByOperator?: string;
+  /** Quando a baixa foi registrada no sistema — pode diferir de paidAt. */
+  registeredAt?: string;
   isQuickEntry?: boolean;
   isPrivate?: boolean;
   attachmentUrls?: string[];
   history?: PaymentHistoryEntry[];
+  /** Momento em que o pedido entrou na fila "Entregue" — base do arquivamento automático. */
+  deliveredAt?: string;
 }
 
 const METADATA_REGEX = /<!--PAYMENT_METADATA:([\s\S]*?)-->/;

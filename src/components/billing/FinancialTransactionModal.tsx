@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, ArrowUpRight, ArrowDownRight, Check, DollarSign } from 'lucide-react';
+import { X, ArrowUpRight, ArrowDownRight, Check } from 'lucide-react';
 import { FinancialTransaction, FinancialTransactionType } from '@/types/stockTypes';
 import { useCompanySettings } from '@/contexts/CompanySettingsContext';
 import { toast } from 'sonner';
@@ -28,6 +28,11 @@ export const FinancialTransactionModal: React.FC<FinancialTransactionModalProps>
   const [expenseType, setExpenseType] = useState<'fixed' | 'variable'>('variable');
   const [dueDate, setDueDate] = useState<string>('');
   const [status, setStatus] = useState<'pending' | 'paid'>('paid');
+  const [customDate, setCustomDate] = useState<string>(() => {
+    const d = new Date();
+    d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+    return d.toISOString().slice(0, 16);
+  });
   const [notes, setNotes] = useState('');
 
   if (!isOpen) return null;
@@ -44,20 +49,26 @@ export const FinancialTransactionModal: React.FC<FinancialTransactionModalProps>
       return;
     }
 
+    const launchDate = customDate ? new Date(customDate).toISOString() : new Date().toISOString();
+
     onSubmitTransaction({
       type,
       amount: val,
       description: description.trim(),
       category,
       payment_method: paymentMethod,
-      date: new Date().toISOString(),
+      date: launchDate,
       expense_type: isIncome ? undefined : expenseType,
-      due_date: (!isIncome && expenseType === 'fixed' && dueDate) ? dueDate : undefined,
-      status: !isIncome ? status : undefined,
+      due_date: dueDate || undefined,
+      status: status,
       notes: notes.trim() || undefined,
     });
 
-    toast.success(isIncome ? 'Receita lançada no caixa!' : 'Despesa registrada no caixa!');
+    toast.success(
+      isIncome
+        ? (status === 'paid' ? 'Receita quitada lançada no caixa!' : 'Entrada futura (A Receber) registrada com sucesso!')
+        : 'Despesa registrada com sucesso!'
+    );
     onClose();
     setDescription('');
     setAmount('');
@@ -134,6 +145,35 @@ export const FinancialTransactionModal: React.FC<FinancialTransactionModalProps>
               className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-3 text-xs text-white focus:outline-none focus:border-purple-500 transition-colors"
               required
             />
+          </div>
+
+          {/* Data do Lançamento (Retroativo) & Status */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-zinc-400 mb-1.5">
+                📅 Data do Lançamento
+              </label>
+              <input
+                type="datetime-local"
+                value={customDate}
+                onChange={(e) => setCustomDate(e.target.value)}
+                className="w-full bg-white/5 border border-white/10 rounded-2xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-purple-500 transition-colors"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-zinc-400 mb-1.5">
+                Status da Transação
+              </label>
+              <select
+                value={status}
+                onChange={(e) => setStatus(e.target.value as any)}
+                className="w-full bg-white/5 border border-white/10 rounded-2xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-purple-500 transition-colors"
+              >
+                <option value="paid" className="bg-[#111118]">✅ Quitada / Entrou no Caixa</option>
+                <option value="pending" className="bg-[#111118]">⏳ Pendente (A Receber / A Pagar)</option>
+              </select>
+            </div>
           </div>
 
           {/* Categoria */}

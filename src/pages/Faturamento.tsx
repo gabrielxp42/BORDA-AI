@@ -27,7 +27,8 @@ import {
   TrendingDown,
   Trash2,
   Filter,
-  Zap
+  Zap,
+  Plus
 } from 'lucide-react';
 import {
   BarChart, 
@@ -52,6 +53,7 @@ import { ReceberDetailsModal } from '@/components/billing/ReceberDetailsModal';
 import { ReceitaDetailsModal } from '@/components/billing/ReceitaDetailsModal';
 import { DespesasDetailsModal } from '@/components/billing/DespesasDetailsModal';
 import { CreateReceivableModal } from '@/components/billing/CreateReceivableModal';
+import { FinancialReportModal } from '@/components/billing/FinancialReportModal';
 import { FinancialTransaction, FinancialTransactionType } from '@/types/stockTypes';
 import { format, startOfMonth, endOfMonth, subMonths, eachMonthOfInterval, eachDayOfInterval, isSameDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -72,8 +74,11 @@ interface ClientBillingData {
 }
 
 export const Faturamento: React.FC = () => {
-  const { isUnlocked, activeProfile } = useProfile();
-  const { settings, permissions } = useCompanySettings();
+  // `permissions` vem do perfil ativo, não das configurações da empresa.
+  // Estava sendo lido de useCompanySettings (sempre undefined), o que fazia
+  // `permissions?.canSeeFinancials ?? true` liberar valores para todo mundo.
+  const { isUnlocked, activeProfile, permissions } = useProfile();
+  const { settings } = useCompanySettings();
   const pc = settings?.primaryColor || '#8b5cf6';
 
   
@@ -89,6 +94,7 @@ export const Faturamento: React.FC = () => {
   const [isReceitaModalOpen, setIsReceitaModalOpen] = useState(false);
   const [isDespesasModalOpen, setIsDespesasModalOpen] = useState(false);
   const [isCreateReceivableOpen, setIsCreateReceivableOpen] = useState(false);
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [expandedCard, setExpandedCard] = useState<'receita' | 'despesas' | 'areceber' | null>(null);
   const [receberFilter, setReceberFilter] = useState<'all' | 'production' | 'delivered'>('all');
 
@@ -122,8 +128,10 @@ export const Faturamento: React.FC = () => {
       };
     });
 
+    // Só entra no histórico de caixa o que já foi efetivamente recebido.
+    // Receita com status 'pending' é entrada futura e vive em "A Receber" até a data marcada.
     const manualEntries = financialTransactions
-      .filter(t => t.type === 'income')
+      .filter(t => t.type === 'income' && (!t.status || t.status === 'paid'))
       .map(t => ({
         id: `tx-${t.id}`,
         date: new Date(t.date || t.created_at),
@@ -226,7 +234,40 @@ export const Faturamento: React.FC = () => {
           .eq('user_id', userId)
           .order('created_at', { ascending: false });
 
-        setFinancialTransactions((cloudTxs || []) as FinancialTransaction[]);
+        const txs = (cloudTxs || []) as FinancialTransaction[];
+
+        // Baixa automática de contas fixas: chegou a data de vencimento,
+        // a conta sai do caixa sozinha em vez de esperar alguém marcar na mão.
+        const hoje = new Date();
+        hoje.setHours(23, 59, 59, 999);
+
+        const aVencer = txs.filter(t =>
+          t.type === 'expense' &&
+          t.expense_type === 'fixed' &&
+          t.status === 'pending' &&
+          t.due_date &&
+          new Date(`${t.due_date}T12:00:00`) <= hoje
+        );
+
+        if (aVencer.length > 0) {
+          const ids = aVencer.map(t => t.id);
+          const { error: baixaErr } = await supabase
+            .from('financial_transactions')
+            .update({ status: 'paid' })
+            .in('id', ids);
+
+          if (baixaErr) {
+            console.error('Erro na baixa automática de contas fixas:', baixaErr);
+          } else {
+            aVencer.forEach(t => { t.status = 'paid'; });
+            toast.info(
+              `${aVencer.length} conta(s) fixa(s) baixada(s) automaticamente no vencimento.`,
+              { duration: 6000 }
+            );
+          }
+        }
+
+        setFinancialTransactions(txs);
         setFinSynced(true);
       } catch (err) {
         console.error('Erro ao carregar transações financeiras:', err);
@@ -271,7 +312,11 @@ export const Faturamento: React.FC = () => {
           category: created.category,
           payment_method: created.payment_method || 'other',
           date: created.date || created.created_at,
+          expense_type: created.expense_type || null,
+          due_date: created.due_date || null,
           status: created.status || 'paid',
+          order_id: created.order_id || null,
+          notes: created.notes || null,
           created_at: created.created_at
         });
       }
@@ -665,9 +710,17 @@ export const Faturamento: React.FC = () => {
     );
   }
 
-  const filteredData = billingData.filter(d => 
-    d.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // Busca ampla: nome, telefone e também o nº de qualquer pedido do cliente.
+  const filteredData = billingData.filter(d => {
+    const termo = searchTerm.trim().toLowerCase();
+    if (!termo) return true;
+    const alvo = [
+      d.name,
+      d.phone,
+      ...(d.orders || []).map((o: any) => `#${o.order_number ?? ''} ${o.clients?.company_name ?? ''}`),
+    ].filter(Boolean).join(' ').toLowerCase();
+    return alvo.includes(termo);
+  });
 
   const targetMonthDate = subMonths(new Date(), selectedMonthOffset);
   const paidPercentage = grandTotal > 0 ? Math.round((paidTotal / grandTotal) * 100) : 0;
@@ -708,6 +761,14 @@ export const Faturamento: React.FC = () => {
               </button>
             ))}
           </div>
+
+          <button
+            onClick={() => setIsReportModalOpen(true)}
+            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-2xl bg-purple-600/30 border border-purple-500/40 hover:bg-purple-600/50 text-purple-200 text-xs font-black transition-all active:scale-95 cursor-pointer shadow-lg shadow-purple-900/30"
+            title="Abrir Central de Relatórios Financeiros em PDF por Intervalo de Datas"
+          >
+            <FileSpreadsheet className="h-3.5 w-3.5 text-purple-300" /> 📊 Relatório PDF por Período
+          </button>
 
           <button
             onClick={handleExportCSV}
@@ -849,10 +910,8 @@ export const Faturamento: React.FC = () => {
           {/* Card A Receber: Em Produção */}
           <div 
             onClick={() => {
-              setActiveTab('areceber');
               setReceberFilter('production');
-              const el = document.getElementById('billing-tabs-container');
-              if (el) el.scrollIntoView({ behavior: 'smooth' });
+              setIsReceberModalOpen(true);
             }}
             className="glass-panel p-5 rounded-3xl border border-amber-500/20 bg-gradient-to-b from-amber-950/10 via-black/40 to-black/60 hover:border-amber-400/60 hover:scale-[1.01] transition-all cursor-pointer relative overflow-hidden flex flex-col justify-between space-y-3 shadow-md"
           >
@@ -886,10 +945,8 @@ export const Faturamento: React.FC = () => {
           {/* Card A Receber: Já Entregues */}
           <div 
             onClick={() => {
-              setActiveTab('areceber');
               setReceberFilter('delivered');
-              const el = document.getElementById('billing-tabs-container');
-              if (el) el.scrollIntoView({ behavior: 'smooth' });
+              setIsReceberModalOpen(true);
             }}
             className="glass-panel p-5 rounded-3xl border border-indigo-500/20 bg-gradient-to-b from-indigo-950/10 via-black/40 to-black/60 hover:border-indigo-400/60 hover:scale-[1.01] transition-all cursor-pointer relative overflow-hidden flex flex-col justify-between space-y-3 shadow-md"
           >
@@ -2285,6 +2342,7 @@ export const Faturamento: React.FC = () => {
         canSeeFinancials={permissions?.canSeeFinancials ?? true}
         onSelectClientForZap={(client) => setSelectedClient(client)}
         onRefreshData={fetchBillingData}
+        defaultFilter={receberFilter}
       />
 
       <ReceitaDetailsModal
@@ -2311,6 +2369,16 @@ export const Faturamento: React.FC = () => {
         isOpen={isCreateReceivableOpen}
         onClose={() => setIsCreateReceivableOpen(false)}
         onSuccess={fetchBillingData}
+      />
+
+      {/* Modal Dedicado de Relatório PDF por Período */}
+      <FinancialReportModal
+        isOpen={isReportModalOpen}
+        onClose={() => setIsReportModalOpen(false)}
+        incomeEntries={allIncomeEntries}
+        transactions={financialTransactions}
+        companyName={settings.systemName}
+        companyColor={settings.primaryColor}
       />
     </div>
   );

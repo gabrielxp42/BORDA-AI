@@ -5,6 +5,7 @@ import { useCompanySettings } from '@/contexts/CompanySettingsContext';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
 import { parsePaymentMetadata, serializePaymentMetadata, updatePaymentMetadata, formatPaymentMethodName } from '@/utils/paymentHelper';
+import { useProfile } from '@/contexts/ProfileContext';
 import { sendEvolutionText } from '@/services/whatsappService';
 import { format } from 'date-fns';
 
@@ -30,10 +31,16 @@ export const PaymentStatusModal: React.FC<PaymentStatusModalProps> = ({
   onStatusUpdated
 }) => {
   const { settings } = useCompanySettings();
+  const { activeProfile } = useProfile();
   const [status, setStatus] = useState<'pending' | 'paid' | 'half_paid'>('pending');
   const [method, setMethod] = useState<string>('');
   const [customAmount, setCustomAmount] = useState<number | ''>(0);
   const [paymentNote, setPaymentNote] = useState<string>('');
+  const [customPaidAt, setCustomPaidAt] = useState<string>(() => {
+    const d = new Date();
+    d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+    return d.toISOString().slice(0, 16);
+  });
   const [notifyWhatsApp, setNotifyWhatsApp] = useState<boolean>(true);
   const [saving, setSaving] = useState<boolean>(false);
 
@@ -48,6 +55,14 @@ export const PaymentStatusModal: React.FC<PaymentStatusModalProps> = ({
       
       setMethod(initialStatus === 'pending' ? '' : savedMethod);
       setPaymentNote(metadata.paymentNote || '');
+
+      if (metadata.paidAt) {
+        try {
+          const d = new Date(metadata.paidAt);
+          d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+          setCustomPaidAt(d.toISOString().slice(0, 16));
+        } catch { /* use default */ }
+      }
 
       if (initialStatus === 'paid') {
         setCustomAmount(order.total_amount || 0);
@@ -93,14 +108,24 @@ export const PaymentStatusModal: React.FC<PaymentStatusModalProps> = ({
       
       // Parse existing metadata and update it
       const { cleanNotes, metadata: existingMetadata } = parsePaymentMetadata(order.notes);
-      const updatedMetadata = updatePaymentMetadata(
-        existingMetadata,
-        status,
-        order.total_amount,
-        selectedMethod,
-        status === 'half_paid' ? paidVal : undefined,
-        paymentNote
-      );
+      const exactPaidAt = customPaidAt ? new Date(customPaidAt).toISOString() : new Date().toISOString();
+      const operatorName = activeProfile?.name || 'Operador';
+
+      const updatedMetadata = {
+        ...updatePaymentMetadata(
+          existingMetadata,
+          status,
+          order.total_amount,
+          selectedMethod,
+          status === 'half_paid' ? paidVal : undefined,
+          paymentNote
+        ),
+        paidAt: status !== 'pending' ? exactPaidAt : undefined,
+        paidByOperator: status !== 'pending' ? operatorName : undefined,
+        // Guarda também QUANDO a baixa foi dada no sistema. O cliente pode ter
+        // pago na sexta e a baixa só sair na segunda — as duas datas importam.
+        registeredAt: status !== 'pending' ? new Date().toISOString() : undefined,
+      };
       
       const noteWithMetadata = serializePaymentMetadata(cleanNotes, updatedMetadata);
 
@@ -196,7 +221,45 @@ export const PaymentStatusModal: React.FC<PaymentStatusModalProps> = ({
 
         {/* Content */}
         <div className="p-6 space-y-5">
-          
+
+          {/* Trilha do último registro: quando o cliente pagou x quando deu baixa, e por quem */}
+          {(() => {
+            const { metadata: meta } = parsePaymentMetadata(order.notes);
+            if (!meta.paidAt && !meta.registeredAt) return null;
+
+            const fmt = (iso?: string) => {
+              if (!iso) return null;
+              try { return format(new Date(iso), "dd/MM/yyyy 'às' HH:mm"); } catch { return null; }
+            };
+            const pagoEm = fmt(meta.paidAt);
+            const baixaEm = fmt(meta.registeredAt);
+            const defasado = pagoEm && baixaEm && pagoEm !== baixaEm;
+
+            return (
+              <div className="p-3.5 rounded-2xl bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 space-y-1.5">
+                <p className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400">
+                  Último registro de pagamento
+                </p>
+                {pagoEm && (
+                  <p className="text-xs text-slate-700 dark:text-zinc-200">
+                    💰 <strong>Cliente pagou em:</strong> {pagoEm}
+                  </p>
+                )}
+                {baixaEm && (
+                  <p className="text-xs text-slate-700 dark:text-zinc-200">
+                    🧾 <strong>Baixa dada em:</strong> {baixaEm}
+                    {defasado && <span className="text-amber-500 dark:text-amber-400 font-bold"> (retroativo)</span>}
+                  </p>
+                )}
+                {meta.paidByOperator && (
+                  <p className="text-xs text-slate-700 dark:text-zinc-200">
+                    👤 <strong>Registrado por:</strong> {meta.paidByOperator}
+                  </p>
+                )}
+              </div>
+            );
+          })()}
+
           {/* Seletor de Status */}
           <div className="space-y-2">
             <label className="text-[11px] font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400 block">
@@ -259,35 +322,53 @@ export const PaymentStatusModal: React.FC<PaymentStatusModalProps> = ({
 
           {/* Forma de Pagamento (Exibida Apenas se Sinal 50% ou Pago 100%) */}
           {status !== 'pending' ? (
-            <div className="space-y-2 animate-in fade-in duration-200">
-              <label className="text-[11px] font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400 flex items-center justify-between">
-                <span>Forma de Pagamento</span>
-                {!method && (
-                  <span className="text-[10px] font-bold text-amber-400 animate-pulse">⚠️ Escolha uma opção</span>
-                )}
-              </label>
-              <div className="grid grid-cols-2 gap-2">
-                {[
-                  { id: 'pix', label: '⚡ PIX' },
-                  { id: 'credit_card', label: '💳 Cartão' },
-                  { id: 'cash', label: '💵 Dinheiro' },
-                  { id: 'transfer', label: '🏦 Transferência' },
-                ].map(pm => (
-                  <button
-                    key={pm.id}
-                    type="button"
-                    onClick={() => setMethod(pm.id)}
-                    className={`py-2.5 px-3 rounded-xl text-xs font-bold border transition-all text-center cursor-pointer ${
-                      method === pm.id
-                        ? 'bg-purple-500/20 text-purple-400 border-purple-500/60 shadow-md ring-1 ring-purple-500/30'
-                        : !method
-                        ? 'border-amber-500/40 text-zinc-400 hover:bg-white/5'
-                        : 'border-slate-200 dark:border-white/10 text-slate-500 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-white/5'
-                    }`}
-                  >
-                    {pm.label}
-                  </button>
-                ))}
+            <div className="space-y-3 animate-in fade-in duration-200">
+              <div className="space-y-2">
+                <label className="text-[11px] font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400 flex items-center justify-between">
+                  <span>Forma de Pagamento</span>
+                  {!method && (
+                    <span className="text-[10px] font-bold text-amber-400 animate-pulse">⚠️ Escolha uma opção</span>
+                  )}
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { id: 'pix', label: '⚡ PIX' },
+                    { id: 'credit_card', label: '💳 Cartão' },
+                    { id: 'cash', label: '💵 Dinheiro' },
+                    { id: 'transfer', label: '🏦 Transferência' },
+                  ].map(pm => (
+                    <button
+                      key={pm.id}
+                      type="button"
+                      onClick={() => setMethod(pm.id)}
+                      className={`py-2.5 px-3 rounded-xl text-xs font-bold border transition-all text-center cursor-pointer ${
+                        method === pm.id
+                          ? 'bg-purple-500/20 text-purple-400 border-purple-500/60 shadow-md ring-1 ring-purple-500/30'
+                          : !method
+                          ? 'border-amber-500/40 text-zinc-400 hover:bg-white/5'
+                          : 'border-slate-200 dark:border-white/10 text-slate-500 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-white/5'
+                      }`}
+                    >
+                      {pm.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Data/Hora Efetiva do Pagamento (Para Baixas Retroativas) */}
+              <div className="pt-1">
+                <label className="text-[11px] font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400 block mb-1">
+                  📅 Data/Hora Real do Pagamento
+                </label>
+                <input
+                  type="datetime-local"
+                  value={customPaidAt}
+                  onChange={(e) => setCustomPaidAt(e.target.value)}
+                  className="w-full bg-slate-50 dark:bg-white/5 border border-slate-300 dark:border-white/10 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-purple-500"
+                />
+                <p className="text-[10px] text-zinc-500 mt-1">
+                  Altere caso o cliente tenha pago em data/horário anterior (ex: no final de semana).
+                </p>
               </div>
             </div>
           ) : (

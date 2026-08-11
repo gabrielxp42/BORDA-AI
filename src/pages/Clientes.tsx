@@ -66,13 +66,13 @@ export const Clientes: React.FC = () => {
       // 1. Gera e aciona o PDF de Extrato de Débitos do Cliente
       printClientStatementPDF({
         clientName: client.name,
-        clientPhone: client.phone,
-        clientCompany: client.company_name,
+        clientPhone: client.phone ?? undefined,
+        clientCompany: client.company_name ?? undefined,
         orders: formattedOrders,
         grandPending,
         companyName: settings.systemName,
         companyColor: settings.primaryColor,
-        pixKey: settings.pixKey
+        pixKey: settings.pixKey ?? undefined
       });
 
       toast.success('Extrato PDF gerado com sucesso!', { id: 'statement-toast' });

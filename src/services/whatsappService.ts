@@ -307,7 +307,7 @@ export async function checkEvolutionStatus(): Promise<EvolutionProxyResponse> {
       };
     }
 
-    return { connected: false, state: (state as any) || 'unknown' };
+    return { connected: false, state: (rawState as any) || 'unknown' };
   } catch (err) {
     return { connected: false, state: 'unknown' };
   }
@@ -501,11 +501,57 @@ export async function sendEvolutionMedia(options: WhatsAppSendOptions): Promise<
     console.warn('[WhatsApp] Falha ao obter whatsapp_instance_id do perfil:', e);
   }
 
-  const targetInstance = userInstanceId;
+  const creds = await getEvolutionCredentials();
+  const targetInstance = userInstanceId || creds?.instanceId;
   if (!targetInstance) {
     throw new Error('Instância do WhatsApp não encontrada. Conecte seu WhatsApp nas configurações.');
   }
 
+  const isImage = options.mediaType === 'image';
+  const fileName = options.mediaName || (isImage ? 'imagem.jpg' : 'Orcamento.pdf');
+  const mimetype = isImage ? 'image/jpeg' : 'application/pdf';
+
+  // A Evolution API v2 não aceita Data URI ("data:application/pdf;base64,...").
+  // Ela espera OU uma URL pública OU o base64 puro. Removemos o prefixo se existir.
+  const rawMedia = options.mediaUrl || '';
+  const media = rawMedia.startsWith('data:') ? rawMedia.split(',')[1] || '' : rawMedia;
+  if (!media) {
+    throw new Error('Arquivo PDF não foi gerado corretamente. Tente novamente.');
+  }
+
+  let lastApiMessage = '';
+
+  // 1. Envio REST direto (mesmo caminho que funciona no envio de texto)
+  if (creds?.apiUrl && creds?.apiKey) {
+    try {
+      console.log(`📄 [WhatsApp Mídia REST Direto] Enviando "${fileName}" para ${formattedPhone} via [${targetInstance}]...`);
+      const resp = await fetch(`${creds.apiUrl}/message/sendMedia/${targetInstance}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', apikey: creds.apiKey },
+        body: JSON.stringify({
+          number: formattedPhone,
+          mediatype: isImage ? 'image' : 'document',
+          mimetype,
+          fileName,
+          caption: options.message,
+          media
+        })
+      });
+
+      const resData = await resp.json().catch(() => ({}));
+      console.log('📄 [WhatsApp Mídia REST Response]:', { status: resp.status, resData });
+
+      if (resp.ok && !resData?.error) {
+        return resData;
+      }
+      lastApiMessage = extractEvolutionError(resData) || `Evolution API respondeu ${resp.status}.`;
+    } catch (restErr: any) {
+      console.warn('⚠️ [WhatsApp Mídia REST Falhou]:', restErr);
+      lastApiMessage = restErr?.message || '';
+    }
+  }
+
+  // 2. Fallback via Edge Function whatsapp-proxy
   try {
     const { data, error } = await supabase.functions.invoke('whatsapp-proxy', {
       body: {
@@ -513,36 +559,30 @@ export async function sendEvolutionMedia(options: WhatsAppSendOptions): Promise<
         phone: formattedPhone,
         message: options.message,
         mediaUrl: options.mediaUrl,
-        mediaType: options.mediaType || 'document',
-        mediaName: options.mediaName || 'Orcamento.pdf',
+        media,
+        mimetype,
+        mediaType: isImage ? 'image' : 'document',
+        mediaName: fileName,
         instanceId: targetInstance
       }
     });
 
-    if (!error && data) return data;
-  } catch { /* fallback */ }
-
-  const creds = await getEvolutionCredentials();
-  if (!creds) {
-    throw new Error('Servidor WhatsApp não configurado.');
+    if (error) {
+      lastApiMessage = error.message || lastApiMessage;
+    } else if (data && !data.error && data.status !== 'ERROR') {
+      return data;
+    } else if (data) {
+      lastApiMessage = extractEvolutionError(data) || lastApiMessage;
+    }
+  } catch (proxyErr: any) {
+    lastApiMessage = proxyErr?.message || lastApiMessage;
   }
 
-  const inst = targetInstance;
-  const resp = await fetch(`${creds.apiUrl}/message/sendMedia/${inst}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', apikey: creds.apiKey },
-    body: JSON.stringify({
-      number: formattedPhone,
-      mediaMessage: {
-        mediatype: options.mediaType === 'image' ? 'image' : 'document',
-        fileName: options.mediaName || 'Orcamento.pdf',
-        caption: options.message,
-        media: options.mediaUrl
-      }
-    })
-  });
-
-  return await resp.json();
+  throw new Error(
+    lastApiMessage
+      ? `Falha ao enviar o PDF: ${lastApiMessage}`
+      : 'Não foi possível enviar o PDF pelo servidor WhatsApp. Tente novamente em instantes.'
+  );
 }
 
 /**

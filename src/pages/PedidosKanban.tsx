@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   ShoppingBag, Play, Package, Lock, Printer, Send, FileText, 
   Building, Phone, AlertTriangle, Calendar, Zap, Download, 
-  CheckCircle2, Clock, Eye, EyeOff, Plus, MessageCircle 
+  CheckCircle2, Clock, Eye, EyeOff, Plus, MessageCircle, Search, X
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useProfile } from '@/contexts/ProfileContext';
@@ -16,6 +16,15 @@ import { KanbanAddOrderModal } from '@/components/orders/KanbanAddOrderModal';
 import { PaymentStatusModal } from '@/components/orders/PaymentStatusModal';
 import { KanbanCard } from '@/components/orders/KanbanCard';
 import { KanbanColumn } from '@/components/orders/KanbanColumn';
+import {
+  KanbanColumnConfig,
+  DEFAULT_KANBAN_COLUMNS,
+  ARCHIVE_AFTER_DAYS,
+  loadKanbanColumns,
+  saveKanbanColumns,
+  isArchived,
+} from '@/services/kanbanColumnsService';
+import { parsePaymentMetadata, serializePaymentMetadata } from '@/utils/paymentHelper';
 import { toast } from 'sonner';
 import { DragDropContext, Droppable, DropResult } from '@hello-pangea/dnd';
 
@@ -38,6 +47,8 @@ interface KanbanOrder {
   due_date?: string;
   notes: string;
   created_at: string;
+  /** Perfis autorizados a ver o pedido; vazio/ausente = visível para todos. */
+  visible_profile_ids?: string[];
   client?: {
     id?: string;
     name?: string;
@@ -52,13 +63,14 @@ interface PedidosKanbanProps {
   onQuickPrice?: (order: any) => void;
 }
 
-const columns = [
-  { id: 'pending', title: 'Pendente', color: 'border-yellow-500/30 text-yellow-400 bg-yellow-500/10' },
-  { id: 'design', title: 'Criação de Matriz', color: 'border-blue-500/30 text-blue-400 bg-blue-500/10' },
-  { id: 'embroidering', title: 'Na Máquina', color: 'border-cyan-500/30 text-cyan-400 bg-cyan-500/10' },
-  { id: 'finishing', title: 'Acabamento', color: 'border-purple-500/30 text-purple-400 bg-purple-500/10' },
-  { id: 'completed', title: 'Pronto p/ Retirada', color: 'border-emerald-500/30 text-emerald-400 bg-emerald-500/10' },
-];
+/** Ordem de avanço das filas — derivada da configuração, para o botão "Avançar". */
+const buildNextStatusMap = (cols: KanbanColumnConfig[]): Record<string, string> => {
+  const map: Record<string, string> = {};
+  cols.forEach((c, i) => {
+    map[c.id] = cols[i + 1]?.id || cols[0].id;
+  });
+  return map;
+};
 
 export const PedidosKanban: React.FC<PedidosKanbanProps> = ({
   onOpenDetails,
@@ -71,6 +83,11 @@ export const PedidosKanban: React.FC<PedidosKanbanProps> = ({
   const [selectedOrderForPaymentModal, setSelectedOrderForPaymentModal] = useState<any | null>(null);
   const [selectedOrderForVisibilityModal, setSelectedOrderForVisibilityModal] = useState<KanbanOrder | null>(null);
   const [visibleLimits, setVisibleLimits] = useState<Record<string, number>>({});
+  const [columns, setColumns] = useState<KanbanColumnConfig[]>(DEFAULT_KANBAN_COLUMNS);
+  const [editingColumnId, setEditingColumnId] = useState<string | null>(null);
+  const [editingTitle, setEditingTitle] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [showArchived, setShowArchived] = useState(false);
   const [kanbanNotificationsEnabled, setKanbanNotificationsEnabled] = useState<Record<string, boolean>>(() => {
     const saved = localStorage.getItem('kanban_notifications_enabled');
     return saved ? JSON.parse(saved) : { design: false, embroidering: false, finishing: false, completed: true };
@@ -80,6 +97,27 @@ export const PedidosKanban: React.FC<PedidosKanbanProps> = ({
   useEffect(() => {
     ordersRef.current = orders;
   }, [orders]);
+
+  // Filas vindas do Supabase (valem em todos os aparelhos)
+  useEffect(() => {
+    loadKanbanColumns().then(setColumns);
+  }, []);
+
+  const handleRenameColumn = async (columnId: string) => {
+    const novo = editingTitle.trim();
+    setEditingColumnId(null);
+    if (!novo) return;
+
+    const atualizadas = columns.map(c => (c.id === columnId ? { ...c, title: novo } : c));
+    setColumns(atualizadas);
+
+    const naNuvem = await saveKanbanColumns(atualizadas);
+    if (naNuvem) {
+      toast.success(`Fila renomeada para "${novo}" em todos os aparelhos.`);
+    } else {
+      toast.warning(`Fila renomeada só neste aparelho. Rode supabase/01_kanban_columns.sql para sincronizar.`);
+    }
+  };
 
   useEffect(() => {
     localStorage.setItem('kanban_notifications_enabled', JSON.stringify(kanbanNotificationsEnabled));
@@ -153,12 +191,33 @@ export const PedidosKanban: React.FC<PedidosKanbanProps> = ({
   };
 
   const moveOrder = async (orderId: string, newStatus: string) => {
-    setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
+    const anterior = ordersRef.current.find(o => o.id === orderId);
+
+    // Ao entrar numa fila de encerramento, carimba a data de entrega.
+    // É ela que dispara o arquivamento automático depois de ARCHIVE_AFTER_DAYS.
+    const ehEncerramento = !!columns.find(c => c.id === newStatus)?.archivable;
+    let notasAtualizadas: string | undefined;
+
+    if (ehEncerramento && anterior) {
+      const { cleanNotes, metadata } = parsePaymentMetadata(anterior.notes);
+      notasAtualizadas = serializePaymentMetadata(cleanNotes, {
+        ...metadata,
+        deliveredAt: new Date().toISOString(),
+      });
+    }
+
+    setOrders(prev => prev.map(o => o.id === orderId
+      ? { ...o, status: newStatus, ...(notasAtualizadas ? { notes: notasAtualizadas } : {}) }
+      : o
+    ));
 
     try {
       const { error } = await supabase
         .from('orders')
-        .update({ status: newStatus })
+        .update({
+          status: newStatus,
+          ...(notasAtualizadas ? { notes: notasAtualizadas } : {}),
+        })
         .eq('id', orderId);
 
       if (error) throw error;
@@ -171,10 +230,11 @@ export const PedidosKanban: React.FC<PedidosKanbanProps> = ({
       
       if (phone && newStatus !== 'pending' && kanbanNotificationsEnabled[newStatus]) {
         const templates: Record<string, string> = {
-            design: `Olá, ${clientName}! Seu pedido #${orderCode} entrou em fase de Criação de Matriz. 🎨`,
+            design: `Olá, ${clientName}! Seu pedido #${orderCode} já está pronto para produção. 🎨`,
             embroidering: `Boas notícias, ${clientName}! Seu pedido #${orderCode} está na Máquina sendo bordado. 🧵`,
             finishing: `Olá, ${clientName}! Seu pedido #${orderCode} está no acabamento final. ✂️`,
-            completed: `Parabéns, ${clientName}! Seu pedido #${orderCode} está PRONTO para retirada/envio. ✅`
+            completed: `Parabéns, ${clientName}! Seu pedido #${orderCode} está PRONTO para retirada/envio. ✅`,
+            delivered: `Pedido #${orderCode} entregue! Obrigado pela preferência, ${clientName}. 🤝`
         };
         const message = templates[newStatus];
         if (message) {
@@ -384,10 +444,67 @@ export const PedidosKanban: React.FC<PedidosKanbanProps> = ({
 
       <DragDropContext onDragEnd={handleDragEnd}>
         <div className="space-y-4 h-full flex flex-col">
+
+          {/* Busca de pedidos no quadro (cliente, nº do pedido, empresa ou peça) */}
+          <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center shrink-0">
+            <div className="relative flex-1">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Buscar por cliente, empresa, nº do pedido ou peça..."
+                className="w-full bg-black/50 border border-white/10 rounded-2xl pl-10 pr-9 py-2.5 text-xs text-zinc-200 outline-none focus:border-purple-500 transition-colors"
+              />
+              {searchTerm && (
+                <button
+                  type="button"
+                  onClick={() => setSearchTerm('')}
+                  title="Limpar busca"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white transition-colors"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowArchived(v => !v)}
+              title={`Pedidos entregues somem do quadro após ${ARCHIVE_AFTER_DAYS} dias`}
+              className={`px-3.5 py-2.5 rounded-2xl text-[11px] font-black uppercase tracking-wide border transition-all active:scale-95 whitespace-nowrap ${
+                showArchived
+                  ? 'bg-teal-500/20 text-teal-300 border-teal-500/40'
+                  : 'bg-white/5 text-zinc-400 border-white/10 hover:text-white hover:bg-white/10'
+              }`}
+            >
+              {showArchived ? '✓ Mostrando arquivados' : 'Ver arquivados'}
+            </button>
+          </div>
+
           <div className="flex gap-4 flex-1 pb-6 overflow-x-auto scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent -mx-2 px-2 md:-mx-4 md:px-4">
             {columns.map((col) => {
+              const termo = searchTerm.trim().toLowerCase();
               const colOrders = orders.filter((o) => {
                 if (o.status !== col.id) return false;
+
+                // Entregues antigos saem do quadro, mas seguem acessíveis no botão "Ver arquivados"
+                if (col.archivable && !showArchived) {
+                  const { metadata } = parsePaymentMetadata(o.notes);
+                  if (isArchived(metadata.deliveredAt)) return false;
+                }
+
+                if (termo) {
+                  const alvo = [
+                    o.client?.name,
+                    o.client?.company_name,
+                    o.client?.phone,
+                    o.order_number != null ? `#${o.order_number}` : '',
+                    o.order_number != null ? String(o.order_number) : '',
+                    ...(o.items || []).map(i => i.description),
+                  ].filter(Boolean).join(' ').toLowerCase();
+                  if (!alvo.includes(termo)) return false;
+                }
+
                 if (role === 'chefe') return true;
                 if (o.visible_profile_ids && o.visible_profile_ids.length > 0) {
                   return o.visible_profile_ids.includes(role);
@@ -413,6 +530,13 @@ export const PedidosKanban: React.FC<PedidosKanbanProps> = ({
                       }}
                       onAddOrderClick={() => setAddModalColumn({ id: col.id, title: col.title })}
                       isDraggingOver={snapshot.isDraggingOver}
+                      canRename={role === 'chefe'}
+                      isEditing={editingColumnId === col.id}
+                      editingValue={editingTitle}
+                      onStartRename={() => { setEditingColumnId(col.id); setEditingTitle(col.title); }}
+                      onChangeRename={setEditingTitle}
+                      onConfirmRename={() => handleRenameColumn(col.id)}
+                      onCancelRename={() => setEditingColumnId(null)}
                     >
                       <div 
                         ref={provided.innerRef}
@@ -441,14 +565,8 @@ export const PedidosKanban: React.FC<PedidosKanbanProps> = ({
                                 onPrintThermal={handlePrintThermal}
                                 onSendWhatsApp={handleSendWhatsApp}
                                 onAdvanceStatus={(o) => {
-                                  const nextStatusMap: Record<string, string> = {
-                                    pending: 'design',
-                                    design: 'embroidering',
-                                    embroidering: 'finishing',
-                                    finishing: 'completed',
-                                    completed: 'pending',
-                                  };
-                                  moveOrder(o.id, nextStatusMap[o.status]);
+                                  const proximo = buildNextStatusMap(columns)[o.status];
+                                  if (proximo) moveOrder(o.id, proximo);
                                 }}
                                 activePrintOption={activePrintOption}
                                 setActivePrintOption={setActivePrintOption}
@@ -466,95 +584,7 @@ export const PedidosKanban: React.FC<PedidosKanbanProps> = ({
                                 Ver mais {colOrders.length - limit} pedidos
                               </button>
                             )}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleSendWhatsApp(ord);
-                              }}
-                              title="Enviar Ficha via WhatsApp"
-                              className="p-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 transition-colors"
-                            >
-                              <Send className="h-3.5 w-3.5" />
-                            </button>
-
-                            {/* Atalho 4: Visibilidade por perfil (Somente Chefe) */}
-                            {role === 'chefe' && (
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setSelectedOrderForVisibilityModal(ord);
-                                }}
-                                title="Configurar Visibilidade do Pedido"
-                                className={`p-1.5 rounded-lg border transition-colors ${
-                                  ord.visible_profile_ids && ord.visible_profile_ids.length > 0
-                                    ? 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border-amber-500/30'
-                                    : 'bg-white/5 hover:bg-white/15 text-zinc-300 border-white/10'
-                                }`}
-                              >
-                                {ord.visible_profile_ids && ord.visible_profile_ids.length > 0 ? (
-                                  <EyeOff className="h-3.5 w-3.5" />
-                                ) : (
-                                  <Eye className="h-3.5 w-3.5" />
-                                )}
-                              </button>
-                            )}
-                          </div>
-
-                          {/* Avançar Status no Kanban */}
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                const nextStatusMap: Record<string, string> = {
-                                  pending: 'design',
-                                  design: 'embroidering',
-                                  embroidering: 'finishing',
-                                  finishing: 'completed',
-                                  completed: 'pending',
-                                };
-                                moveOrder(ord.id, nextStatusMap[ord.status]);
-                              }}
-                              className="text-[10px] font-bold px-2 py-1 rounded-lg bg-purple-500/10 hover:bg-purple-500/20 text-purple-300 border border-purple-500/30 flex items-center gap-1 transition-all active:scale-95 whitespace-nowrap"
-                            >
-                            <Play className="h-3 w-3 fill-purple-300" /> {ord.status === 'completed' ? 'Reiniciar' : 'Avançar'}
-                                  </button>
-                                </div>
-
-                              {/* RODAPÉ DO CARD: BADGE INTEGRADO DE STATUS DE PRODUÇÃO EM LARGURA TOTAL */}
-                              <div className={`-mx-4 -mb-4 mt-3 px-3.5 py-2 border-t rounded-b-2xl flex items-center justify-between text-[10px] font-black uppercase tracking-wide ${col.color}`}>
-                                <span className="flex items-center gap-1.5 truncate">
-                                  <span className="h-2 w-2 rounded-full bg-current animate-pulse shrink-0" />
-                                  <span className="truncate">Etapa: {col.title}</span>
-                                </span>
-                                <div className="flex items-center gap-2 shrink-0 text-[9px] font-bold opacity-90">
-                                  {ord.created_at && (
-                                    <span title="Data de Entrada na oficina">
-                                      Entrada: {format(new Date(ord.created_at), 'dd/MM')}
-                                    </span>
-                                  )}
-                                  {ord.due_date && (
-                                    <span className="text-amber-400 font-extrabold" title="Data de Entrega / Prazo">
-                                      Entrega: {format(new Date(ord.due_date), 'dd/MM')}
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                          )}
-                        </Draggable>
-                          );
-                        })}
-                        {colOrders.length > (visibleLimits[col.id] || 10) && (
-                          <button 
-                            type="button"
-                            onClick={() => setVisibleLimits(prev => ({ ...prev, [col.id]: (prev[col.id] || 10) + 10 }))}
-                            className="w-full py-2 mt-2 text-[10px] font-bold text-zinc-400 hover:text-white bg-white/5 hover:bg-white/10 border border-white/5 rounded-xl transition-colors"
-                          >
-                            Ver mais {colOrders.length - (visibleLimits[col.id] || 10)} pedidos
-                          </button>
-=======
                           </>
->>>>>>> 03cebbd (feat: reestruturacao financeira por regime de caixa, modal a receber futuro, extrato PDF via whatsapp e alertas kanban)
                         )}
                         {provided.placeholder}
                       </div>

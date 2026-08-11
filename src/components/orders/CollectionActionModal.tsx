@@ -223,7 +223,12 @@ export const CollectionActionModal: React.FC<CollectionActionModalProps> = ({
                 clientName: clientName,
                 paymentStatus: order.payment_status,
                 totalAmount: order.total_amount,
-                items: order.order_items || order.items || [],
+                items: (order.order_items || order.items || []).map(i => ({
+                    description: i.description,
+                    quantity: i.quantity,
+                    unitPrice: i.unit_price ?? 0,
+                    totalPrice: i.total_price ?? (i.unit_price ?? 0) * i.quantity,
+                })),
                 companyName: settings.systemName,
             });
 
