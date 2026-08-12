@@ -251,3 +251,37 @@ html, body {
 .animate-subtle-bounce {
   animation: subtleBounce 2.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
 }
+
+/* Global Form Controls & Native Select Elimination */
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23a1a1aa'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  background-size: 1rem;
+  padding-right: 2.5rem !important;
+}
+
+select option {
+  background-color: #12121a !important;
+  color: #ffffff !important;
+  padding: 8px 12px;
+}
+
+.light select option {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+}
+
+input[type="date"],
+input[type="datetime-local"] {
+  color-scheme: dark;
+}
+
+.light input[type="date"],
+.light input[type="datetime-local"] {
+  color-scheme: light;
+}
+

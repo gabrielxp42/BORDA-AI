@@ -103,9 +103,11 @@ export const Dashboard: React.FC = () => {
     let paidOrdersCount = 0;
     let totalPendingReceivables = 0;
 
+    let pendentesCount = 0;
     let inProductionCount = 0;
-    let pendingQuoteCount = 0;
+    let unpaidOrdersCount = 0;
     let readyCount = 0;
+    let deliveredCount = 0;
 
     orders.forEach(ord => {
       const val = Number(ord.total_amount || 0);
@@ -119,14 +121,23 @@ export const Dashboard: React.FC = () => {
         totalBilledAllTime += deposit;
         totalPendingReceivables += Math.max(0, val - deposit);
         paidOrdersCount += 0.5;
+        unpaidOrdersCount += 1;
       } else {
         totalPendingReceivables += val;
+        unpaidOrdersCount += 1;
       }
 
-      // Kanban status
-      if (ord.status === 'producao') inProductionCount++;
-      else if (ord.status === 'orcamento') pendingQuoteCount++;
-      else if (ord.status === 'pronto') readyCount++;
+      // Status do Kanban / Pedido
+      const st = (ord.status || '').toLowerCase();
+      if (st === 'producao' || st === 'em_producao') {
+        inProductionCount++;
+      } else if (st === 'pronto' || st === 'aguardando') {
+        readyCount++;
+      } else if (st === 'entregue' || st === 'concluido') {
+        deliveredCount++;
+      } else {
+        pendentesCount++;
+      }
     });
 
     const averageTicket = paidOrdersCount > 0 ? totalBilledAllTime / Math.max(1, paidOrdersCount) : 0;
@@ -138,9 +149,11 @@ export const Dashboard: React.FC = () => {
       paidOrdersCount: Math.floor(paidOrdersCount),
       averageTicket,
       totalPendingReceivables,
+      pendentesCount,
       inProductionCount,
-      pendingQuoteCount,
-      readyCount
+      unpaidOrdersCount,
+      readyCount,
+      deliveredCount
     };
   }, [orders]);
 
@@ -336,6 +349,92 @@ export const Dashboard: React.FC = () => {
           </p>
         </Link>
 
+      </div>
+
+      {/* 📊 BARRA STATUS DOS PEDIDOS (NOVO PAINEL SOLICITADO) */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h3 className="text-xs font-black uppercase tracking-widest text-slate-500 dark:text-zinc-400 flex items-center gap-2">
+            <Kanban className="h-4 w-4 text-purple-500" /> STATUS DOS PEDIDOS
+          </h3>
+          <Link to="/pedidos-kanban" className="text-xs font-bold text-purple-600 dark:text-purple-400 hover:underline flex items-center gap-1">
+            Ver Quadro Kanban <ChevronRight className="h-3.5 w-3.5" />
+          </Link>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+          
+          {/* Card 1: PENDENTES */}
+          <Link
+            to="/pedidos-kanban"
+            className="p-4 rounded-2xl bg-white dark:bg-[#0d0d14] border border-amber-500/30 hover:border-amber-500 text-center transition-all hover:scale-105 active:scale-95 group shadow-sm"
+          >
+            <Clock className="h-5 w-5 text-amber-500 mx-auto mb-1.5 group-hover:rotate-12 transition-transform" />
+            <div className="text-xl sm:text-2xl font-black text-amber-600 dark:text-amber-400 leading-none">
+              {loading ? '—' : metrics.pendentesCount}
+            </div>
+            <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400 mt-1.5 block">
+              PENDENTES
+            </span>
+          </Link>
+
+          {/* Card 2: PROCESSANDO / EM PRODUÇÃO */}
+          <Link
+            to="/pedidos-kanban"
+            className="p-4 rounded-2xl bg-white dark:bg-[#0d0d14] border border-cyan-500/30 hover:border-cyan-500 text-center transition-all hover:scale-105 active:scale-95 group shadow-sm"
+          >
+            <Boxes className="h-5 w-5 text-cyan-500 mx-auto mb-1.5 group-hover:rotate-12 transition-transform" />
+            <div className="text-xl sm:text-2xl font-black text-cyan-600 dark:text-cyan-400 leading-none">
+              {loading ? '—' : metrics.inProductionCount}
+            </div>
+            <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400 mt-1.5 block">
+              PROCESSANDO
+            </span>
+          </Link>
+
+          {/* Card 3: FALTAM PAGAR / A RECEBER */}
+          <Link
+            to="/faturamento"
+            className="p-4 rounded-2xl bg-white dark:bg-[#0d0d14] border border-rose-500/30 hover:border-rose-500 text-center transition-all hover:scale-105 active:scale-95 group shadow-sm relative overflow-hidden"
+          >
+            <DollarSign className="h-5 w-5 text-rose-500 mx-auto mb-1.5 group-hover:scale-110 transition-transform" />
+            <div className="text-xl sm:text-2xl font-black text-rose-600 dark:text-rose-400 leading-none">
+              {loading ? '—' : metrics.unpaidOrdersCount}
+            </div>
+            <span className="text-[10px] font-black uppercase tracking-wider text-rose-600 dark:text-rose-400 mt-1.5 block">
+              FALTAM PAGAR
+            </span>
+          </Link>
+
+          {/* Card 4: AGUARDANDO / PRONTO */}
+          <Link
+            to="/pedidos-kanban"
+            className="p-4 rounded-2xl bg-white dark:bg-[#0d0d14] border border-purple-500/30 hover:border-purple-500 text-center transition-all hover:scale-105 active:scale-95 group shadow-sm"
+          >
+            <Package className="h-5 w-5 text-purple-500 mx-auto mb-1.5 group-hover:rotate-12 transition-transform" />
+            <div className="text-xl sm:text-2xl font-black text-purple-600 dark:text-purple-400 leading-none">
+              {loading ? '—' : metrics.readyCount}
+            </div>
+            <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400 mt-1.5 block">
+              AGUARDANDO
+            </span>
+          </Link>
+
+          {/* Card 5: ENTREGUES */}
+          <Link
+            to="/pedidos-kanban"
+            className="p-4 rounded-2xl bg-white dark:bg-[#0d0d14] border border-emerald-500/30 hover:border-emerald-500 text-center transition-all hover:scale-105 active:scale-95 group shadow-sm"
+          >
+            <CheckCircle2 className="h-5 w-5 text-emerald-500 mx-auto mb-1.5 group-hover:scale-110 transition-transform" />
+            <div className="text-xl sm:text-2xl font-black text-emerald-600 dark:text-emerald-400 leading-none">
+              {loading ? '—' : metrics.deliveredCount}
+            </div>
+            <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400 mt-1.5 block">
+              ENTREGUES
+            </span>
+          </Link>
+
+        </div>
       </div>
 
       {/* PAINEL CENTRAL: GRÁFICO DE EVOLUÇÃO MENSAL + TOP CLIENTES VIPS */}

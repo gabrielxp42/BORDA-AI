@@ -2343,6 +2343,8 @@ export const Faturamento: React.FC = () => {
         onSelectClientForZap={(client) => setSelectedClient(client)}
         onRefreshData={fetchBillingData}
         defaultFilter={receberFilter}
+        onOpenCreateReceivable={() => setIsCreateReceivableOpen(true)}
+        pendingTransactions={financialTransactions.filter(t => t.type === 'income' && t.status === 'pending')}
       />
 
       <ReceitaDetailsModal

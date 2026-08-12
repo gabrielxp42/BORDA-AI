@@ -9,7 +9,7 @@ import { useCompanySettings } from '@/contexts/CompanySettingsContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProfile } from '@/contexts/ProfileContext';
 import { formatCurrency } from '@/utils/currencyFormatter';
-import { generateOrderPDFBase64 } from '@/services/pdfGenerator';
+import { generateOrderPDFBase64, generateClientStatementPDFBase64 } from '@/services/pdfGenerator';
 import { useBackgroundTasks } from '@/hooks/useBackgroundTasks';
 
 interface WhatsAppBillingModalProps {
@@ -100,19 +100,48 @@ export const WhatsAppBillingModal: React.FC<WhatsAppBillingModalProps> = ({ isOp
         updateTask(taskId, { progress: 60, status: 'sending' });
 
         if (isPdfAttached) {
-          const latestOrder = cData.orders[cData.orders.length - 1];
-          if (!latestOrder) throw new Error("Pedido não encontrado para gerar PDF.");
-          
-          const pdfBase64 = await generateOrderPDFBase64({
-            id: latestOrder.id,
-            orderNumber: latestOrder.order_number,
-            createdAt: latestOrder.created_at,
-            clientName: cData.name,
-            paymentStatus: 'pending',
-            totalAmount: latestOrder.total_amount,
-            items: latestOrder.items || [],
-            companyName: settings.systemName,
-          });
+          let pdfBase64 = '';
+
+          if (cData.orders && cData.orders.length > 0) {
+            const statementOrders = cData.orders.map((o: any) => {
+              const total = Number(o.total_amount || 0);
+              const pending = o.payment_status === 'half_paid' ? total * 0.5 : total;
+              return {
+                id: o.id,
+                orderNumber: o.order_number,
+                createdAt: o.created_at,
+                dueDate: o.due_date,
+                totalAmount: total,
+                paymentStatus: o.payment_status,
+                pendingAmount: pending
+              };
+            });
+
+            pdfBase64 = await generateClientStatementPDFBase64({
+              clientName: cData.name,
+              clientPhone: cData.phone,
+              orders: statementOrders,
+              grandPending: cData.totalAmount,
+              companyName: settings.systemName,
+              companyColor: settings.primaryColor,
+              pixKey: settings.pixKey,
+              workingHours: settings.workingHours
+            });
+          } else {
+            const latestOrder = cData.orders?.[0];
+            if (!latestOrder) throw new Error("Nenhum pedido encontrado para gerar PDF.");
+            
+            pdfBase64 = await generateOrderPDFBase64({
+              id: latestOrder.id,
+              orderNumber: latestOrder.order_number,
+              createdAt: latestOrder.created_at,
+              clientName: cData.name,
+              paymentStatus: 'pending',
+              totalAmount: latestOrder.total_amount,
+              items: latestOrder.items || [],
+              companyName: settings.systemName,
+            });
+          }
 
           updateStep(taskId, 'pdf', 'completed');
           updateStep(taskId, 'send', 'loading');
@@ -122,7 +151,7 @@ export const WhatsAppBillingModal: React.FC<WhatsAppBillingModalProps> = ({ isOp
             message: msgText,
             mediaUrl: `data:application/pdf;base64,${pdfBase64}`,
             mediaType: 'document',
-            mediaName: `Fechamento_${cData.name.replace(/\s+/g, '_')}.pdf`
+            mediaName: `Fechamento_Pedidos_${cData.name.replace(/\s+/g, '_')}.pdf`
           });
         } else {
           updateStep(taskId, 'send', 'completed');

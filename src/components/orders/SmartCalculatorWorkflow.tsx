@@ -809,11 +809,22 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
         const validItems = orderItemsList.filter(it => it.matrixName && it.matrixName.trim() !== '');
         
         if (validItems.length > 0) {
-          const sanitizeDesc = (name: string) => name.replace(/^(bordado:\s*|entrada:\s*)+/gi, '').trim();
+          const buildItemDesc = (rawName: string, stitches: number, colors: number) => {
+            const clean = rawName.trim();
+            if (/^(entrada|sinal|desenvolvimento|serviço|taxa|frete|desconto):/i.test(clean)) {
+              return clean;
+            }
+            const cleanName = clean.replace(/^bordado:\s*/gi, '').trim();
+            if (stitches === 0) {
+              return cleanName;
+            }
+            return `Bordado: ${cleanName} (${stitches.toLocaleString()} pts, ${colors || 1} cores)`;
+          };
+
           const itemsPayload = validItems.map(it => ({
             order_id: order.id,
             matrix_id: it.matrixId || null,
-            description: `Bordado: ${sanitizeDesc(it.matrixName)} (${it.stitchCount.toLocaleString()} pts, ${it.colorCount} cores)`,
+            description: buildItemDesc(it.matrixName, it.stitchCount, it.colorCount),
             quantity: it.quantity,
             unit_price: isQuick ? 0 : it.unitPrice,
             total_price: isQuick ? 0 : it.totalPrice
@@ -828,10 +839,21 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
           }
         } else if (matrixName.trim()) {
           // Fallback para item único configurado nos inputs
-          const cleanName = matrixName.replace(/^(bordado:\s*|entrada:\s*)+/gi, '').trim();
+          const buildItemDesc = (rawName: string, stitches: number, colors: number) => {
+            const clean = rawName.trim();
+            if (/^(entrada|sinal|desenvolvimento|serviço|taxa|frete|desconto):/i.test(clean)) {
+              return clean;
+            }
+            const cleanName = clean.replace(/^bordado:\s*/gi, '').trim();
+            if (stitches === 0) {
+              return cleanName;
+            }
+            return `Bordado: ${cleanName} (${stitches.toLocaleString()} pts, ${colors || 1} cores)`;
+          };
+
           const descText = isQuick 
-            ? `Entrada: ${cleanName}`
-            : `Bordado: ${cleanName} (${stitchCount.toLocaleString()} pts, ${colorCount || 1} cores)`;
+            ? `Entrada: ${matrixName.replace(/^(bordado:\s*|entrada:\s*)+/gi, '').trim()}`
+            : buildItemDesc(matrixName, stitchCount, colorCount);
 
           const { error: itemError } = await supabase
             .from('order_items')

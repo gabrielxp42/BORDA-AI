@@ -167,7 +167,7 @@ const getOrderHTML = (order: OrderPDFData) => {
               const tPrice = Number(item.totalPrice ?? (item as any).total_price ?? (uPrice * (item.quantity || 1)));
               return `
               <tr>
-                <td class="font-bold">${item.description}</td>
+                <td class="font-bold">${formatItemDesc(item.description)}</td>
                 <td class="text-center">${item.quantity} un</td>
                 ${canSee ? `<td class="text-right">${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(uPrice)}</td><td class="text-right font-bold">${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(tPrice)}</td>` : ''}
               </tr>
@@ -287,14 +287,119 @@ export interface ClientStatementPDFData {
   companyName?: string;
   companyColor?: string;
   pixKey?: string;
+  workingHours?: string;
 }
 
-export const printClientStatementPDF = (data: ClientStatementPDFData) => {
+const getClientStatementHTML = (data: ClientStatementPDFData) => {
   const companyName = data.companyName || 'GUAÇU BORDADOS';
   const brandColor = data.companyColor || '#8B5CF6';
   const formattedDate = new Date().toLocaleDateString('pt-BR');
   const formattedGrandPending = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(data.grandPending);
 
+  return `
+    <!DOCTYPE html>
+    <html lang="pt-BR">
+    <head>
+      <meta charset="UTF-8">
+      <title>Extrato de Débitos - ${data.clientName}</title>
+      <style>
+        @page { size: A4; margin: 15mm; }
+        * { box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; word-spacing: normal; letter-spacing: normal; }
+        body { font-family: 'Segoe UI', system-ui, -apple-system, Roboto, sans-serif; margin: 0; padding: 0; color: #1e293b; font-size: 13px; line-height: 1.5; background: #ffffff; }
+        .brand-bar { height: 6px; background: ${brandColor}; width: 100%; border-radius: 4px 4px 0 0; margin-bottom: 20px; }
+        .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #e2e8f0; padding-bottom: 16px; margin-bottom: 20px; }
+        .title { font-size: 22px; font-weight: 900; color: ${brandColor}; text-transform: uppercase; letter-spacing: -0.5px; margin: 0; }
+        .subtitle { font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px; }
+        .client-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px 16px; margin-bottom: 20px; }
+        .client-title { font-size: 10px; font-weight: 800; text-transform: uppercase; color: #64748b; margin-bottom: 4px; letter-spacing: 0.5px; }
+        .client-name { font-size: 16px; font-weight: 800; color: #0f172a; }
+        .table-container { margin-bottom: 24px; border-radius: 12px; overflow: hidden; border: 1px solid #e2e8f0; }
+        table { width: 100%; border-collapse: collapse; }
+        th { background: ${brandColor}; color: #ffffff; text-align: left; padding: 12px 16px; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; }
+        td { padding: 12px 16px; border-bottom: 1px solid #f1f5f9; font-size: 12px; color: #334155; }
+        tr:nth-child(even) { background-color: #f8fafc; }
+        .text-right { text-align: right; }
+        .text-center { text-align: center; }
+        .font-bold { font-weight: 700; }
+        .pending-tag { background: #fef2f2; color: #dc2626; padding: 4px 10px; border-radius: 20px; font-weight: 800; font-size: 10px; border: 1px solid #fca5a5; display: inline-block; white-space: nowrap; }
+        .half-tag { background: #eff6ff; color: #2563eb; padding: 4px 10px; border-radius: 20px; font-weight: 800; font-size: 10px; border: 1px solid #93c5fd; display: inline-block; white-space: nowrap; }
+        .total-container { display: flex; justify-content: space-between; align-items: center; background: #0f172a; color: white; padding: 16px 20px; border-radius: 12px; margin-bottom: 20px; }
+        .total-val { font-size: 24px; font-weight: 900; color: #ffffff; }
+        .pix-box { padding: 14px 16px; background: #fffbeb; border: 1px solid #fde68a; border-radius: 12px; color: #92400e; font-size: 12px; margin-bottom: 20px; }
+        .footer { border-top: 1px solid #e2e8f0; padding-top: 16px; text-align: center; font-size: 10px; color: #94a3b8; }
+      </style>
+    </head>
+    <body>
+      <div class="brand-bar"></div>
+      <div class="header">
+        <div>
+          <h1 class="title">${companyName}</h1>
+          <div class="subtitle">Extrato Detalhado de Fechamento de Pedidos</div>
+        </div>
+        <div style="text-align: right;">
+          <div style="font-weight: 800; font-size: 10px; color: #64748b; text-transform: uppercase;">DATA DE EMISSÃO</div>
+          <div style="font-weight: 700; font-size: 12px; color: #0f172a;">${formattedDate}</div>
+        </div>
+      </div>
+
+      <div class="client-box">
+        <div class="client-title">Cliente / Destinatário</div>
+        <div class="client-name">${data.clientName} ${data.clientCompany ? `(${data.clientCompany})` : ''}</div>
+        ${data.clientPhone ? `<div style="font-size: 11px; color: #64748b; margin-top: 2px;">📞 ${data.clientPhone}</div>` : ''}
+      </div>
+
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Pedido #</th>
+              <th>Data da Entrada</th>
+              <th>Previsão Entrega</th>
+              <th class="text-center">Status Pagamento</th>
+              <th class="text-right">Valor Total</th>
+              <th class="text-right">Saldo Pendente</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${data.orders.map(o => `
+              <tr>
+                <td class="font-bold">#${o.orderNumber || o.id.slice(0, 4)}</td>
+                <td>${new Date(o.createdAt).toLocaleDateString('pt-BR')}</td>
+                <td>${o.dueDate ? new Date(o.dueDate).toLocaleDateString('pt-BR') : 'A combinar'}</td>
+                <td class="text-center">
+                  ${o.paymentStatus === 'half_paid' ? '<span class="half-tag">SINAL 50% RECEBIDO</span>' : '<span class="pending-tag">100% PENDENTE</span>'}
+                </td>
+                <td class="text-right">${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(o.totalAmount)}</td>
+                <td class="text-right font-bold" style="color: #dc2626;">${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(o.pendingAmount)}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="total-container">
+        <div>
+          <div style="font-size: 10px; font-weight: 800; text-transform: uppercase; color: #94a3b8;">Total Acumulado a Pagar</div>
+          <div style="font-size: 11px; color: #cbd5e1;">Sumatório dos pedidos em aberto deste cliente</div>
+        </div>
+        <div class="total-val">${formattedGrandPending}</div>
+      </div>
+
+      ${data.pixKey ? `
+        <div class="pix-box">
+          🔑 <strong>Chave PIX para Pagamento:</strong> ${data.pixKey}<br/>
+          Por favor, envie o comprovante de pagamento para este mesmo número de WhatsApp.
+        </div>
+      ` : ''}
+
+      <div class="footer">${companyName} — Tecnologia ERP para Oficinas de Bordado</div>
+    </body>
+    </html>
+  `;
+};
+
+export const printClientStatementPDF = (data: ClientStatementPDFData) => {
+  const html = getClientStatementHTML(data);
   const existingFrame = document.getElementById('borda-print-iframe');
   if (existingFrame) existingFrame.remove();
 
@@ -311,101 +416,6 @@ export const printClientStatementPDF = (data: ClientStatementPDFData) => {
 
   const frameDoc = iframe.contentWindow?.document;
   if (!frameDoc) return;
-
-  const html = `
-    <!DOCTYPE html>
-    <html lang="pt-BR">
-    <head>
-      <meta charset="UTF-8">
-      <title>Extrato de Débitos - ${data.clientName}</title>
-      <style>
-        * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-        body { margin: 0; padding: 24px; color: #1e293b; font-size: 13px; }
-        .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 3px solid ${brandColor}; padding-bottom: 16px; margin-bottom: 20px; }
-        .title { font-size: 20px; font-weight: 900; color: #0f172a; text-transform: uppercase; }
-        .subtitle { font-size: 11px; color: #64748b; font-weight: 600; }
-        .client-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px; margin-bottom: 20px; }
-        .client-title { font-size: 11px; font-weight: 800; text-transform: uppercase; color: #64748b; margin-bottom: 4px; }
-        .client-name { font-size: 16px; font-weight: 800; color: #0f172a; }
-        table { width: 100%; border-collapse: collapse; margin-bottom: 24px; }
-        th { background: #f1f5f9; text-align: left; padding: 10px 12px; font-size: 11px; font-weight: 800; uppercase; color: #475569; border-bottom: 2px solid #cbd5e1; }
-        td { padding: 12px; border-bottom: 1px solid #e2e8f0; }
-        .text-right { text-align: right; }
-        .text-center { text-align: center; }
-        .font-bold { font-weight: 700; }
-        .pending-tag { background: #fef2f2; color: #dc2626; padding: 4px 8px; border-radius: 6px; font-weight: 800; font-size: 10px; }
-        .half-tag { background: #eff6ff; color: #2563eb; padding: 4px 8px; border-radius: 6px; font-weight: 800; font-size: 10px; }
-        .total-container { display: flex; justify-content: space-between; align-items: center; background: #0f172a; color: white; padding: 16px 20px; border-radius: 12px; }
-        .total-val { font-size: 22px; font-weight: 900; color: #f59e0b; }
-        .pix-box { margin-top: 16px; padding: 12px; background: #fffbeb; border: 1px solid #fde68a; border-radius: 10px; color: #92400e; font-size: 12px; }
-      </style>
-    </head>
-    <body>
-      <div class="header">
-        <div>
-          <div class="title">${companyName}</div>
-          <div class="subtitle">Extrato Detalhado de Faturas & Débitos em Aberto</div>
-        </div>
-        <div style="text-align: right;">
-          <div style="font-weight: 800; font-size: 11px; color: #64748b;">EMISSÃO</div>
-          <div style="font-weight: 700;">${formattedDate}</div>
-        </div>
-      </div>
-
-      <div class="client-box">
-        <div class="client-title">Cliente</div>
-        <div class="client-name">${data.clientName} ${data.clientCompany ? `(${data.clientCompany})` : ''}</div>
-        ${data.clientPhone ? `<div style="font-size: 11px; color: #64748b; margin-top: 2px;">Telefone / WhatsApp: ${data.clientPhone}</div>` : ''}
-      </div>
-
-      <table>
-        <thead>
-          <tr>
-            <th>Pedido #</th>
-            <th>Data de Entrada</th>
-            <th>Prazo Combinado</th>
-            <th class="text-center">Status</th>
-            <th class="text-right">Valor Total</th>
-            <th class="text-right">Saldo Pendente</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${data.orders.map(o => `
-            <tr>
-              <td class="font-bold">#${o.orderNumber || o.id.slice(0, 4)}</td>
-              <td>${new Date(o.createdAt).toLocaleDateString('pt-BR')}</td>
-              <td>${o.dueDate ? new Date(o.dueDate).toLocaleDateString('pt-BR') : 'A combinar'}</td>
-              <td class="text-center">
-                ${o.paymentStatus === 'half_paid' ? '<span class="half-tag">SINAL 50%</span>' : '<span class="pending-tag">100% PENDENTE</span>'}
-              </td>
-              <td class="text-right">${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(o.totalAmount)}</td>
-              <td class="text-right font-bold" style="color: #dc2626;">${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(o.pendingAmount)}</td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
-
-      <div class="total-container">
-        <div>
-          <div style="font-size: 11px; font-weight: 800; text-transform: uppercase; color: #94a3b8;">Total Geral a Pagar</div>
-          <div style="font-size: 11px; color: #cbd5e1;">Sumatório de todas as faturas pendentes</div>
-        </div>
-        <div class="total-val">${formattedGrandPending}</div>
-      </div>
-
-      ${data.pixKey ? `
-        <div class="pix-box">
-          🔑 <strong>Chave PIX para Pagamento:</strong> ${data.pixKey}<br/>
-          Por favor, envie o comprovante de pagamento para este mesmo número de WhatsApp.
-        </div>
-      ` : ''}
-
-      <div style="margin-top: 30px; text-align: center; font-size: 10px; color: #94a3b8;">
-        ${companyName} • Gestão Inteligente de Bordados
-      </div>
-    </body>
-    </html>
-  `;
 
   frameDoc.open();
   frameDoc.write(html);
@@ -570,4 +580,56 @@ export const printPeriodFinancialReportPDF = (data: PeriodFinancialReportData) =
       console.error('Erro ao imprimir relatório financeiro:', err);
     }
   }, 400);
+};
+
+export const generateClientStatementPDFBase64 = async (data: ClientStatementPDFData): Promise<string> => {
+  const container = document.createElement('div');
+  container.innerHTML = getClientStatementHTML(data);
+  container.style.position = 'fixed';
+  container.style.top = '0';
+  container.style.left = '-9999px';
+  container.style.background = 'white';
+  container.style.width = '794px';
+  container.style.padding = '20px';
+  container.style.boxSizing = 'border-box';
+  document.body.appendChild(container);
+
+  await new Promise(r => setTimeout(r, 100));
+
+  const canvas = await html2canvas(container, {
+    scale: 2,
+    useCORS: true,
+    logging: false,
+    y: 0,
+    scrollY: 0,
+    windowWidth: 800
+  });
+
+  const imgData = canvas.toDataURL('image/jpeg', 0.95);
+  const pdf = new jsPDF('p', 'mm', 'a4');
+  const pdfWidth = pdf.internal.pageSize.getWidth();
+  const pdfHeight = pdf.internal.pageSize.getHeight();
+  
+  const imgProps = pdf.getImageProperties(imgData);
+  const calculatedHeight = (imgProps.height * pdfWidth) / imgProps.width;
+
+  if (calculatedHeight <= pdfHeight) {
+    pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, calculatedHeight);
+  } else {
+    let heightLeft = calculatedHeight;
+    let position = 0;
+
+    pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, calculatedHeight);
+    heightLeft -= pdfHeight;
+
+    while (heightLeft >= 0) {
+      position = heightLeft - calculatedHeight;
+      pdf.addPage();
+      pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, calculatedHeight);
+      heightLeft -= pdfHeight;
+    }
+  }
+
+  document.body.removeChild(container);
+  return pdf.output('datauristring').split(',')[1];
 };

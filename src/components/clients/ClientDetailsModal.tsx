@@ -31,6 +31,8 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
 import { formatCurrency } from '@/utils/currencyFormatter';
+import { printClientStatementPDF } from '@/services/pdfGenerator';
+import { WhatsAppBillingModal } from '@/components/billing/WhatsAppBillingModal';
 
 interface ClientDetailsModalProps {
   isOpen: boolean;
@@ -121,33 +123,57 @@ export const ClientDetailsModal: React.FC<ClientDetailsModalProps> = ({
   const selectedTotal = selectedOrders.reduce((sum, o) => sum + (o.total_amount || 0), 0);
   const effectiveTotal = selectedOrderIds.length > 0 ? selectedTotal : totalPendente;
 
-  // Cobrança WhatsApp
-  const handleCobrarWhatsApp = () => {
-    if (!client.phone) {
-      toast.error('Este cliente não possui WhatsApp cadastrado.');
+  const [isBillingModalOpen, setIsBillingModalOpen] = useState(false);
+
+  // Impressão de Extrato Consolidado em PDF
+  const handlePrintStatement = () => {
+    const ordersToPrint = selectedOrders.length > 0 ? selectedOrders : openOrders;
+    if (ordersToPrint.length === 0) {
+      toast.info('Nenhum pedido pendente para imprimir extrato.');
       return;
     }
 
+    const statementOrders = ordersToPrint.map(o => {
+      const total = Number(o.total_amount || 0);
+      const pending = o.payment_status === 'half_paid' ? total * 0.5 : total;
+      return {
+        id: o.id,
+        orderNumber: o.id.slice(0, 6),
+        createdAt: o.created_at,
+        dueDate: o.due_date,
+        totalAmount: total,
+        paymentStatus: o.payment_status,
+        pendingAmount: pending
+      };
+    });
+
+    const grandPending = ordersToPrint.reduce((sum, o) => {
+      const total = Number(o.total_amount || 0);
+      return sum + (o.payment_status === 'half_paid' ? total * 0.5 : total);
+    }, 0);
+
+    printClientStatementPDF({
+      clientName: client.name,
+      clientPhone: client.phone,
+      clientCompany: client.company_name,
+      orders: statementOrders,
+      grandPending,
+      companyName: settings.systemName,
+      companyColor: settings.primaryColor,
+      pixKey: settings.pixKey
+    });
+
+    toast.success('🖨️ Extrato consolidado enviado para impressão!');
+  };
+
+  // Abrir Modal de Cobrança Inteligente WhatsApp
+  const handleCobrarWhatsApp = () => {
     const ordersToCharge = selectedOrders.length > 0 ? selectedOrders : openOrders;
     if (ordersToCharge.length === 0) {
       toast.info('Nenhum pedido pendente para cobrança.');
       return;
     }
-
-    const itemsText = ordersToCharge.map(o => 
-      `• *Pedido #${o.id.slice(0, 6)}*: R$ ${Number(o.total_amount || 0).toFixed(2)} (${o.payment_status === 'half_paid' ? 'Sinal 50%' : 'Pendente'})`
-    ).join('\n');
-
-    const totalCobrar = ordersToCharge.reduce((sum, o) => sum + (o.total_amount || 0), 0);
-
-    const message = `*Ficha de Cobrança - ${settings.systemName}*\n\n` +
-      `Olá *${client.name}*, tudo bem?\n` +
-      `Segue a relação de pedidos pendentes na oficina:\n\n` +
-      `${itemsText}\n\n` +
-      `*Valor Total em Aberto:* R$ ${totalCobrar.toFixed(2)}\n\n` +
-      `Ficamos no aguardo da confirmação do pagamento! Obrigado.`;
-
-    window.open(`https://wa.me/${client.phone.replace(/\D/g, '')}?text=${encodeURIComponent(message)}`, '_blank');
+    setIsBillingModalOpen(true);
   };
 
   const modalContent = (
@@ -486,20 +512,44 @@ export const ClientDetailsModal: React.FC<ClientDetailsModalProps> = ({
                 </span>
               </div>
 
-              <button
-                type="button"
-                onClick={handleCobrarWhatsApp}
-                className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs transition-all shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2 active:scale-95"
-              >
-                <Send className="h-3.5 w-3.5" />
-                <span>Cobrar via WhatsApp</span>
-                <ArrowRight className="h-3.5 w-3.5" />
-              </button>
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <button
+                  type="button"
+                  onClick={handlePrintStatement}
+                  className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl bg-purple-500/10 hover:bg-purple-500/20 text-purple-300 border border-purple-500/30 font-bold text-xs transition-all flex items-center justify-center gap-2 active:scale-95"
+                >
+                  <FileText className="h-3.5 w-3.5" />
+                  <span>Gerar Extrato PDF</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleCobrarWhatsApp}
+                  className="flex-1 sm:flex-none px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs transition-all shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2 active:scale-95"
+                >
+                  <Send className="h-3.5 w-3.5" />
+                  <span>Cobrar via WhatsApp</span>
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </button>
+              </div>
             </div>
           </div>
         )}
 
       </div>
+
+      <WhatsAppBillingModal
+        isOpen={isBillingModalOpen}
+        onClose={() => setIsBillingModalOpen(false)}
+        clientData={{
+          id: client.id,
+          name: client.name,
+          phone: client.phone,
+          totalAmount: effectiveTotal,
+          orderCount: (selectedOrders.length > 0 ? selectedOrders : openOrders).length,
+          orders: selectedOrders.length > 0 ? selectedOrders : openOrders
+        }}
+      />
     </div>
   );
 
