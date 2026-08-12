@@ -87,6 +87,17 @@ export const PaymentStatusModal: React.FC<PaymentStatusModalProps> = ({
       setCustomAmount(0);
     } else if (newStatus === 'paid') {
       setCustomAmount(order.total_amount || 0);
+      // Automação inteligente: se a data agendada está no futuro e o status é "Pago",
+      // limpa a data agendada pois não faz sentido manter vencimento futuro para algo já quitado
+      if (scheduledDueDate) {
+        const scheduled = new Date(scheduledDueDate);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        if (scheduled > today) {
+          toast.info('📅 Data de vencimento futura removida automaticamente — pedido já foi quitado.');
+          setScheduledDueDate('');
+        }
+      }
     } else if (newStatus === 'half_paid') {
       const { metadata } = parsePaymentMetadata(order.notes);
       setCustomAmount(metadata.depositAmount || (order.total_amount || 0) / 2);
@@ -378,29 +389,47 @@ export const PaymentStatusModal: React.FC<PaymentStatusModalProps> = ({
               </div>
             </div>
           ) : (
-            <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs flex items-center gap-2">
-              <span>📌 Pedido marcado como Pendente. Altere o status acima para <strong>Sinal 50%</strong> ou <strong>Pago 100%</strong> para registrar a forma de pagamento.</span>
-            </div>
+            <>
+              {/* Guia sutil para o operador quando pendente */}
+              <div className="p-3 rounded-2xl bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-xs text-slate-600 dark:text-zinc-400 flex items-start gap-2.5">
+                <span className="text-base leading-none mt-0.5">💡</span>
+                <span>Para <strong className="text-slate-800 dark:text-zinc-200">dar baixa</strong>, selecione <strong className="text-emerald-600 dark:text-emerald-400">Pago (100%)</strong> ou <strong className="text-blue-600 dark:text-blue-400">Sinal 50%</strong> acima, escolha a forma de pagamento e salve. O valor entrará automaticamente no caixa.</span>
+              </div>
+
+              {/* Agendar Data Prevista de Pagamento — só exibe no status Pendente */}
+              <div className="p-3.5 rounded-2xl bg-purple-500/5 dark:bg-purple-500/10 border border-purple-500/20 dark:border-purple-500/30 space-y-1.5 animate-in fade-in duration-200">
+                <label className="text-[11px] font-black uppercase tracking-wider text-purple-600 dark:text-purple-400 flex items-center gap-1.5">
+                  <Calendar className="h-4 w-4 text-purple-500" />
+                  <span>Agendar Vencimento (Faturas A Receber)</span>
+                </label>
+                <input
+                  type="date"
+                  value={scheduledDueDate}
+                  onChange={e => setScheduledDueDate(e.target.value)}
+                  className="w-full bg-white dark:bg-black/40 border border-slate-300 dark:border-white/10 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-purple-500 font-bold cursor-pointer"
+                />
+                <p className="text-[10px] text-slate-500 dark:text-zinc-400">
+                  💡 Opcional: agende a data combinada com o cliente. O pedido aparece automaticamente no <strong>A Receber</strong>.
+                </p>
+              </div>
+            </>
           )}
 
-          {/* Agendar Data Prevista de Pagamento / Vencimento no 'A Receber' (Exibido apenas quando pendente ou sinal) */}
-          {status !== 'paid' && (
-            <div className="p-3.5 rounded-2xl bg-amber-500/10 dark:bg-amber-500/10 border border-amber-500/30 space-y-1.5 animate-in fade-in duration-200">
-              <label className="text-[11px] font-black uppercase tracking-wider text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
-                <Calendar className="h-4 w-4 text-amber-500" />
-                <span>📅 Agendar Data Prevista de Pagamento (Faturas A Receber)</span>
-              </label>
-              <input
-                type="date"
-                value={scheduledDueDate}
-                onChange={e => setScheduledDueDate(e.target.value)}
-                className="w-full bg-white dark:bg-black/40 border border-slate-300 dark:border-white/10 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-amber-500 font-bold cursor-pointer"
-              />
-              <p className="text-[10px] text-slate-500 dark:text-zinc-400">
-                💡 Ao agendar uma data aqui, o pedido é vinculado diretamente ao módulo <strong>A Receber</strong> na data acordada com o cliente.
-              </p>
-            </div>
-          )}
+          {/* Alerta inteligente: data agendada no futuro com sinal dado */}
+          {status === 'half_paid' && scheduledDueDate && (() => {
+            const scheduled = new Date(scheduledDueDate);
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            if (scheduled > today) {
+              return (
+                <div className="p-3 rounded-2xl bg-blue-500/10 border border-blue-500/20 text-xs text-blue-700 dark:text-blue-300 flex items-start gap-2">
+                  <span className="text-base leading-none">📅</span>
+                  <span>Vencimento agendado para <strong>{format(scheduled, 'dd/MM/yyyy')}</strong>. O saldo restante continuará visível no <strong>A Receber</strong> até a quitação total.</span>
+                </div>
+              );
+            }
+            return null;
+          })()}
 
           {/* Observação do Pagamento (Persistida no Banco de Dados) */}
           <div className="space-y-1.5 pt-1">
