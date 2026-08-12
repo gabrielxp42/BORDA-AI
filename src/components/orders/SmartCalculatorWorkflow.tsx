@@ -2202,7 +2202,7 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
                     </div>
 
                     {/* Pílulas de Atalho Rápido de Desconto */}
-                    {[5, 10, 15, 20].map(pct => (
+                    {[3, 5, 10, 15, 20].map(pct => (
                       <button
                         key={pct}
                         type="button"

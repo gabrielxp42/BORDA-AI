@@ -33,6 +33,11 @@ export interface OrderPDFData {
   canSeeFinancials?: boolean;
 }
 
+const formatItemDesc = (desc?: string): string => {
+  if (!desc || !desc.trim()) return 'Bordado Personalizado';
+  return desc.trim();
+};
+
 const getOrderHTML = (order: OrderPDFData) => {
   const { cleanNotes } = parsePaymentMetadata(order.notes);
   const canSee = order.canSeeFinancials !== false;

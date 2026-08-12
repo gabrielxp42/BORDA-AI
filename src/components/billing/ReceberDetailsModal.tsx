@@ -55,44 +55,48 @@ export const ReceberDetailsModal: React.FC<ReceberDetailsModalProps> = ({
     let olderCount = 0;
     let grandPending = 0;
 
-    pendingOrders.forEach(o => {
-      const created = new Date(o.created_at || Date.now());
-      const monthStr = format(created, 'MM/yyyy');
-      const total = Number(o.total_amount || 0);
-      const pendingVal = o.payment_status === 'half_paid' ? total * 0.5 : total;
+    pendingOrders
+      .filter(o => o.payment_status !== 'paid')
+      .forEach(o => {
+        const created = new Date(o.created_at || Date.now());
+        const monthStr = format(created, 'MM/yyyy');
+        const total = Number(o.total_amount || 0);
+        const pendingVal = o.payment_status === 'half_paid' ? total * 0.5 : total;
 
-      grandPending += pendingVal;
+        grandPending += pendingVal;
 
-      if (monthStr === currentMonthStr) {
-        currentPending += pendingVal;
-        currentCount++;
-      } else if (monthStr === lastMonthStr) {
-        lastMonthPending += pendingVal;
-        lastMonthCount++;
-      } else {
-        olderPending += pendingVal;
-        olderCount++;
-      }
-    });
+        if (monthStr === currentMonthStr) {
+          currentPending += pendingVal;
+          currentCount++;
+        } else if (monthStr === lastMonthStr) {
+          lastMonthPending += pendingVal;
+          lastMonthCount++;
+        } else {
+          olderPending += pendingVal;
+          olderCount++;
+        }
+      });
 
-    pendingTransactions.forEach(t => {
-      const created = new Date(t.due_date || t.date || Date.now());
-      const monthStr = format(created, 'MM/yyyy');
-      const val = Number(t.amount || 0);
+    pendingTransactions
+      .filter(t => t.status !== 'paid')
+      .forEach(t => {
+        const created = new Date(t.due_date || t.date || Date.now());
+        const monthStr = format(created, 'MM/yyyy');
+        const val = Number(t.amount || 0);
 
-      grandPending += val;
+        grandPending += val;
 
-      if (monthStr === currentMonthStr) {
-        currentPending += val;
-        currentCount++;
-      } else if (monthStr === lastMonthStr) {
-        lastMonthPending += val;
-        lastMonthCount++;
-      } else {
-        olderPending += val;
-        olderCount++;
-      }
-    });
+        if (monthStr === currentMonthStr) {
+          currentPending += val;
+          currentCount++;
+        } else if (monthStr === lastMonthStr) {
+          lastMonthPending += val;
+          lastMonthCount++;
+        } else {
+          olderPending += val;
+          olderCount++;
+        }
+      });
 
     return {
       grandPending,
@@ -107,9 +111,13 @@ export const ReceberDetailsModal: React.FC<ReceberDetailsModalProps> = ({
 
   // Filtered orders & transactions list
   const filteredItems = useMemo(() => {
-    const ordersFormatted = pendingOrders.map(o => ({ ...o, isManualTx: false }));
+    const ordersFormatted = pendingOrders
+      .filter(o => o.payment_status !== 'paid')
+      .map(o => ({ ...o, isManualTx: false }));
     
-    const txFormatted = pendingTransactions.map(t => {
+    const txFormatted = pendingTransactions
+      .filter(t => t.status !== 'paid')
+      .map(t => {
       let metadata: any = {};
       try {
         if (t.notes && t.notes.startsWith('{')) {

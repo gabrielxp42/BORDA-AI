@@ -15,7 +15,7 @@ export default defineConfig({
     watch: {
       usePolling: true,
     },
-    strictPort: true,
+    strictPort: false,
   },
   clearScreen: false,
 });
