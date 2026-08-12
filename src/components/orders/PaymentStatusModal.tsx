@@ -383,22 +383,24 @@ export const PaymentStatusModal: React.FC<PaymentStatusModalProps> = ({
             </div>
           )}
 
-          {/* Agendar Data Prevista de Pagamento / Vencimento no 'A Receber' */}
-          <div className="p-3.5 rounded-2xl bg-amber-500/10 dark:bg-amber-500/10 border border-amber-500/30 space-y-1.5">
-            <label className="text-[11px] font-black uppercase tracking-wider text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
-              <Calendar className="h-4 w-4 text-amber-500" />
-              <span>📅 Agendar Data Prevista de Pagamento (Faturas A Receber)</span>
-            </label>
-            <input
-              type="date"
-              value={scheduledDueDate}
-              onChange={e => setScheduledDueDate(e.target.value)}
-              className="w-full bg-white dark:bg-black/40 border border-slate-300 dark:border-white/10 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-amber-500 font-bold cursor-pointer"
-            />
-            <p className="text-[10px] text-slate-500 dark:text-zinc-400">
-              💡 Ao agendar uma data aqui, o pedido é vinculado diretamente ao módulo <strong>A Receber</strong> na data acordada com o cliente.
-            </p>
-          </div>
+          {/* Agendar Data Prevista de Pagamento / Vencimento no 'A Receber' (Exibido apenas quando pendente ou sinal) */}
+          {status !== 'paid' && (
+            <div className="p-3.5 rounded-2xl bg-amber-500/10 dark:bg-amber-500/10 border border-amber-500/30 space-y-1.5 animate-in fade-in duration-200">
+              <label className="text-[11px] font-black uppercase tracking-wider text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
+                <Calendar className="h-4 w-4 text-amber-500" />
+                <span>📅 Agendar Data Prevista de Pagamento (Faturas A Receber)</span>
+              </label>
+              <input
+                type="date"
+                value={scheduledDueDate}
+                onChange={e => setScheduledDueDate(e.target.value)}
+                className="w-full bg-white dark:bg-black/40 border border-slate-300 dark:border-white/10 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-amber-500 font-bold cursor-pointer"
+              />
+              <p className="text-[10px] text-slate-500 dark:text-zinc-400">
+                💡 Ao agendar uma data aqui, o pedido é vinculado diretamente ao módulo <strong>A Receber</strong> na data acordada com o cliente.
+              </p>
+            </div>
+          )}
 
           {/* Observação do Pagamento (Persistida no Banco de Dados) */}
           <div className="space-y-1.5 pt-1">
