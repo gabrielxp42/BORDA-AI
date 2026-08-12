@@ -23,13 +23,18 @@ interface PaymentStatusModalProps {
     due_date?: string;
   } | null;
   onStatusUpdated?: () => void;
+  /** Se true ou se defaultStatus for 'paid', pre-seleciona Pago (100%) para dar baixa direto */
+  isBaixaMode?: boolean;
+  defaultStatus?: 'pending' | 'paid' | 'half_paid';
 }
 
 export const PaymentStatusModal: React.FC<PaymentStatusModalProps> = ({
   isOpen,
   onClose,
   order,
-  onStatusUpdated
+  onStatusUpdated,
+  isBaixaMode = false,
+  defaultStatus
 }) => {
   const { settings } = useCompanySettings();
   const { activeProfile } = useProfile();
@@ -48,7 +53,12 @@ export const PaymentStatusModal: React.FC<PaymentStatusModalProps> = ({
 
   useEffect(() => {
     if (isOpen && order) {
-      const initialStatus = order.payment_status || 'pending';
+      // Quando abre para Dar Baixa ou se defaultStatus for informado, pre-seleciona 'paid' por padrão!
+      const targetDefault = defaultStatus || (isBaixaMode ? 'paid' : null);
+      const initialStatus = targetDefault 
+        ? targetDefault 
+        : (order.payment_status === 'pending' && isBaixaMode ? 'paid' : (order.payment_status || 'pending'));
+
       setStatus(initialStatus);
 
       // Lê metadados salvos para persistência entre dispositivos
@@ -76,7 +86,7 @@ export const PaymentStatusModal: React.FC<PaymentStatusModalProps> = ({
         setCustomAmount(0);
       }
     }
-  }, [order, isOpen]);
+  }, [order, isOpen, isBaixaMode, defaultStatus]);
 
   const handleStatusChange = (newStatus: 'pending' | 'paid' | 'half_paid') => {
     setStatus(newStatus);
@@ -284,7 +294,11 @@ export const PaymentStatusModal: React.FC<PaymentStatusModalProps> = ({
             </label>
             <div className="grid grid-cols-3 gap-2">
               {[
-                { id: 'pending', label: 'Pendente', color: 'bg-amber-500/20 text-amber-500 border-amber-500/50' },
+                { 
+                  id: 'pending', 
+                  label: isBaixaMode ? 'Pendente (Sem Baixa)' : 'Pendente', 
+                  color: 'bg-amber-500/20 text-amber-500 border-amber-500/50' 
+                },
                 { id: 'half_paid', label: 'Sinal 50%', color: 'bg-blue-500/20 text-blue-400 border-blue-500/50' },
                 { id: 'paid', label: 'Pago (100%)', color: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/50' },
               ].map(st => (
@@ -391,9 +405,9 @@ export const PaymentStatusModal: React.FC<PaymentStatusModalProps> = ({
           ) : (
             <>
               {/* Guia sutil para o operador quando pendente */}
-              <div className="p-3 rounded-2xl bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-xs text-slate-600 dark:text-zinc-400 flex items-start gap-2.5">
-                <span className="text-base leading-none mt-0.5">💡</span>
-                <span>Para <strong className="text-slate-800 dark:text-zinc-200">dar baixa</strong>, selecione <strong className="text-emerald-600 dark:text-emerald-400">Pago (100%)</strong> ou <strong className="text-blue-600 dark:text-blue-400">Sinal 50%</strong> acima, escolha a forma de pagamento e salve. O valor entrará automaticamente no caixa.</span>
+              <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-700 dark:text-amber-300 flex items-start gap-2.5">
+                <span className="text-base leading-none mt-0.5">⚠️</span>
+                <span>{isBaixaMode ? 'Atenção: Ao manter o status como Pendente, nenhuma baixa será dada e o valor não entrará no caixa.' : 'Para dar baixa, selecione Pago (100%) ou Sinal 50% acima, escolha a forma de pagamento e salve.'}</span>
               </div>
 
               {/* Agendar Data Prevista de Pagamento — só exibe no status Pendente */}

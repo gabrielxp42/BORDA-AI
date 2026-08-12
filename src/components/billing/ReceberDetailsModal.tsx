@@ -468,6 +468,8 @@ export const ReceberDetailsModal: React.FC<ReceberDetailsModalProps> = ({
         isOpen={!!selectedOrderForStatusModal}
         onClose={() => setSelectedOrderForStatusModal(null)}
         order={selectedOrderForStatusModal}
+        isBaixaMode={true}
+        defaultStatus="paid"
         onStatusUpdated={() => {
           onRefreshData();
           setSelectedOrderForStatusModal(null);
