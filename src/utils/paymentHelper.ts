@@ -227,7 +227,8 @@ export function getDueDateAlertInfo(dueDate?: string, status?: string): DueDateA
     const daysDiff = Math.round(diffMs / (1000 * 60 * 60 * 24));
     
     const formattedDate = format(due, 'dd/MM/yyyy');
-    const isFinished = status === 'concluido' || status === 'cancelado';
+    const st = (status || '').toLowerCase();
+    const isFinished = st === 'concluido' || st === 'completed' || st === 'entregue' || st === 'delivered' || st === 'pronto' || st === 'cancelado';
 
     if (isFinished) {
       return {

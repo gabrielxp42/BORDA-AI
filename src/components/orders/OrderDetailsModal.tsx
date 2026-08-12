@@ -180,7 +180,7 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
 
     const rawItems = order.order_items || order.items || [];
     const itemsSummary = rawItems.map((it: any) => `- ${it.description} (${it.quantity}x)`).join('\n') || '';
-    const text = `*Ficha do Pedido #${order.id.slice(0, 6)} - ${settings.systemName}* 🧵✨\n\n` +
+    const text = `*Ficha do Pedido #${order.order_number || order.id.slice(0, 6)} - ${settings.systemName}* 🧵✨\n\n` +
       `Olá, *${clientName}*! Seguem os detalhes do seu pedido:\n\n` +
       `*Cliente:* ${clientName}\n` +
       `*Status:* ${order.payment_status === 'paid' ? 'Pago (100%)' : order.payment_status === 'half_paid' ? 'Sinal (50%)' : 'Pendente'}\n\n` +
@@ -188,7 +188,7 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
       `*Valor Total:* R$ ${Number(order.total_amount || 0).toFixed(2)}`;
 
     const taskId = addTask({
-      title: `Ficha Pedido #${order.id.slice(0, 4)}`,
+      title: `Ficha Pedido #${order.order_number || order.id.slice(0, 4)}`,
       description: `Enviando para ${clientName}...`,
       status: 'processing',
       progress: 25,
@@ -377,7 +377,7 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
               <div>
                 <div className="flex items-center gap-2">
                   <h3 className="text-base font-black text-slate-900 dark:text-white uppercase tracking-wider">
-                    PEDIDO #{order.id.slice(0, 6)}
+                    PEDIDO #{order.order_number || order.id.slice(0, 6)}
                   </h3>
                   <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
                     order.payment_status === 'paid' ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30' :

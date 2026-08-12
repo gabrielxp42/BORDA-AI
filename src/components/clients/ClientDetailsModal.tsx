@@ -58,6 +58,7 @@ export const ClientDetailsModal: React.FC<ClientDetailsModalProps> = ({
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
+  const [isBillingModalOpen, setIsBillingModalOpen] = useState(false);
 
   useEffect(() => {
     if (isOpen && client) {
@@ -123,7 +124,6 @@ export const ClientDetailsModal: React.FC<ClientDetailsModalProps> = ({
   const selectedTotal = selectedOrders.reduce((sum, o) => sum + (o.total_amount || 0), 0);
   const effectiveTotal = selectedOrderIds.length > 0 ? selectedTotal : totalPendente;
 
-  const [isBillingModalOpen, setIsBillingModalOpen] = useState(false);
 
   // Impressão de Extrato Consolidado em PDF
   const handlePrintStatement = () => {
@@ -138,7 +138,7 @@ export const ClientDetailsModal: React.FC<ClientDetailsModalProps> = ({
       const pending = o.payment_status === 'half_paid' ? total * 0.5 : total;
       return {
         id: o.id,
-        orderNumber: o.id.slice(0, 6),
+        orderNumber: o.order_number ? String(o.order_number) : o.id.slice(0, 6),
         createdAt: o.created_at,
         dueDate: o.due_date,
         totalAmount: total,
@@ -415,7 +415,7 @@ export const ClientDetailsModal: React.FC<ClientDetailsModalProps> = ({
                           </div>
                           <div>
                             <h4 className="text-xs font-bold text-white">
-                              Pedido #{order.id.slice(0, 6)}
+                              Pedido #{order.order_number || order.id.slice(0, 6)}
                             </h4>
                             <p className="text-[10px] text-zinc-400">
                               {format(new Date(order.created_at), 'dd/MM/yyyy')}
@@ -469,7 +469,7 @@ export const ClientDetailsModal: React.FC<ClientDetailsModalProps> = ({
                     >
                       <div>
                         <span className="font-bold text-white block">
-                          Pedido #{order.id.slice(0, 6)}
+                          Pedido #{order.order_number || order.id.slice(0, 6)}
                         </span>
                         <span className="text-[10px] text-zinc-400">
                           {format(new Date(order.created_at), 'dd/MM/yyyy HH:mm')}

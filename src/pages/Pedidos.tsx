@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams, useLocation } from 'react-router-dom';
 import {
   ShoppingBag, Kanban, LayoutGrid, List, Plus, Search, Filter, Calendar,
   CheckCircle2, Clock, DollarSign, User, Package, FileText, ChevronRight,
@@ -60,18 +61,35 @@ const formatPaymentMethod = (method?: string): string => {
 };
 
 export const Pedidos: React.FC = () => {
+  const [searchParams] = useSearchParams();
+  const location = useLocation();
+  const initialFilterParam = searchParams.get('filter') || searchParams.get('payment_status') || 'all';
+
   const { isUnlocked, role, customProfiles, permissions } = useProfile();
   const { settings } = useCompanySettings();
   const canSeeFinancials = isUnlocked || (permissions?.canSeeFinancials === true);
 
-  const [activeTab, setActiveTab] = useState<'cards' | 'kanban'>('cards');
+  const isKanbanInitial = location.pathname === '/pedidos-kanban' || searchParams.get('tab') === 'kanban';
+  const [activeTab, setActiveTab] = useState<'cards' | 'kanban'>(isKanbanInitial ? 'kanban' : 'cards');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid'); // Grid de Miniaturas (Cards) como PADRÃO PRIMÁRIO!
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [filterPayment, setFilterPayment] = useState<string>('all');
+  const [filterPayment, setFilterPayment] = useState<string>(initialFilterParam);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [initialOrderData, setInitialOrderData] = useState<any>(null);
+
+  useEffect(() => {
+    const filterFromUrl = searchParams.get('filter') || searchParams.get('payment_status');
+    if (filterFromUrl) {
+      setFilterPayment(filterFromUrl);
+    }
+    if (location.pathname === '/pedidos-kanban' || searchParams.get('tab') === 'kanban') {
+      setActiveTab('kanban');
+    } else if (searchParams.get('tab') === 'cards') {
+      setActiveTab('cards');
+    }
+  }, [searchParams, location.pathname]);
 
   // Estado para controlar quais cards estão expandidos no modo Acordeon
   const [expandedOrderIds, setExpandedOrderIds] = useState<Record<string, boolean>>({});
@@ -239,6 +257,7 @@ export const Pedidos: React.FC = () => {
       o.notes?.toLowerCase().includes(search.toLowerCase());
 
     if (filterPayment === 'all') return matchesSearch;
+    if (filterPayment === 'unpaid') return matchesSearch && o.payment_status !== 'paid';
     return matchesSearch && o.payment_status === filterPayment;
   });
 
@@ -357,6 +376,7 @@ export const Pedidos: React.FC = () => {
               <span className="text-[11px] font-bold text-slate-500 dark:text-zinc-400 shrink-0">Status:</span>
               {[
                 { id: 'all', label: 'Todos' },
+                { id: 'unpaid', label: '⚠️ Faltam Pagar' },
                 { id: 'pending', label: 'Pendentes' },
                 { id: 'half_paid', label: 'Sinal 50%' },
                 { id: 'paid', label: 'Pago (100%)' },

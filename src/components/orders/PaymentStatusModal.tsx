@@ -220,7 +220,7 @@ export const PaymentStatusModal: React.FC<PaymentStatusModalProps> = ({
             </div>
             <div>
               <h3 className="text-base font-black text-slate-900 dark:text-white">
-                Atualizar Pagamento #{order.id.slice(0, 6)}
+                Atualizar Pagamento #{order.order_number || order.id.slice(0, 6)}
               </h3>
               <p className="text-xs text-slate-500 dark:text-zinc-400">
                 {order.client?.name || 'Cliente'} • Total: <strong className="text-slate-800 dark:text-zinc-200">R$ {(order.total_amount || 0).toFixed(2)}</strong>

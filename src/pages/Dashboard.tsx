@@ -22,6 +22,7 @@ import { formatCurrency } from '@/utils/currencyFormatter';
 import { parsePaymentMetadata, formatOrderPaymentBadgeDetails } from '@/utils/paymentHelper';
 import { format, subMonths, startOfMonth, endOfMonth, isSameMonth } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { ReceberDetailsModal } from '@/components/billing/ReceberDetailsModal';
 
 interface OrderRecord {
   id: string;
@@ -53,6 +54,8 @@ export const Dashboard: React.FC = () => {
   const [isCreateClientOpen, setIsCreateClientOpen] = useState(false);
   const [selectedOrderForDetails, setSelectedOrderForDetails] = useState<OrderRecord | null>(null);
   const [selectedOrderForPayment, setSelectedOrderForPayment] = useState<OrderRecord | null>(null);
+  const [isReceberModalOpen, setIsReceberModalOpen] = useState(false);
+  const [receberFilter, setReceberFilter] = useState<'all' | 'production' | 'delivered'>('all');
 
   const loadDashboardData = async () => {
     setLoading(true);
@@ -282,7 +285,10 @@ export const Dashboard: React.FC = () => {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         
         {/* Card 1: Faturamento Acumulado */}
-        <div className="glass-panel p-5 rounded-3xl border border-slate-200 dark:border-white/10 hover:border-emerald-500/40 transition-all relative overflow-hidden group">
+        <Link 
+          to="/faturamento"
+          className="glass-panel p-5 rounded-3xl border border-slate-200 dark:border-white/10 hover:border-emerald-500/40 transition-all relative overflow-hidden group block"
+        >
           <div className="flex items-center justify-between mb-3">
             <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400">Faturamento Acumulado</span>
             <div className="h-9 w-9 rounded-2xl bg-emerald-500/15 text-emerald-500 flex items-center justify-center shrink-0">
@@ -295,10 +301,13 @@ export const Dashboard: React.FC = () => {
           <p className="text-[11px] text-emerald-500 font-bold mt-2.5 flex items-center gap-1">
             <TrendingUp className="h-3.5 w-3.5" /> Total histórico recebido
           </p>
-        </div>
+        </Link>
 
         {/* Card 2: Ticket Médio por Pedido */}
-        <div className="glass-panel p-5 rounded-3xl border border-slate-200 dark:border-white/10 hover:border-purple-500/40 transition-all relative overflow-hidden group">
+        <Link 
+          to="/faturamento"
+          className="glass-panel p-5 rounded-3xl border border-slate-200 dark:border-white/10 hover:border-purple-500/40 transition-all relative overflow-hidden group block"
+        >
           <div className="flex items-center justify-between mb-3">
             <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400">Ticket Médio p/ Pedido</span>
             <div className="h-9 w-9 rounded-2xl bg-purple-500/15 text-purple-400 flex items-center justify-center shrink-0">
@@ -311,10 +320,13 @@ export const Dashboard: React.FC = () => {
           <p className="text-[11px] text-slate-500 dark:text-zinc-400 font-medium mt-2.5">
             Média por pedido finalizado
           </p>
-        </div>
+        </Link>
 
         {/* Card 3: Total de Pedidos Produzidos */}
-        <div className="glass-panel p-5 rounded-3xl border border-slate-200 dark:border-white/10 hover:border-blue-500/40 transition-all relative overflow-hidden group">
+        <Link 
+          to="/pedidos?filter=all"
+          className="glass-panel p-5 rounded-3xl border border-slate-200 dark:border-white/10 hover:border-blue-500/40 transition-all relative overflow-hidden group block"
+        >
           <div className="flex items-center justify-between mb-3">
             <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400">Total de Pedidos</span>
             <div className="h-9 w-9 rounded-2xl bg-blue-500/15 text-blue-400 flex items-center justify-center shrink-0">
@@ -327,7 +339,7 @@ export const Dashboard: React.FC = () => {
           <p className="text-[11px] text-blue-400 font-bold mt-2.5 flex items-center gap-1">
             <CheckCircle2 className="h-3.5 w-3.5" /> {metrics.paidOrdersCount} totalmente quitados
           </p>
-        </div>
+        </Link>
 
         {/* Card 4: Matrizes & Acervo Wilcom */}
         <Link 
@@ -357,7 +369,7 @@ export const Dashboard: React.FC = () => {
           <h3 className="text-xs font-black uppercase tracking-widest text-slate-500 dark:text-zinc-400 flex items-center gap-2">
             <Kanban className="h-4 w-4 text-purple-500" /> STATUS DOS PEDIDOS
           </h3>
-          <Link to="/pedidos-kanban" className="text-xs font-bold text-purple-600 dark:text-purple-400 hover:underline flex items-center gap-1">
+          <Link to="/pedidos?tab=kanban" className="text-xs font-bold text-purple-600 dark:text-purple-400 hover:underline flex items-center gap-1">
             Ver Quadro Kanban <ChevronRight className="h-3.5 w-3.5" />
           </Link>
         </div>
@@ -366,8 +378,8 @@ export const Dashboard: React.FC = () => {
           
           {/* Card 1: PENDENTES */}
           <Link
-            to="/pedidos-kanban"
-            className="p-4 rounded-2xl bg-white dark:bg-[#0d0d14] border border-amber-500/30 hover:border-amber-500 text-center transition-all hover:scale-105 active:scale-95 group shadow-sm"
+            to="/pedidos?filter=pending"
+            className="p-4 rounded-2xl bg-white dark:bg-[#0d0d14] border border-amber-500/30 hover:border-amber-500 text-center transition-all hover:scale-105 active:scale-95 group shadow-sm cursor-pointer"
           >
             <Clock className="h-5 w-5 text-amber-500 mx-auto mb-1.5 group-hover:rotate-12 transition-transform" />
             <div className="text-xl sm:text-2xl font-black text-amber-600 dark:text-amber-400 leading-none">
@@ -380,8 +392,8 @@ export const Dashboard: React.FC = () => {
 
           {/* Card 2: PROCESSANDO / EM PRODUÇÃO */}
           <Link
-            to="/pedidos-kanban"
-            className="p-4 rounded-2xl bg-white dark:bg-[#0d0d14] border border-cyan-500/30 hover:border-cyan-500 text-center transition-all hover:scale-105 active:scale-95 group shadow-sm"
+            to="/pedidos?filter=all"
+            className="p-4 rounded-2xl bg-white dark:bg-[#0d0d14] border border-cyan-500/30 hover:border-cyan-500 text-center transition-all hover:scale-105 active:scale-95 group shadow-sm cursor-pointer"
           >
             <Boxes className="h-5 w-5 text-cyan-500 mx-auto mb-1.5 group-hover:rotate-12 transition-transform" />
             <div className="text-xl sm:text-2xl font-black text-cyan-600 dark:text-cyan-400 leading-none">
@@ -392,10 +404,14 @@ export const Dashboard: React.FC = () => {
             </span>
           </Link>
 
-          {/* Card 3: FALTAM PAGAR / A RECEBER */}
-          <Link
-            to="/faturamento"
-            className="p-4 rounded-2xl bg-white dark:bg-[#0d0d14] border border-rose-500/30 hover:border-rose-500 text-center transition-all hover:scale-105 active:scale-95 group shadow-sm relative overflow-hidden"
+          {/* Card 3: FALTAM PAGAR / A RECEBER (Abre o Modal A Receber diretamente!) */}
+          <button
+            type="button"
+            onClick={() => {
+              setReceberFilter('all');
+              setIsReceberModalOpen(true);
+            }}
+            className="p-4 rounded-2xl bg-white dark:bg-[#0d0d14] border border-rose-500/30 hover:border-rose-500 hover:bg-rose-500/5 text-center transition-all hover:scale-105 active:scale-95 group shadow-sm relative overflow-hidden cursor-pointer"
           >
             <DollarSign className="h-5 w-5 text-rose-500 mx-auto mb-1.5 group-hover:scale-110 transition-transform" />
             <div className="text-xl sm:text-2xl font-black text-rose-600 dark:text-rose-400 leading-none">
@@ -404,12 +420,12 @@ export const Dashboard: React.FC = () => {
             <span className="text-[10px] font-black uppercase tracking-wider text-rose-600 dark:text-rose-400 mt-1.5 block">
               FALTAM PAGAR
             </span>
-          </Link>
+          </button>
 
           {/* Card 4: AGUARDANDO / PRONTO */}
           <Link
-            to="/pedidos-kanban"
-            className="p-4 rounded-2xl bg-white dark:bg-[#0d0d14] border border-purple-500/30 hover:border-purple-500 text-center transition-all hover:scale-105 active:scale-95 group shadow-sm"
+            to="/pedidos?filter=all"
+            className="p-4 rounded-2xl bg-white dark:bg-[#0d0d14] border border-purple-500/30 hover:border-purple-500 text-center transition-all hover:scale-105 active:scale-95 group shadow-sm cursor-pointer"
           >
             <Package className="h-5 w-5 text-purple-500 mx-auto mb-1.5 group-hover:rotate-12 transition-transform" />
             <div className="text-xl sm:text-2xl font-black text-purple-600 dark:text-purple-400 leading-none">
@@ -422,8 +438,8 @@ export const Dashboard: React.FC = () => {
 
           {/* Card 5: ENTREGUES */}
           <Link
-            to="/pedidos-kanban"
-            className="p-4 rounded-2xl bg-white dark:bg-[#0d0d14] border border-emerald-500/30 hover:border-emerald-500 text-center transition-all hover:scale-105 active:scale-95 group shadow-sm"
+            to="/pedidos?filter=paid"
+            className="p-4 rounded-2xl bg-white dark:bg-[#0d0d14] border border-emerald-500/30 hover:border-emerald-500 text-center transition-all hover:scale-105 active:scale-95 group shadow-sm cursor-pointer"
           >
             <CheckCircle2 className="h-5 w-5 text-emerald-500 mx-auto mb-1.5 group-hover:scale-110 transition-transform" />
             <div className="text-xl sm:text-2xl font-black text-emerald-600 dark:text-emerald-400 leading-none">
@@ -752,6 +768,24 @@ export const Dashboard: React.FC = () => {
           }}
         />
       )}
+
+      <ReceberDetailsModal
+        isOpen={isReceberModalOpen}
+        onClose={() => setIsReceberModalOpen(false)}
+        pendingOrders={orders.filter(o => o.payment_status !== 'paid')}
+        canSeeFinancials={canSeeFinancials}
+        onSelectClientForZap={(clientData) => {
+          if (clientData.phone) {
+            const cleanPhone = clientData.phone.replace(/\D/g, '');
+            const msg = `Olá ${clientData.name || 'Cliente'}, tudo bem? Segue o lembrete sobre o saldo pendente do seu pedido no BORDA AI.`;
+            window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`, '_blank');
+          } else {
+            toast.error('Telefone do cliente não cadastrado.');
+          }
+        }}
+        onRefreshData={loadDashboardData}
+        defaultFilter={receberFilter}
+      />
 
     </div>
   );

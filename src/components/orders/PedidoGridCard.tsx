@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { 
   User, Calendar, CheckCircle2, AlertCircle, HandCoins, DollarSign, Package, 
   Printer, Eye, Edit3, Trash2, FileText, Share2, Copy, 
-  Send, Sparkles, QrCode, Maximize2, Layers, Palette, Clock, Check, Image as ImageIcon, RefreshCw
+  Send, Sparkles, QrCode, Maximize2, Layers, Palette, Clock, Check, Image as ImageIcon, RefreshCw, Kanban
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useProfile } from '@/contexts/ProfileContext';
@@ -14,6 +14,7 @@ import { parsePaymentMetadata, formatOrderPaymentBadgeDetails, getDueDateAlertIn
 import { printOrderReceipt } from '@/services/pdfGenerator';
 import { printThermalReceipt } from '@/services/thermalPrinter';
 import { useCompanySettings } from '@/contexts/CompanySettingsContext';
+import { CustomSelect, SelectOption } from '@/components/ui/CustomSelect';
 
 import { OrderContextMenu } from './OrderContextMenu';
 
@@ -85,6 +86,29 @@ const PedidoGridCardComponent: React.FC<PedidoGridCardProps> = ({
   const firstItem = items[0];
   const itemDesc = firstItem?.description || 'Bordado Personalizado';
 
+  const handleUpdateStatus = async (newStatus: string) => {
+    try {
+      const { error } = await supabase
+        .from('orders')
+        .update({ status: newStatus })
+        .eq('id', order.id);
+      if (error) throw error;
+      toast.success('Etapa do Kanban atualizada com sucesso!');
+    } catch (err) {
+      console.error('Erro ao atualizar etapa do Kanban:', err);
+      toast.error('Erro ao atualizar etapa do Kanban.');
+    }
+  };
+
+  const kanbanSelectOptions: SelectOption[] = [
+    { value: 'pending', label: '📌 Orçamento / Pendente' },
+    { value: 'design', label: '🎨 Pronto p/ Produção' },
+    { value: 'embroidering', label: '🧵 Na Máquina' },
+    { value: 'finishing', label: '✂️ Acabamento' },
+    { value: 'completed', label: '📦 Pronto p/ Retirada' },
+    { value: 'delivered', label: '✅ Entregue' },
+  ];
+
   // Extrai notas limpas e metadados estruturados
   const { cleanNotes, metadata } = useMemo(() => {
     return parsePaymentMetadata(order.notes);
@@ -135,17 +159,38 @@ const PedidoGridCardComponent: React.FC<PedidoGridCardProps> = ({
     };
   }, [paymentDetails]);
 
-  // Badge da Etapa no Kanban do Pedido
+  // Badge da Etapa no Kanban do Pedido (com Banner no Topo do Card e Letra Branca)
   const kanbanStepBadge = useMemo(() => {
-    const statusMap: Record<string, { label: string; className: string }> = {
-      pending: { label: '📌 Pendente', className: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30' },
-      design: { label: '🎨 Pronto p/ Produção', className: 'bg-blue-500/10 text-blue-400 border-blue-500/30' },
-      embroidering: { label: '🧵 Na Máquina', className: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30' },
-      finishing: { label: '✂️ Acabamento', className: 'bg-purple-500/10 text-purple-400 border-purple-500/30' },
-      completed: { label: '📦 Pronto p/ Retirada', className: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' },
-      delivered: { label: '✅ Entregue', className: 'bg-zinc-500/10 text-zinc-300 border-zinc-500/30' },
+    const statusMap: Record<string, { label: string; bannerClass: string }> = {
+      pending: { 
+        label: '📌 ORÇAMENTO / PENDENTE', 
+        bannerClass: 'bg-gradient-to-r from-amber-500 via-amber-600 to-yellow-600 text-white font-black drop-shadow-md shadow-amber-500/20'
+      },
+      design: { 
+        label: '🎨 PRONTO P/ PRODUÇÃO', 
+        bannerClass: 'bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 text-white font-black drop-shadow-md shadow-blue-500/20'
+      },
+      embroidering: { 
+        label: '🧵 NA MÁQUINA', 
+        bannerClass: 'bg-gradient-to-r from-cyan-600 via-teal-600 to-blue-600 text-white font-black drop-shadow-md shadow-cyan-500/20'
+      },
+      finishing: { 
+        label: '✂️ ACABAMENTO', 
+        bannerClass: 'bg-gradient-to-r from-purple-600 via-fuchsia-600 to-pink-600 text-white font-black drop-shadow-md shadow-purple-500/20'
+      },
+      completed: { 
+        label: '📦 PRONTO P/ RETIRADA', 
+        bannerClass: 'bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 text-white font-black drop-shadow-md shadow-emerald-500/20'
+      },
+      delivered: { 
+        label: '✅ ENTREGUE', 
+        bannerClass: 'bg-gradient-to-r from-zinc-700 via-slate-700 to-zinc-800 text-white font-black drop-shadow-md shadow-zinc-500/20'
+      },
     };
-    return statusMap[order.status] || { label: `📍 ${order.status}`, className: 'bg-white/5 text-zinc-300 border-white/10' };
+    return statusMap[order.status] || { 
+      label: `📍 ${order.status.toUpperCase()}`, 
+      bannerClass: 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-black drop-shadow-md'
+    };
   }, [order.status]);
 
   // Gerador Impressão Direta PDF Ordem de Serviço com Identidade Visual Total
@@ -223,30 +268,36 @@ const PedidoGridCardComponent: React.FC<PedidoGridCardProps> = ({
           e.stopPropagation();
           setContextMenuPos({ x: e.clientX, y: e.clientY });
         }}
-        className={`group relative flex flex-col justify-between rounded-3xl border border-slate-200 dark:border-white/10 bg-white dark:bg-[#12121a]/90 backdrop-blur-xl p-5 shadow-lg transition-all duration-300 hover:-translate-y-1 hover:border-purple-500/40 hover:shadow-2xl hover:shadow-purple-500/10 cursor-pointer overflow-hidden ${
+        className={`group relative flex flex-col justify-between rounded-3xl border border-slate-200 dark:border-white/10 bg-white dark:bg-[#12121a]/90 backdrop-blur-xl shadow-lg transition-all duration-300 hover:-translate-y-1 hover:border-purple-500/40 hover:shadow-2xl hover:shadow-purple-500/10 cursor-pointer overflow-hidden ${
           order.visible_profile_ids && order.visible_profile_ids.length > 0 ? 'opacity-60 hover:opacity-85' : ''
         }`}
       >
+        {/* Barrinha Colorida no Topo com Texto PURE WHITE em Destaque Absoluto */}
+        <div className={`w-full py-2 px-4 text-center text-[11px] font-black uppercase tracking-widest flex items-center justify-center gap-1.5 shadow-md text-white drop-shadow-md ${kanbanStepBadge.bannerClass}`}>
+          <span className="text-white font-black drop-shadow-md">{kanbanStepBadge.label}</span>
+        </div>
+
         {/* Top Background Glow Effect */}
         <div className="absolute top-0 right-0 w-32 h-32 bg-purple-500/5 rounded-full blur-2xl group-hover:bg-purple-500/15 transition-all duration-500 pointer-events-none" />
 
-        <div>
-          {/* Cabeçalho do Card: Pedido #ID + Badges */}
-          <div className="flex items-start justify-between gap-3 mb-3">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-base font-black text-slate-900 dark:text-white tracking-tight">
-                  {orderCode}
-                </span>
-                <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20">
-                  Bordado
-                </span>
-                {order.visible_profile_ids && order.visible_profile_ids.length > 0 && (
-                  <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 flex items-center gap-1">
-                    👁️ Restrito
+        <div className="p-5 flex-1 flex flex-col justify-between">
+          <div>
+            {/* Cabeçalho do Card: Pedido #ID + Badges */}
+            <div className="flex items-start justify-between gap-3 mb-3">
+              <div>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-base font-black text-slate-900 dark:text-white tracking-tight">
+                    {orderCode}
                   </span>
-                )}
-              </div>
+                  <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20">
+                    Bordado
+                  </span>
+                  {order.visible_profile_ids && order.visible_profile_ids.length > 0 && (
+                    <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 flex items-center gap-1">
+                      👁️ Restrito
+                    </span>
+                  )}
+                </div>
               <p className="text-[11px] text-slate-500 dark:text-zinc-400 mt-0.5 flex items-center gap-1">
                 <Calendar className="h-3 w-3 text-purple-400 shrink-0" />
                 {format(new Date(order.created_at), 'dd/MM/yyyy HH:mm', { locale: ptBR })}
@@ -283,14 +334,6 @@ const PedidoGridCardComponent: React.FC<PedidoGridCardProps> = ({
                   <Eye className="h-3.5 w-3.5" />
                 </button>
               )}
-
-              {/* Badge da Etapa do Kanban */}
-              <div 
-                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-wider border ${kanbanStepBadge.className}`}
-                title="Etapa atual da produção no Kanban"
-              >
-                <span>{kanbanStepBadge.label}</span>
-              </div>
 
               {/* Badge de Status Financeiro (Pill de 1 Linha Limpa) */}
               <div 
@@ -416,6 +459,7 @@ const PedidoGridCardComponent: React.FC<PedidoGridCardProps> = ({
                 </p>
               </div>
             )}
+
           </div>
         </div>
 
@@ -554,6 +598,7 @@ const PedidoGridCardComponent: React.FC<PedidoGridCardProps> = ({
               <Send className="h-3.5 w-3.5" /> Cobrar
             </button>
           </div>
+        </div>
         </div>
       </div>
 
