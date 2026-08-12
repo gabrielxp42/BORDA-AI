@@ -76,6 +76,7 @@ export const ClientDetailsModal: React.FC<ClientDetailsModalProps> = ({
         .from('orders')
         .select(`
           id,
+          order_number,
           status,
           payment_status,
           payment_method,
@@ -143,7 +144,8 @@ export const ClientDetailsModal: React.FC<ClientDetailsModalProps> = ({
         dueDate: o.due_date,
         totalAmount: total,
         paymentStatus: o.payment_status,
-        pendingAmount: pending
+        pendingAmount: pending,
+        items: o.order_items || []
       };
     });
 

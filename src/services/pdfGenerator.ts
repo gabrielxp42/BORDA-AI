@@ -287,6 +287,17 @@ export interface ClientStatementPDFData {
     totalAmount: number;
     paymentStatus: string;
     pendingAmount: number;
+    items?: Array<{
+      id?: string;
+      description?: string;
+      item_name?: string;
+      name?: string;
+      quantity?: number;
+      unit_price?: number;
+      unitPrice?: number;
+      total_price?: number;
+      totalPrice?: number;
+    }>;
   }>;
   grandPending: number;
   companyName?: string;
@@ -299,39 +310,48 @@ const getClientStatementHTML = (data: ClientStatementPDFData) => {
   const companyName = data.companyName || 'GUAÇU BORDADOS';
   const brandColor = data.companyColor || '#8B5CF6';
   const formattedDate = new Date().toLocaleDateString('pt-BR');
-  const formattedGrandPending = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(data.grandPending);
+  const fmt = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v || 0);
+  const formattedGrandPending = fmt(data.grandPending);
 
   return `
     <!DOCTYPE html>
     <html lang="pt-BR">
     <head>
       <meta charset="UTF-8">
-      <title>Extrato de Débitos - ${data.clientName}</title>
+      <title>Extrato Detalhado de Débitos - ${data.clientName}</title>
       <style>
-        @page { size: A4; margin: 15mm; }
+        @page { size: A4; margin: 12mm; }
         * { box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; word-spacing: normal; letter-spacing: normal; }
-        body { font-family: 'Segoe UI', system-ui, -apple-system, Roboto, sans-serif; margin: 0; padding: 0; color: #1e293b; font-size: 13px; line-height: 1.5; background: #ffffff; }
-        .brand-bar { height: 6px; background: ${brandColor}; width: 100%; border-radius: 4px 4px 0 0; margin-bottom: 20px; }
-        .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #e2e8f0; padding-bottom: 16px; margin-bottom: 20px; }
-        .title { font-size: 22px; font-weight: 900; color: ${brandColor}; text-transform: uppercase; letter-spacing: -0.5px; margin: 0; }
-        .subtitle { font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px; }
-        .client-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px 16px; margin-bottom: 20px; }
-        .client-title { font-size: 10px; font-weight: 800; text-transform: uppercase; color: #64748b; margin-bottom: 4px; letter-spacing: 0.5px; }
-        .client-name { font-size: 16px; font-weight: 800; color: #0f172a; }
-        .table-container { margin-bottom: 24px; border-radius: 12px; overflow: hidden; border: 1px solid #e2e8f0; }
-        table { width: 100%; border-collapse: collapse; }
-        th { background: ${brandColor}; color: #ffffff; text-align: left; padding: 12px 16px; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; }
-        td { padding: 12px 16px; border-bottom: 1px solid #f1f5f9; font-size: 12px; color: #334155; }
-        tr:nth-child(even) { background-color: #f8fafc; }
+        body { font-family: 'Segoe UI', system-ui, -apple-system, Roboto, sans-serif; margin: 0; padding: 0; color: #1e293b; font-size: 12px; line-height: 1.4; background: #ffffff; }
+        .brand-bar { height: 6px; background: ${brandColor}; width: 100%; border-radius: 4px 4px 0 0; margin-bottom: 16px; }
+        .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #e2e8f0; padding-bottom: 12px; margin-bottom: 16px; }
+        .title { font-size: 20px; font-weight: 900; color: ${brandColor}; text-transform: uppercase; letter-spacing: -0.5px; margin: 0; }
+        .subtitle { font-size: 10px; color: #64748b; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px; }
+        .client-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px 14px; margin-bottom: 16px; }
+        .client-title { font-size: 10px; font-weight: 800; text-transform: uppercase; color: #64748b; margin-bottom: 2px; letter-spacing: 0.5px; }
+        .client-name { font-size: 15px; font-weight: 800; color: #0f172a; }
+        
+        .order-card { margin-bottom: 16px; border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden; background: #ffffff; page-break-inside: avoid; }
+        .order-header { background: #f8fafc; padding: 10px 14px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; }
+        .order-num { font-size: 13px; font-weight: 900; color: #0f172a; }
+        .order-dates { font-size: 11px; color: #64748b; margin-left: 8px; }
+        
+        .pending-tag { background: #fef2f2; color: #dc2626; padding: 3px 8px; border-radius: 16px; font-weight: 800; font-size: 9px; border: 1px solid #fca5a5; display: inline-block; white-space: nowrap; }
+        .half-tag { background: #eff6ff; color: #2563eb; padding: 3px 8px; border-radius: 16px; font-weight: 800; font-size: 9px; border: 1px solid #93c5fd; display: inline-block; white-space: nowrap; }
+        
+        table.items-table { width: 100%; border-collapse: collapse; }
+        table.items-table th { background: #f1f5f9; color: #475569; text-align: left; padding: 6px 12px; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid #cbd5e1; }
+        table.items-table td { padding: 8px 12px; border-bottom: 1px solid #f1f5f9; font-size: 11px; color: #334155; }
+        table.items-table tr:nth-child(even) { background-color: #f8fafc; }
+        
         .text-right { text-align: right; }
         .text-center { text-align: center; }
         .font-bold { font-weight: 700; }
-        .pending-tag { background: #fef2f2; color: #dc2626; padding: 4px 10px; border-radius: 20px; font-weight: 800; font-size: 10px; border: 1px solid #fca5a5; display: inline-block; white-space: nowrap; }
-        .half-tag { background: #eff6ff; color: #2563eb; padding: 4px 10px; border-radius: 20px; font-weight: 800; font-size: 10px; border: 1px solid #93c5fd; display: inline-block; white-space: nowrap; }
-        .total-container { display: flex; justify-content: space-between; align-items: center; background: #0f172a; color: white; padding: 16px 20px; border-radius: 12px; margin-bottom: 20px; }
-        .total-val { font-size: 24px; font-weight: 900; color: #ffffff; }
-        .pix-box { padding: 14px 16px; background: #fffbeb; border: 1px solid #fde68a; border-radius: 12px; color: #92400e; font-size: 12px; margin-bottom: 20px; }
-        .footer { border-top: 1px solid #e2e8f0; padding-top: 16px; text-align: center; font-size: 10px; color: #94a3b8; }
+        
+        .total-container { display: flex; justify-content: space-between; align-items: center; background: #0f172a; color: white; padding: 14px 18px; border-radius: 10px; margin-top: 16px; margin-bottom: 16px; }
+        .total-val { font-size: 22px; font-weight: 900; color: #ffffff; }
+        .pix-box { padding: 12px 14px; background: #fffbeb; border: 1px solid #fde68a; border-radius: 10px; color: #92400e; font-size: 11px; margin-bottom: 16px; }
+        .footer { border-top: 1px solid #e2e8f0; padding-top: 12px; text-align: center; font-size: 10px; color: #94a3b8; }
       </style>
     </head>
     <body>
@@ -353,34 +373,66 @@ const getClientStatementHTML = (data: ClientStatementPDFData) => {
         ${data.clientPhone ? `<div style="font-size: 11px; color: #64748b; margin-top: 2px;">📞 ${data.clientPhone}</div>` : ''}
       </div>
 
-      <div class="table-container">
-        <table>
-          <thead>
-            <tr>
-              <th>Pedido #</th>
-              <th>Data da Entrada</th>
-              <th>Previsão Entrega</th>
-              <th class="text-center">Status Pagamento</th>
-              <th class="text-right">Valor Total</th>
-              <th class="text-right">Saldo Pendente</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${data.orders.map(o => `
-              <tr>
-                <td class="font-bold">#${o.orderNumber || o.id.slice(0, 4)}</td>
-                <td>${new Date(o.createdAt).toLocaleDateString('pt-BR')}</td>
-                <td>${o.dueDate ? new Date(o.dueDate).toLocaleDateString('pt-BR') : 'A combinar'}</td>
-                <td class="text-center">
-                  ${o.paymentStatus === 'half_paid' ? '<span class="half-tag">SINAL 50% RECEBIDO</span>' : '<span class="pending-tag">100% PENDENTE</span>'}
-                </td>
-                <td class="text-right">${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(o.totalAmount)}</td>
-                <td class="text-right font-bold" style="color: #dc2626;">${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(o.pendingAmount)}</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-      </div>
+      <!-- Pedidos Detalhados com seus Respectivos Itens -->
+      ${data.orders.map(o => {
+        const orderNumStr = o.orderNumber ? `#${o.orderNumber}` : `#${o.id.slice(0, 6)}`;
+        const dateStr = new Date(o.createdAt).toLocaleDateString('pt-BR');
+        const dueStr = o.dueDate ? new Date(o.dueDate).toLocaleDateString('pt-BR') : 'A combinar';
+        const hasItems = o.items && o.items.length > 0;
+
+        return `
+          <div class="order-card">
+            <div class="order-header">
+              <div>
+                <span class="order-num">Pedido ${orderNumStr}</span>
+                <span class="order-dates">Entrada: ${dateStr} • Vencimento: ${dueStr}</span>
+              </div>
+              <div style="display: flex; align-items: center; gap: 12px;">
+                ${o.paymentStatus === 'half_paid' ? '<span class="half-tag">SINAL 50% RECEBIDO</span>' : '<span class="pending-tag">100% PENDENTE</span>'}
+                <div style="text-align: right;">
+                  <span style="font-size: 9px; font-weight: 800; color: #64748b; text-transform: uppercase; display: block;">A Receber</span>
+                  <span style="font-size: 13px; font-weight: 900; color: #dc2626;">${fmt(o.pendingAmount)}</span>
+                </div>
+              </div>
+            </div>
+
+            <table class="items-table">
+              <thead>
+                <tr>
+                  <th style="width: 50%;">Item / Descrição do Bordado</th>
+                  <th class="text-center" style="width: 15%;">Qtd</th>
+                  <th class="text-right" style="width: 17%;">Valor Unit.</th>
+                  <th class="text-right" style="width: 18%;">Subtotal</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${hasItems ? o.items!.map(it => {
+                  const desc = it.description || it.item_name || it.name || 'Bordado Personalizado';
+                  const qty = it.quantity || 1;
+                  const unitPrice = it.unit_price ?? it.unitPrice ?? (qty ? (it.total_price ?? it.totalPrice ?? o.totalAmount) / qty : 0);
+                  const totalPrice = it.total_price ?? it.totalPrice ?? (qty * unitPrice);
+
+                  return `
+                    <tr>
+                      <td class="font-bold">${desc}</td>
+                      <td class="text-center font-bold">${qty} pçs</td>
+                      <td class="text-right">${fmt(unitPrice)}</td>
+                      <td class="text-right font-bold">${fmt(totalPrice)}</td>
+                    </tr>
+                  `;
+                }).join('') : `
+                  <tr>
+                    <td class="font-bold">Serviços de Bordado / Ficha Técnica</td>
+                    <td class="text-center font-bold">1 un</td>
+                    <td class="text-right">${fmt(o.totalAmount)}</td>
+                    <td class="text-right font-bold">${fmt(o.totalAmount)}</td>
+                  </tr>
+                `}
+              </tbody>
+            </table>
+          </div>
+        `;
+      }).join('')}
 
       <div class="total-container">
         <div>
