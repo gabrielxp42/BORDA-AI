@@ -33,6 +33,7 @@ import { toast } from 'sonner';
 import { formatCurrency } from '@/utils/currencyFormatter';
 import { printClientStatementPDF } from '@/services/pdfGenerator';
 import { WhatsAppBillingModal } from '@/components/billing/WhatsAppBillingModal';
+import { PaymentStatusModal } from '@/components/orders/PaymentStatusModal';
 
 interface ClientDetailsModalProps {
   isOpen: boolean;
@@ -59,6 +60,24 @@ export const ClientDetailsModal: React.FC<ClientDetailsModalProps> = ({
   const [loading, setLoading] = useState(false);
   const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
   const [isBillingModalOpen, setIsBillingModalOpen] = useState(false);
+  const [selectedOrderForStatusModal, setSelectedOrderForStatusModal] = useState<any | null>(null);
+
+  const handleUpdateDueDate = async (orderId: string, newDate: string) => {
+    try {
+      const { error } = await supabase
+        .from('orders')
+        .update({ due_date: newDate || null })
+        .eq('id', orderId);
+
+      if (error) throw error;
+
+      setOrders(prev => prev.map(o => o.id === orderId ? { ...o, due_date: newDate || null } : o));
+      toast.success('📅 Vencimento combinado programado com sucesso!');
+    } catch (err) {
+      console.error('Erro ao atualizar vencimento:', err);
+      toast.error('Erro ao salvar vencimento combinado.');
+    }
+  };
 
   useEffect(() => {
     if (isOpen && client) {
@@ -403,47 +422,74 @@ export const ClientDetailsModal: React.FC<ClientDetailsModalProps> = ({
                       <div
                         key={order.id}
                         onClick={() => toggleSelectOrder(order.id)}
-                        className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${
+                        className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex flex-col gap-2.5 ${
                           isSelected
                             ? 'bg-purple-500/10 border-purple-500/40 shadow-sm'
                             : 'bg-white/[0.03] border-white/10 hover:bg-white/[0.06] hover:border-white/20'
                         }`}
                       >
-                        <div className="flex items-center gap-3">
-                          <div className={`h-5 w-5 rounded-lg border flex items-center justify-center transition-colors ${
-                            isSelected ? 'bg-purple-600 border-purple-500 text-white' : 'border-white/20 bg-white/5'
-                          }`}>
-                            {isSelected && <Check className="h-3 w-3 stroke-[3]" />}
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-3">
+                            <div className={`h-5 w-5 rounded-lg border flex items-center justify-center transition-colors ${
+                              isSelected ? 'bg-purple-600 border-purple-500 text-white' : 'border-white/20 bg-white/5'
+                            }`}>
+                              {isSelected && <Check className="h-3 w-3 stroke-[3]" />}
+                            </div>
+                            <div>
+                              <h4 className="text-xs font-bold text-white">
+                                Pedido #{order.order_number || order.id.slice(0, 6)}
+                              </h4>
+                              <p className="text-[10px] text-zinc-400">
+                                Entrada: {format(new Date(order.created_at), 'dd/MM/yyyy')}
+                              </p>
+                            </div>
                           </div>
-                          <div>
-                            <h4 className="text-xs font-bold text-white">
-                              Pedido #{order.order_number || order.id.slice(0, 6)}
-                            </h4>
-                            <p className="text-[10px] text-zinc-400">
-                              {format(new Date(order.created_at), 'dd/MM/yyyy')}
-                            </p>
+
+                          <div className="text-right flex items-center gap-3">
+                            <div>
+                              {canSeeFinancials ? (
+                                <span className="text-xs font-bold text-white block">
+                                  {formatCurrency(order.total_amount || 0, canSeeFinancials)}
+                                </span>
+                              ) : (
+                                <span className="text-xs font-medium text-emerald-400 block">
+                                  Em Fila
+                                </span>
+                              )}
+                              <span className={`inline-block px-2 py-0.5 rounded-full text-[9px] font-semibold ${
+                                order.payment_status === 'half_paid' 
+                                  ? 'bg-blue-500/15 text-blue-300 border border-blue-500/20' 
+                                  : 'bg-amber-500/15 text-amber-300 border border-amber-500/20'
+                              }`}>
+                                {order.payment_status === 'half_paid' ? 'Sinal 50%' : 'Pendente'}
+                              </span>
+                            </div>
                           </div>
                         </div>
 
-                        <div className="text-right flex items-center gap-3">
-                          <div>
-                            {canSeeFinancials ? (
-                              <span className="text-xs font-bold text-white block">
-                                {formatCurrency(order.total_amount || 0, canSeeFinancials)}
-                              </span>
-                            ) : (
-                              <span className="text-xs font-medium text-emerald-400 block">
-                                Em Fila
-                              </span>
-                            )}
-                            <span className={`inline-block px-2 py-0.5 rounded-full text-[9px] font-semibold ${
-                              order.payment_status === 'half_paid' 
-                                ? 'bg-blue-500/15 text-blue-300 border border-blue-500/20' 
-                                : 'bg-amber-500/15 text-amber-300 border border-amber-500/20'
-                            }`}>
-                              {order.payment_status === 'half_paid' ? 'Sinal 50%' : 'Pendente'}
-                            </span>
+                        {/* Programar Vencimento Combinado & Dar Baixa */}
+                        <div className="pt-2 border-t border-white/10 flex items-center justify-between gap-2 flex-wrap" onClick={e => e.stopPropagation()}>
+                          <div className="flex items-center gap-1.5 bg-white/5 hover:bg-white/10 px-2.5 py-1 rounded-xl border border-white/10 text-xs">
+                            <Calendar className="h-3.5 w-3.5 text-purple-400 shrink-0" />
+                            <span className="text-[10px] text-zinc-400 font-bold shrink-0">Combinado:</span>
+                            <input
+                              type="date"
+                              value={order.due_date ? order.due_date.slice(0, 10) : ''}
+                              onChange={e => handleUpdateDueDate(order.id, e.target.value)}
+                              className="bg-transparent text-[11px] font-bold text-white outline-none cursor-pointer"
+                              title="Programar data de vencimento combinada com o cliente"
+                            />
                           </div>
+
+                          <button
+                            type="button"
+                            onClick={() => setSelectedOrderForStatusModal(order)}
+                            className="px-3 py-1 rounded-xl bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 border border-purple-500/30 text-[11px] font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+                            title="Dar baixa ou atualizar pagamento"
+                          >
+                            <CheckCircle2 className="h-3.5 w-3.5 text-purple-400" />
+                            <span>Dar Baixa</span>
+                          </button>
                         </div>
                       </div>
                     );
@@ -550,6 +596,18 @@ export const ClientDetailsModal: React.FC<ClientDetailsModalProps> = ({
           totalAmount: effectiveTotal,
           orderCount: (selectedOrders.length > 0 ? selectedOrders : openOrders).length,
           orders: selectedOrders.length > 0 ? selectedOrders : openOrders
+        }}
+      />
+
+      <PaymentStatusModal
+        isOpen={!!selectedOrderForStatusModal}
+        onClose={() => setSelectedOrderForStatusModal(null)}
+        order={selectedOrderForStatusModal}
+        isBaixaMode={true}
+        defaultStatus="paid"
+        onStatusUpdated={() => {
+          fetchClientOrders();
+          setSelectedOrderForStatusModal(null);
         }}
       />
     </div>
