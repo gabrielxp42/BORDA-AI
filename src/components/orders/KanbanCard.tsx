@@ -7,6 +7,8 @@ import { format } from 'date-fns';
 import { Draggable } from '@hello-pangea/dnd';
 import { parsePaymentMetadata, formatOrderPaymentBadgeDetails, getDueDateAlertInfo } from '@/utils/paymentHelper';
 
+import { OrderContextMenu } from './OrderContextMenu';
+
 interface OrderItem {
   id: string;
   description: string;
@@ -47,6 +49,8 @@ interface KanbanCardProps {
   onPrintThermal: (order: KanbanOrder) => void;
   onSendWhatsApp: (order: KanbanOrder) => void;
   onAdvanceStatus: (order: KanbanOrder) => void;
+  onEditOrder?: (order: KanbanOrder) => void;
+  onDeleteOrder?: (orderId: string) => void;
   activePrintOption: string | null;
   setActivePrintOption: (id: string | null) => void;
   columnColor: string;
@@ -65,11 +69,14 @@ export const KanbanCard: React.FC<KanbanCardProps> = ({
   onPrintThermal,
   onSendWhatsApp,
   onAdvanceStatus,
+  onEditOrder,
+  onDeleteOrder,
   activePrintOption,
   setActivePrintOption,
   columnColor,
   columnTitle
 }) => {
+  const [contextMenuPos, setContextMenuPos] = useState<{ x: number; y: number } | null>(null);
   const { cleanNotes, metadata } = parsePaymentMetadata(order.notes);
   const isUnpriced = metadata.isQuickEntry || order.total_amount === 0;
 
@@ -90,6 +97,11 @@ export const KanbanCard: React.FC<KanbanCardProps> = ({
               ...(snapshot.isDragging ? { zIndex: 99999 } : {})
             }}
             onClick={() => !snapshot.isDragging && onOpenDetails(order)}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setContextMenuPos({ x: e.clientX, y: e.clientY });
+            }}
           >
           {/* Grip Drag Handle & Top Row */}
           <div className="flex items-center justify-between px-3 pt-2.5 pb-1.5 border-b border-slate-100 dark:border-white/5 bg-slate-50/80 dark:bg-white/[0.02] rounded-t-2xl">
@@ -368,10 +380,29 @@ export const KanbanCard: React.FC<KanbanCardProps> = ({
           </div>
         );
 
-        if (snapshot.isDragging) {
-          return ReactDOM.createPortal(cardContent, document.body);
-        }
-        return cardContent;
+        return (
+          <>
+            {snapshot.isDragging ? ReactDOM.createPortal(cardContent, document.body) : cardContent}
+
+            {contextMenuPos && (
+              <OrderContextMenu
+                x={contextMenuPos.x}
+                y={contextMenuPos.y}
+                order={order}
+                onClose={() => setContextMenuPos(null)}
+                onOpenDetails={onOpenDetails}
+                onOpenStatusModal={onSelectPayment}
+                onQuickPrice={onQuickPrice}
+                onSendWhatsApp={onSendWhatsApp}
+                onPrintPDF={onPrintPDF}
+                onPrintThermal={onPrintThermal}
+                onAdvanceStatus={onAdvanceStatus}
+                onEditOrder={onEditOrder}
+                onDeleteOrder={onDeleteOrder}
+              />
+            )}
+          </>
+        );
       }}
     </Draggable>
   );

@@ -15,6 +15,8 @@ import { printOrderReceipt } from '@/services/pdfGenerator';
 import { printThermalReceipt } from '@/services/thermalPrinter';
 import { useCompanySettings } from '@/contexts/CompanySettingsContext';
 
+import { OrderContextMenu } from './OrderContextMenu';
+
 interface OrderItem {
   id: string;
   description: string;
@@ -67,6 +69,7 @@ const PedidoGridCardComponent: React.FC<PedidoGridCardProps> = ({
   const { settings } = useCompanySettings();
   const { permissions, role, isUnlocked } = useProfile();
   const canSeeFinancials = isUnlocked || (permissions?.canSeeFinancials === true);
+  const [contextMenuPos, setContextMenuPos] = useState<{ x: number; y: number } | null>(null);
   const [activeLightbox, setActiveLightbox] = useState<string | null>(null);
   const [showFiscalModal, setShowFiscalModal] = useState(false);
   const [showPrintOptions, setShowPrintOptions] = useState(false);
@@ -215,6 +218,11 @@ const PedidoGridCardComponent: React.FC<PedidoGridCardProps> = ({
     <>
       <div 
         onClick={() => onOpenDetails(order)}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setContextMenuPos({ x: e.clientX, y: e.clientY });
+        }}
         className={`group relative flex flex-col justify-between rounded-3xl border border-slate-200 dark:border-white/10 bg-white dark:bg-[#12121a]/90 backdrop-blur-xl p-5 shadow-lg transition-all duration-300 hover:-translate-y-1 hover:border-purple-500/40 hover:shadow-2xl hover:shadow-purple-500/10 cursor-pointer overflow-hidden ${
           order.visible_profile_ids && order.visible_profile_ids.length > 0 ? 'opacity-60 hover:opacity-85' : ''
         }`}
@@ -716,6 +724,36 @@ const PedidoGridCardComponent: React.FC<PedidoGridCardProps> = ({
             className="max-h-[90vh] max-w-[90vw] object-contain rounded-2xl shadow-2xl border border-white/20"
           />
         </div>
+      )}
+      {/* Menu de Contexto (Clique Direito) */}
+      {contextMenuPos && (
+        <OrderContextMenu
+          x={contextMenuPos.x}
+          y={contextMenuPos.y}
+          order={order}
+          onClose={() => setContextMenuPos(null)}
+          onOpenDetails={onOpenDetails}
+          onOpenStatusModal={onOpenStatusModal}
+          onSendWhatsApp={onCobrarOrder}
+          onPrintPDF={() => {
+            try {
+              printOrderReceipt(getPrintData());
+              toast.success(`🖨️ Gerando Nota PDF do Pedido ${orderCode}...`);
+            } catch (err) {
+              console.error(err);
+            }
+          }}
+          onPrintThermal={() => {
+            try {
+              printThermalReceipt(getPrintData(), canSeeFinancials);
+              toast.success(`🖨️ Imprimindo Cupom (80mm) ${orderCode}...`);
+            } catch (err) {
+              console.error(err);
+            }
+          }}
+          onEditOrder={onOpenEditModal}
+          onDeleteOrder={onDeleteOrder}
+        />
       )}
     </>
   );

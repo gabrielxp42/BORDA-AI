@@ -4,7 +4,7 @@ import {
   X, UserPlus, Calendar, Plus, Trash2, Package, Save, Lock, Layers, Sparkles, 
   CheckCircle2, DollarSign, ChevronDown, Check, Upload, FileCheck, ChevronUp, 
   Sliders, Send, Clock, CreditCard, Landmark, Coins, ArrowRight, ArrowLeft, Camera, Paperclip,
-  MessageSquare, Image, FileText, QrCode, User, CheckCircle, Settings, Edit2, Star, Printer
+  MessageSquare, Image, FileText, QrCode, User, CheckCircle, Settings, Edit2, Star, Printer, Percent
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { calculateEmbroideryPrice } from '@/services/pricingEngine';
@@ -112,8 +112,8 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
   const [isPaymentMethodOpen, setIsPaymentMethodOpen] = useState(false);
   const [observations, setObservations] = useState('');
   const [isPrivate, setIsPrivate] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [depositAmount, setDepositAmount] = useState<number>(0);
+  const [isSaving, setIsSaving] = useState(false);  const [depositAmount, setDepositAmount] = useState<number>(0);
+  const [discountPercent, setDiscountPercent] = useState<number>(0);
   const [activeMatrixTab, setActiveMatrixTab] = useState<'client' | 'global'>('client');
   const [globalMatrices, setGlobalMatrices] = useState<Matrix[]>([]);
   const [entryMode, setEntryMode] = useState<'budget' | 'quick'>('quick');
@@ -138,6 +138,20 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [isAddingNewMatrix, setIsAddingNewMatrix] = useState(false);
 
+  const formatPriceVal = (val: number) => {
+    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
+  };
+
+  const formatHoursMinutes = (minutes: number) => {
+    if (!minutes || minutes <= 0) return '0 min';
+    const hrs = Math.floor(minutes / 60);
+    const mins = Math.round(minutes % 60);
+    if (hrs > 0) {
+      return mins > 0 ? `${hrs}h ${mins}min` : `${hrs}h`;
+    }
+    return `${mins} min`;
+  };
+
   const hasItemsInCart = orderItemsList.length > 1 || (orderItemsList.length === 1 && !!(orderItemsList[0].matrixName || orderItemsList[0].stitchCount > 0));
 
   useEffect(() => {
@@ -161,6 +175,25 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
     },
     rules
   );
+
+  // Subtotal das Matrizes/Itens antes do Desconto
+  const subtotalOrderAmount = useMemo(() => {
+    if (orderItemsList.length > 0) {
+      return orderItemsList.reduce((acc, item) => acc + item.totalPrice, 0);
+    }
+    return calculation.totalPrice || 0;
+  }, [orderItemsList, calculation.totalPrice]);
+
+  // Valor calculado do Desconto em R$
+  const discountAmount = useMemo(() => {
+    if (!discountPercent || discountPercent <= 0) return 0;
+    return Number(((subtotalOrderAmount * discountPercent) / 100).toFixed(2));
+  }, [subtotalOrderAmount, discountPercent]);
+
+  // Valor Total Final do Pedido (Após Desconto)
+  const totalOrderAmount = useMemo(() => {
+    return Math.max(0, subtotalOrderAmount - discountAmount);
+  }, [subtotalOrderAmount, discountAmount]);
 
   // Tempo Estimado de Máquina (Calculado com base na velocidade SPM da máquina do usuário)
   const estimatedMinutesPerPiece = useMemo(() => {
@@ -192,10 +225,6 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
     return `${mins} min`;
   };
 
-  // Cálculo total com suporte a múltiplos itens/matrizes no mesmo pedido
-  const totalOrderAmount = useMemo(() => {
-    return orderItemsList.reduce((acc, item) => acc + item.totalPrice, 0);
-  }, [orderItemsList]);
 
   // Master-Detail Sync Effect (Syncs form inputs to the currently selected item)
 
@@ -2141,15 +2170,70 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
                 </div>
               )}
 
+              {/* Input de Desconto em % (Aplicável ao Total do Pedido) */}
+              {isUnlocked && entryMode === 'budget' && (
+                <div className="pt-3 border-t border-slate-200 dark:border-white/10 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400 flex items-center gap-1">
+                      <Percent className="h-3 w-3 text-emerald-500" /> Desconto Especial (%)
+                    </label>
+                    {discountPercent > 0 && (
+                      <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+                        -{formatPrice(discountAmount)}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-1.5">
+                    <div className="relative flex-1">
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        placeholder="0"
+                        value={discountPercent || ''}
+                        onChange={(e) => {
+                          const val = Math.min(100, Math.max(0, Number(e.target.value)));
+                          setDiscountPercent(val);
+                        }}
+                        className="w-full bg-slate-50 dark:bg-black/60 border border-slate-300 dark:border-white/10 rounded-xl px-3 py-1.5 text-xs text-slate-900 dark:text-white font-bold outline-none focus:border-purple-500 text-right pr-7"
+                      />
+                      <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 dark:text-zinc-500 pointer-events-none">%</span>
+                    </div>
+
+                    {/* Pílulas de Atalho Rápido de Desconto */}
+                    {[5, 10, 15, 20].map(pct => (
+                      <button
+                        key={pct}
+                        type="button"
+                        onClick={() => setDiscountPercent(discountPercent === pct ? 0 : pct)}
+                        className={`px-2 py-1.5 rounded-xl text-[10px] font-black transition-all cursor-pointer ${
+                          discountPercent === pct
+                            ? 'bg-emerald-500 text-black shadow-sm'
+                            : 'bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-zinc-400 hover:bg-slate-200 dark:hover:bg-white/10'
+                        }`}
+                      >
+                        {pct}%
+                      </button>
+                    ))}
+                  </div>
+
+                  {discountPercent > 0 && (
+                    <div className="flex justify-between items-center text-[10px] text-slate-500 dark:text-zinc-400 pt-1">
+                      <span>Subtotal: <strong>{formatPrice(subtotalOrderAmount)}</strong></span>
+                      <span className="text-emerald-600 dark:text-emerald-400 font-bold">-{discountPercent}%: -{formatPrice(discountAmount)}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Total Card Display */}
               {(() => {
                 const totalCartPieces = orderItemsList.length > 0 
                   ? orderItemsList.reduce((acc, i) => acc + (i.quantity || 1), 0)
                   : (Number(quantity) || 0);
 
-                const finalOrderTotal = orderItemsList.length > 0
-                  ? totalOrderAmount
-                  : calculation.totalPrice;
+                const finalOrderTotal = totalOrderAmount;
 
                 return (
                   <div className="p-4 rounded-2xl text-white relative overflow-hidden" style={{ background: `linear-gradient(135deg, ${settings.primaryColor} 0%, ${settings.primaryColor}dd 100%)`, boxShadow: `0 10px 15px -3px ${settings.primaryColor}30` }}>
