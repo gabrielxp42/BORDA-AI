@@ -7,13 +7,24 @@
   touch-action: manipulation;
 }
 
-html, body {
+html, body, #root {
+  height: 100%;
+  min-height: 100%;
+  width: 100%;
+  margin: 0;
+  padding: 0;
   touch-action: manipulation;
   -webkit-text-size-adjust: 100%;
   -ms-text-size-adjust: 100%;
   text-size-adjust: 100%;
   -webkit-tap-highlight-color: transparent;
   overscroll-behavior-y: none;
+}
+
+#root {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
 }
 
 /* 100% Prohibition of Auto-Zoom on iOS Safari & Android when focusing inputs */

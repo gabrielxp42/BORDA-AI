@@ -189,9 +189,19 @@ export const CreateInstallmentAgreementModal: React.FC<CreateInstallmentAgreemen
             reminderTiming: reminderTiming,
             notifyClientOnDue: notifyClient,
             notifyOwnerOnDue: notifyOwner,
-            reminded_dates: []
           })
         });
+      }
+
+      // 2.5 Atualiza os pedidos selecionados para status 'in_agreement' para evitar duplicidade de cobrança/caixa
+      for (const ord of selectedOrders) {
+        const prevNotes = ord.notes || '';
+        const tag = `[ACORDO_ATIVO:${installmentCount}X]`;
+        const updatedNotes = prevNotes.includes('[ACORDO_ATIVO') ? prevNotes : `${prevNotes} ${tag}`.trim();
+        await supabase.from('orders').update({
+          payment_status: 'in_agreement',
+          notes: updatedNotes
+        }).eq('id', ord.id);
       }
 
       // 3. Notificação da Gabi Secretária via WhatsApp para o Cliente

@@ -56,7 +56,7 @@ export const ReceberDetailsModal: React.FC<ReceberDetailsModalProps> = ({
     let grandPending = 0;
 
     pendingOrders
-      .filter(o => o.payment_status !== 'paid')
+      .filter(o => o.payment_status !== 'paid' && o.payment_status !== 'in_agreement' && !(o.notes && o.notes.includes('[ACORDO_ATIVO')))
       .forEach(o => {
         const created = new Date(o.created_at || Date.now());
         const monthStr = format(created, 'MM/yyyy');
@@ -113,7 +113,7 @@ export const ReceberDetailsModal: React.FC<ReceberDetailsModalProps> = ({
   const filteredItems = useMemo(() => {
     const ordersFormatted = pendingOrders
       .filter(o => o.payment_status !== 'paid')
-      .map(o => ({ ...o, isManualTx: false }));
+      .map(o => ({ ...o, isManualTx: false, isAgreementParcel: false }));
     
     const txFormatted = pendingTransactions
       .filter(t => t.status !== 'paid')
@@ -149,23 +149,13 @@ export const ReceberDetailsModal: React.FC<ReceberDetailsModalProps> = ({
 
     const combined = [...ordersFormatted, ...txFormatted];
 
-    // Ordenação por Vencimento: Vencidos VÊM NO TOPO da lista!
+    // Ordenação estrita por Vencimento: da data mais antiga para a mais recente (ordem cronológica)
     const sorted = combined.sort((a, b) => {
       const getDueDateTs = (item: any) => {
         const dStr = item.due_date || item.created_at;
         return dStr ? new Date(dStr).getTime() : 9999999999999;
       };
-      const dueA = getDueDateTs(a);
-      const dueB = getDueDateTs(b);
-      
-      const todayTs = new Date().setHours(0, 0, 0, 0);
-      const isOverdueA = dueA < todayTs;
-      const isOverdueB = dueB < todayTs;
-
-      if (isOverdueA && !isOverdueB) return -1;
-      if (!isOverdueA && isOverdueB) return 1;
-
-      return dueA - dueB;
+      return getDueDateTs(a) - getDueDateTs(b);
     });
 
     return sorted.filter(item => {

@@ -98,7 +98,7 @@ const DesktopSidebar: React.FC<{
     <aside 
       onMouseEnter={() => setIsSidebarHovered(true)}
       onMouseLeave={() => setIsSidebarHovered(false)}
-      className={`hidden md:flex flex-col glass-panel border-r ${isDark ? 'border-white/10' : 'border-slate-200'} z-20 transition-all duration-300 ease-in-out overflow-hidden ${
+      className={`hidden md:flex flex-col glass-panel border-r ${isDark ? 'border-white/10' : 'border-slate-200'} z-20 transition-all duration-300 ease-in-out overflow-hidden h-full min-h-full ${
         isSidebarHovered ? 'w-64' : 'w-[78px]'
       }`}
       style={{ willChange: 'width' }}
@@ -286,7 +286,7 @@ export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children })
   }, []);
 
   useEffect(() => {
-    // Aplica o fator de zoom e ajusta a altura proporcional no elemento raiz para eliminar vãos pretos no rodape
+    // Aplica o fator de zoom e ajusta a altura proporcional no elemento raiz e em #root para eliminar vãos pretos no rodape
     const zoomRatio = globalZoom / 100;
     const minH = `${100 / zoomRatio}vh`;
 
@@ -298,6 +298,12 @@ export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children })
     document.body.style.minHeight = minH;
     document.body.style.height = minH;
     document.body.style.backgroundColor = isDark ? '#09090d' : '#f8fafc';
+
+    const rootEl = document.getElementById('root');
+    if (rootEl) {
+      rootEl.style.minHeight = minH;
+      rootEl.style.height = minH;
+    }
 
     localStorage.setItem('borda-global-zoom', globalZoom.toString());
   }, [globalZoom, isDark]);
@@ -364,7 +370,7 @@ export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children })
   const primaryStyle = { color: settings.primaryColor };
 
   return (
-    <div className={`flex h-full ${isDark ? 'bg-[#09090d] text-zinc-100' : 'bg-slate-50 text-slate-900'} overflow-hidden transition-colors duration-300`}>
+    <div className={`flex flex-1 min-h-full h-full w-full ${isDark ? 'bg-[#09090d] text-zinc-100' : 'bg-slate-50 text-slate-900'} overflow-hidden transition-colors duration-300`}>
       {/* Subcomponente Sidebar Desktop */}
       <DesktopSidebar
         settings={settings}
@@ -378,7 +384,7 @@ export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children })
       />
 
       {/* Main Content Container */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden min-h-full h-full">
         {/* Top Header */}
         <header className={`h-16 glass-panel border-b ${isDark ? 'border-white/10' : 'border-slate-200'} px-6 flex items-center justify-between z-10`}>
           <div className="flex items-center gap-4">
