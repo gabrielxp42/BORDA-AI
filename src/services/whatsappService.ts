@@ -1,5 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { format, parseISO, differenceInCalendarDays } from 'date-fns';
 import { 
   humanizeMessageText, 
   waitAntiBanJitterDelay, 
@@ -422,7 +423,7 @@ export async function sendEvolutionText(phone: string, message: string): Promise
     throw new Error('Instância do WhatsApp não encontrada para este usuário. Por favor, conecte seu WhatsApp nas configurações.');
   }
 
-  // 1. Tenta envio REST direto com parâmetro de presença "composing" (digitando...)
+  // 1. Tenta envio REST direto com parâmetro de presença/delay oficial da Evolution API v2
   if (creds && creds.apiUrl && creds.apiKey) {
     const inst = targetInstance;
     console.log(`📲 [WhatsApp REST Direto Anti-Ban] Enviando para ${cleanPhone} via [${inst}] (Digitação: ${typingDelayMs}ms)...`);
@@ -436,11 +437,7 @@ export async function sendEvolutionText(phone: string, message: string): Promise
         body: JSON.stringify({
           number: cleanPhone,
           text: safeMessage,
-          delay: typingDelayMs,
-          options: {
-            delay: typingDelayMs,
-            presence: 'composing'
-          }
+          delay: typingDelayMs
         })
       });
 
@@ -451,15 +448,31 @@ export async function sendEvolutionText(phone: string, message: string): Promise
         return resData;
       }
 
-      if (resData.error || resData.message || resData.status === 'ERROR' || resData.status === 'close' || resData.state === 'close') {
-        const errMsg = typeof resData.message === 'string'
-          ? resData.message
-          : (Array.isArray(resData.message) ? resData.message.join(', ') : (resData.message?.message || resData.error || `Erro Evolution API (${resp.status})`));
+      // Trata erros de status HTTP (!resp.ok) ou erro retornado pela API
+      if (!resp.ok || resData.error || resData.message || resData.status === 'ERROR' || resData.status === 'close') {
+        let errMsg = '';
+        if (resData?.response?.message) {
+          errMsg = Array.isArray(resData.response.message) ? resData.response.message.join(', ') : String(resData.response.message);
+        } else if (resData?.message) {
+          errMsg = Array.isArray(resData.message) ? resData.message.join(', ') : (typeof resData.message === 'object' ? JSON.stringify(resData.message) : String(resData.message));
+        } else if (resData?.error) {
+          errMsg = typeof resData.error === 'string' ? resData.error : JSON.stringify(resData.error);
+        } else {
+          errMsg = `Conexão rejeitada pela Evolution API (Status ${resp.status})`;
+        }
+
+        // Mapeamento de mensagens técnicas em português claro para o usuário
+        if (errMsg.includes('number must be') || errMsg.includes('invalid') || errMsg.includes('exists')) {
+          errMsg = `Número de WhatsApp inválido ou sem conta ativa (${cleanPhone}).`;
+        } else if (errMsg.includes('Session closed') || errMsg.includes('close') || errMsg.includes('not connected')) {
+          errMsg = `Sessão do WhatsApp desconectada. Abra a página de Configurações para ler o QR Code novamente.`;
+        }
+
         throw new Error(errMsg);
       }
     } catch (restErr) {
       if (restErr instanceof Error && !restErr.message.includes('fetch')) {
-        throw restErr; // Re-throw erros lógicos de conexão/rejeição da Evolution
+        throw restErr; // Re-throw erro amigável já formatado
       }
       console.warn('⚠️ [WhatsApp REST Direto Falhou]:', restErr);
     }
@@ -548,9 +561,28 @@ export async function uploadPdfToStorageAndGetUrl(base64Data: string, fileName: 
 }
 
 /**
- * Envia arquivo de mídia ou PDF via Evolution API
+ * Envia arquivo de mídia ou PDF via Evolution API (Suporta tanto objeto quanto argumentos posicionais)
  */
-export async function sendEvolutionMedia(options: WhatsAppSendOptions): Promise<any> {
+export async function sendEvolutionMedia(
+  optionsOrPhone: WhatsAppSendOptions | string,
+  mediaUrlParam?: string,
+  fileNameParam?: string,
+  captionParam?: string,
+  mediaTypeParam?: 'image' | 'document' | 'pdf'
+): Promise<any> {
+  let options: WhatsAppSendOptions;
+  if (typeof optionsOrPhone === 'string') {
+    options = {
+      phone: optionsOrPhone,
+      mediaUrl: mediaUrlParam,
+      mediaName: fileNameParam,
+      message: captionParam || '',
+      mediaType: mediaTypeParam || 'document'
+    };
+  } else {
+    options = optionsOrPhone;
+  }
+
   const formattedPhone = formatWhatsAppNumber(options.phone);
 
   let userInstanceId: string | undefined = undefined;
@@ -580,8 +612,7 @@ export async function sendEvolutionMedia(options: WhatsAppSendOptions): Promise<
   const fileName = options.mediaName || (isImage ? 'imagem.jpg' : 'Orcamento.pdf');
   const mimetype = isImage ? 'image/jpeg' : 'application/pdf';
 
-  // Tenta gerar Signed URL via Supabase Storage (igual ao DIRECT-AI-GB) se for base64.
-  // Mandar URL em vez de megabytes de base64 é mais leve e mais confiável.
+  // Tenta gerar Signed URL via Supabase Storage se for base64.
   let finalMediaUrl = options.mediaUrl || '';
   let tempPathToClean: string | null = null;
 
@@ -591,9 +622,11 @@ export async function sendEvolutionMedia(options: WhatsAppSendOptions): Promise<
       finalMediaUrl = uploadResult.url;
       tempPathToClean = uploadResult.tempPath;
       console.log('📄 [WhatsApp PDF] Signed URL gerada com sucesso:', finalMediaUrl);
-    } else if (finalMediaUrl.startsWith('data:')) {
-      // Sem Storage, cai para base64 puro — a Evolution não aceita Data URI.
-      finalMediaUrl = finalMediaUrl.split(',')[1] || '';
+    } else {
+      // Sem Storage (ou falha na permissão do Bucket), cai para base64 puro
+      if (finalMediaUrl.startsWith('data:')) {
+        finalMediaUrl = finalMediaUrl.split(',')[1] || '';
+      }
     }
   }
 
@@ -735,6 +768,127 @@ export function handleWhatsAppDispatchError(
         onClick: () => { window.open(webLink, '_blank'); }
       }
     });
+  }
+}
+
+/**
+ * Motor de Disparo Automático da Gabi Secretária AI para Lembretes de Vencimento de Parcelas.
+ * Verifica parcelas pendentes no Supabase e dispara WhatsApp para clientes e para a diretoria.
+ */
+export async function processGabiInstallmentReminders(): Promise<{ sentCount: number }> {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { sentCount: 0 };
+
+    // 1. Busca todas as transações de parcelas pendentes no Supabase
+    const { data: txs, error } = await supabase
+      .from('financial_transactions')
+      .select('*')
+      .eq('user_id', user.id)
+      .eq('status', 'pending')
+      .not('due_date', 'is', null);
+
+    if (error || !txs || txs.length === 0) return { sentCount: 0 };
+
+    const todayStr = format(new Date(), 'yyyy-MM-dd');
+    const todayObj = parseISO(todayStr);
+    let sentCount = 0;
+
+    // Busca credenciais/configurações globais
+    const { data: settings } = await supabase
+      .from('company_settings')
+      .select('system_name, pix_key, owner_phone')
+      .maybeSingle();
+
+    const systemName = settings?.system_name || 'GUAÇU BORDADOS';
+    const pixKey = settings?.pix_key || '';
+    const ownerPhone = settings?.owner_phone || '';
+
+    for (const tx of txs) {
+      if (!tx.notes || !tx.due_date) continue;
+
+      let meta: any = {};
+      try {
+        meta = typeof tx.notes === 'string' ? JSON.parse(tx.notes) : tx.notes;
+      } catch (e) {
+        continue;
+      }
+
+      // Se a automação não estiver ativada nesta parcela, ignora
+      if (!meta.autoRemindDue || !meta.clientPhone) continue;
+
+      const dueDateObj = parseISO(tx.due_date);
+      const daysDiff = differenceInCalendarDays(dueDateObj, todayObj);
+
+      const timing = meta.reminderTiming || '3_days_before';
+      const remindedDates: string[] = Array.isArray(meta.reminded_dates) ? meta.reminded_dates : [];
+
+      // Verifica se o disparo deve acontecer hoje
+      let shouldSendToday = false;
+
+      if (timing === '3_days_before' && daysDiff === 3) {
+        shouldSendToday = true;
+      } else if (timing === '1_day_before' && daysDiff === 1) {
+        shouldSendToday = true;
+      } else if (timing === 'on_due_date' && daysDiff === 0) {
+        shouldSendToday = true;
+      } else if (timing === 'both_before_and_on_due' && (daysDiff === 3 || daysDiff === 0)) {
+        shouldSendToday = true;
+      }
+
+      // Já foi disparado hoje? Evita spam duplo!
+      if (shouldSendToday && !remindedDates.includes(todayStr)) {
+        const clientName = meta.clientName || 'Cliente';
+        const instIdx = meta.installmentIndex || 1;
+        const totalInst = meta.totalInstallments || 1;
+        const formattedDueDate = format(dueDateObj, 'dd/MM/yyyy');
+        const formattedAmount = Number(tx.amount).toFixed(2);
+
+        const dueLabel = daysDiff === 0 ? 'VENCE HOJE!' : `vence em ${daysDiff} dia(s) (${formattedDueDate})`;
+
+        // 1. WhatsApp para o Cliente
+        if (meta.notifyClientOnDue !== false) {
+          const clientMsg = `⏰ *LEMBRETE DE PARCELA — ${systemName}*\n\n` +
+            `Olá *${clientName}*! Tudo bem? Aqui é a *Gabi*, secretária da oficina.\n\n` +
+            `Passando para lembrar da sua parcela *${instIdx}/${totalInst}* do acordo que *${dueLabel}*.\n\n` +
+            `💰 *Valor:* R$ ${formattedAmount}\n` +
+            `📅 *Vencimento:* ${formattedDueDate}\n` +
+            `${pixKey ? `🔑 *Chave PIX para pagamento:* ${pixKey}\n` : ''}\n` +
+            `Qualquer dúvida estamos à disposição!`;
+
+          await sendEvolutionText(meta.clientPhone, clientMsg).catch(err => {
+            console.warn('[Gabi Reminders] Falha ao enviar lembrete pro cliente:', err);
+          });
+        }
+
+        // 2. WhatsApp para o Chefe
+        if (meta.notifyOwnerOnDue !== false && ownerPhone) {
+          const ownerMsg = `👑 *LEMBRETE DE PARCELA (GABI AI)*\n\n` +
+            `A Parcela *${instIdx}/${totalInst}* do cliente *${clientName}* (R$ ${formattedAmount}) *${dueLabel}*.\n\n` +
+            `A Gabi já disparou o lembrete para o cliente no WhatsApp.`;
+
+          await sendEvolutionText(ownerPhone, ownerMsg).catch(err => {
+            console.warn('[Gabi Reminders] Falha ao enviar cópia pro chefe:', err);
+          });
+        }
+
+        // 3. Atualiza o registro no Supabase com a data de disparo para não repeti-la
+        remindedDates.push(todayStr);
+        const updatedMeta = { ...meta, reminded_dates: remindedDates };
+
+        await supabase
+          .from('financial_transactions')
+          .update({ notes: JSON.stringify(updatedMeta) })
+          .eq('id', tx.id);
+
+        sentCount++;
+      }
+    }
+
+    return { sentCount };
+  } catch (err) {
+    console.error('[Gabi Reminders Engine Error]:', err);
+    return { sentCount: 0 };
   }
 }
 

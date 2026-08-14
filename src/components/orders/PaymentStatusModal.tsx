@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { X, DollarSign, Send, Save, RefreshCw, Check, MessageCircle, FileText, Calendar } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { X, DollarSign, Send, Save, RefreshCw, Check, MessageCircle, FileText, Calendar, Layers } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useCompanySettings } from '@/contexts/CompanySettingsContext';
 import { toast } from 'sonner';
@@ -9,10 +9,32 @@ import { useProfile } from '@/contexts/ProfileContext';
 import { sendEvolutionText } from '@/services/whatsappService';
 import { format } from 'date-fns';
 
+export function calculateOrderExactValue(ord: any): number {
+  if (!ord) return 0;
+  let total = Number(ord.total_amount || 0);
+  if (total > 0) return total;
+
+  const items = ord.order_items || ord.items || [];
+  if (Array.isArray(items) && items.length > 0) {
+    return items.reduce((acc: number, item: any) => {
+      const p = Number(item.total_price || item.total || item.price || item.unit_price || item.val || 0);
+      const q = Number(item.quantity || item.qty || 1);
+      const itemVal = p > 0 ? (item.total_price ? p : p * q) : 0;
+      return acc + itemVal;
+    }, 0);
+  }
+  return 0;
+}
+
+export function calculateOrderPendingVal(ord: any): number {
+  const total = calculateOrderExactValue(ord);
+  return ord?.payment_status === 'half_paid' ? total * 0.5 : total;
+}
+
 interface PaymentStatusModalProps {
   isOpen: boolean;
   onClose: () => void;
-  order: {
+  order?: {
     id: string;
     order_number?: number;
     client?: { name: string; phone?: string };
@@ -21,7 +43,10 @@ interface PaymentStatusModalProps {
     total_amount: number;
     notes?: string;
     due_date?: string;
+    order_items?: any[];
   } | null;
+  /** Suporte a Múltiplos Pedidos para Quitação Coletiva em Lote (Quitar Tudo) */
+  orders?: any[] | null;
   onStatusUpdated?: () => void;
   /** Se true ou se defaultStatus for 'paid', pre-seleciona Pago (100%) para dar baixa direto */
   isBaixaMode?: boolean;
@@ -32,15 +57,31 @@ export const PaymentStatusModal: React.FC<PaymentStatusModalProps> = ({
   isOpen,
   onClose,
   order,
+  orders,
   onStatusUpdated,
   isBaixaMode = false,
   defaultStatus
 }) => {
   const { settings } = useCompanySettings();
   const { activeProfile } = useProfile();
-  const [status, setStatus] = useState<'pending' | 'paid' | 'half_paid'>('pending');
-  const [method, setMethod] = useState<string>('');
-  const [customAmount, setCustomAmount] = useState<number | ''>(0);
+
+  // Lista normalizada de pedidos a processar
+  const targetOrders = useMemo(() => {
+    if (orders && orders.length > 0) return orders;
+    if (order) return [order];
+    return [];
+  }, [order, orders]);
+
+  const isMultiple = targetOrders.length > 1;
+  const targetClient = targetOrders[0]?.client;
+
+  const totalSumToPay = useMemo(() => {
+    return targetOrders.reduce((acc, o) => acc + calculateOrderPendingVal(o), 0);
+  }, [targetOrders]);
+
+  const [status, setStatus] = useState<'pending' | 'paid' | 'half_paid'>('paid');
+  const [method, setMethod] = useState<string>('pix');
+  const [customAmount, setCustomAmount] = useState<number | ''>(totalSumToPay);
   const [paymentNote, setPaymentNote] = useState<string>('');
   const [scheduledDueDate, setScheduledDueDate] = useState<string>('');
   const [customPaidAt, setCustomPaidAt] = useState<string>(() => {
@@ -52,73 +93,46 @@ export const PaymentStatusModal: React.FC<PaymentStatusModalProps> = ({
   const [saving, setSaving] = useState<boolean>(false);
 
   useEffect(() => {
-    if (isOpen && order) {
-      // Quando abre para Dar Baixa ou se defaultStatus for informado, pre-seleciona 'paid' por padrão!
+    if (isOpen && targetOrders.length > 0) {
       const targetDefault = defaultStatus || (isBaixaMode ? 'paid' : null);
+      const firstOrd = targetOrders[0];
       const initialStatus = targetDefault 
         ? targetDefault 
-        : (order.payment_status === 'pending' && isBaixaMode ? 'paid' : (order.payment_status || 'pending'));
+        : (firstOrd.payment_status === 'pending' && isBaixaMode ? 'paid' : (firstOrd.payment_status || 'pending'));
 
       setStatus(initialStatus);
 
-      // Lê metadados salvos para persistência entre dispositivos
-      const { metadata } = parsePaymentMetadata(order.notes);
-      const savedMethod = order.payment_method || metadata.paymentMethod || '';
-      
-      const savedDueDate = order.due_date ? order.due_date.slice(0, 10) : ((metadata as any).scheduledPaymentDate || '');
-      setScheduledDueDate(savedDueDate);
+      const { metadata } = parsePaymentMetadata(firstOrd.notes);
+      const savedMethod = firstOrd.payment_method || metadata.paymentMethod || 'pix';
       setMethod(initialStatus === 'pending' ? '' : savedMethod);
-      setPaymentNote(metadata.paymentNote || '');
-
-      if (metadata.paidAt) {
-        try {
-          const d = new Date(metadata.paidAt);
-          d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
-          setCustomPaidAt(d.toISOString().slice(0, 16));
-        } catch { /* use default */ }
-      }
 
       if (initialStatus === 'paid') {
-        setCustomAmount(order.total_amount || 0);
+        setCustomAmount(totalSumToPay);
       } else if (initialStatus === 'half_paid') {
-        setCustomAmount(metadata.depositAmount || (order.total_amount || 0) / 2);
+        setCustomAmount(totalSumToPay / 2);
       } else {
         setCustomAmount(0);
       }
     }
-  }, [order, isOpen, isBaixaMode, defaultStatus]);
+  }, [isOpen, targetOrders, isBaixaMode, defaultStatus, totalSumToPay]);
 
   const handleStatusChange = (newStatus: 'pending' | 'paid' | 'half_paid') => {
     setStatus(newStatus);
-    if (!order) return;
-
     if (newStatus === 'pending') {
       setMethod('');
       setCustomAmount(0);
     } else if (newStatus === 'paid') {
-      setCustomAmount(order.total_amount || 0);
-      // Automação inteligente: se a data agendada está no futuro e o status é "Pago",
-      // limpa a data agendada pois não faz sentido manter vencimento futuro para algo já quitado
-      if (scheduledDueDate) {
-        const scheduled = new Date(scheduledDueDate);
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        if (scheduled > today) {
-          toast.info('📅 Data de vencimento futura removida automaticamente — pedido já foi quitado.');
-          setScheduledDueDate('');
-        }
-      }
+      setCustomAmount(totalSumToPay);
     } else if (newStatus === 'half_paid') {
-      const { metadata } = parsePaymentMetadata(order.notes);
-      setCustomAmount(metadata.depositAmount || (order.total_amount || 0) / 2);
+      setCustomAmount(totalSumToPay / 2);
     }
   };
+
+  if (!isOpen || targetOrders.length === 0) return null;
 
   const isMethodRequired = status === 'paid' || status === 'half_paid';
   const isMethodSelected = Boolean(method && method.trim().length > 0);
   const isSaveDisabled = saving || (isMethodRequired && !isMethodSelected);
-
-  if (!isOpen || !order) return null;
 
   const handleSave = async () => {
     if (isMethodRequired && !isMethodSelected) {
@@ -130,403 +144,317 @@ export const PaymentStatusModal: React.FC<PaymentStatusModalProps> = ({
     try {
       const paidVal = Number(customAmount) || 0;
       const selectedMethod = status === 'pending' ? '' : method;
-      
-      // Parse existing metadata and update it
-      const { cleanNotes, metadata: existingMetadata } = parsePaymentMetadata(order.notes);
       const exactPaidAt = customPaidAt ? new Date(customPaidAt).toISOString() : new Date().toISOString();
       const operatorName = activeProfile?.name || 'Operador';
 
-      const updatedMetadata = {
-        ...updatePaymentMetadata(
-          existingMetadata,
-          status,
-          order.total_amount,
-          selectedMethod,
-          status === 'half_paid' ? paidVal : undefined,
-          paymentNote
-        ),
-        paidAt: status !== 'pending' ? exactPaidAt : undefined,
-        paidByOperator: status !== 'pending' ? operatorName : undefined,
-        // Guarda também QUANDO a baixa foi dada no sistema. O cliente pode ter
-        // pago na sexta e a baixa só sair na segunda — as duas datas importam.
-        registeredAt: status !== 'pending' ? new Date().toISOString() : undefined,
-        scheduledPaymentDate: scheduledDueDate || undefined,
-      };
-      
-      const noteWithMetadata = serializePaymentMetadata(cleanNotes, updatedMetadata);
+      // 1. Atualiza todos os pedidos envolvidos no banco de dados
+      for (const ord of targetOrders) {
+        const { cleanNotes, metadata: existingMetadata } = parsePaymentMetadata(ord.notes);
+        const ordVal = calculateOrderExactValue(ord);
 
-      const { error } = await supabase
-        .from('orders')
-        .update({
-          payment_status: status,
-          payment_method: selectedMethod,
-          due_date: scheduledDueDate ? scheduledDueDate : null,
-          notes: noteWithMetadata
-        })
-        .eq('id', order.id);
+        const updatedMetadata = {
+          ...updatePaymentMetadata(
+            existingMetadata,
+            status,
+            ordVal,
+            selectedMethod,
+            status === 'half_paid' ? paidVal / targetOrders.length : undefined,
+            paymentNote
+          ),
+          paidAt: status !== 'pending' ? exactPaidAt : undefined,
+          paidByOperator: status !== 'pending' ? operatorName : undefined,
+          registeredAt: status !== 'pending' ? new Date().toISOString() : undefined,
+          scheduledPaymentDate: scheduledDueDate || undefined,
+        };
 
-      if (error) throw error;
+        const noteWithMetadata = serializePaymentMetadata(cleanNotes, updatedMetadata);
 
-      toast.success('Status financeiro atualizado com sucesso!');
+        await supabase
+          .from('orders')
+          .update({
+            payment_status: status,
+            payment_method: selectedMethod,
+            due_date: scheduledDueDate ? scheduledDueDate : null,
+            notes: noteWithMetadata
+          })
+          .eq('id', ord.id);
+      }
 
-      // Notificação nativa via WhatsApp Evolution API com Toast em tempo real
-      if (notifyWhatsApp && order.client?.phone) {
-        const toastId = toast.loading("📲 Enviando recibo de pagamento via WhatsApp...");
+      // 2. Sincroniza uma ÚNICA entrada financeira consolidada no Faturamento (financial_transactions)
+      if (status !== 'pending' && paidVal > 0) {
+        const { data: authUser } = await supabase.auth.getUser();
+        if (authUser?.user?.id) {
+          const clientNameText = targetClient?.name || 'Cliente';
+          const descriptionText = isMultiple
+            ? `Quitação de ${targetOrders.length} Encomendas (#${targetOrders.map(o => o.order_number || o.id.slice(0, 4)).join(', ')}) de ${clientNameText}`
+            : `Recebimento Pedido #${targetOrders[0].order_number || targetOrders[0].id.slice(0, 4)} (${clientNameText})`;
+
+          await supabase.from('financial_transactions').insert({
+            user_id: authUser.user.id,
+            type: 'income',
+            amount: paidVal,
+            description: descriptionText,
+            category: 'Venda de Bordado',
+            payment_method: selectedMethod || 'pix',
+            date: exactPaidAt,
+            due_date: exactPaidAt,
+            status: 'paid',
+            notes: JSON.stringify({
+              orderIds: targetOrders.map(o => o.id),
+              paymentStatus: status,
+              operator: operatorName,
+              registeredAt: new Date().toISOString()
+            })
+          });
+        }
+      }
+
+      toast.success(
+        isMultiple 
+          ? `🎉 Quitação coletiva de ${targetOrders.length} encomendas salva e sincronizada com o Faturamento!` 
+          : 'Status financeiro e receita sincronizados com o Faturamento!'
+      );
+
+      // 3. Notificação consolidada via WhatsApp Evolution API
+      if (notifyWhatsApp && targetClient?.phone) {
+        const toastId = toast.loading("📲 Enviando recibo de quitação via WhatsApp...");
         try {
           const statusText = status === 'paid' 
-            ? `PAGO 100% (R$ ${order.total_amount.toFixed(2)})` 
-            : status === 'half_paid' 
-            ? `ENTRADA / SINAL (R$ ${paidVal.toFixed(2)})` 
-            : 'PENDENTE';
+            ? `QUITADO 100% (R$ ${paidVal.toFixed(2)})` 
+            : `ENTRADA / SINAL (R$ ${paidVal.toFixed(2)})`;
           
           const methodText = formatPaymentMethodName(selectedMethod) || 'N/A';
           const noteText = paymentNote ? `\n📝 *Obs:* ${paymentNote}` : '';
 
-          const msg = `*${settings.systemName || 'BORDA AI'}* — Confirmamos o recebimento do seu pagamento!\n\n` +
-            `📋 *Pedido:* #${order.order_number || order.id.slice(0, 6)}\n` +
-            `👤 *Cliente:* ${order.client.name}\n` +
+          const ordersSummary = isMultiple
+            ? targetOrders.map(o => `• Pedido #${o.order_number || o.id.slice(0, 4)}: R$ ${calculateOrderExactValue(o).toFixed(2)}`).join('\n')
+            : `• Pedido #${targetOrders[0].order_number || targetOrders[0].id.slice(0, 4)}: R$ ${calculateOrderExactValue(targetOrders[0]).toFixed(2)}`;
+
+          const msg = `*${settings.systemName || 'BORDA AI'}* — Confirmamos a quitação do seu pagamento! 📋\n\n` +
+            `👤 *Cliente:* ${targetClient.name}\n` +
+            `📋 *Encomendas Quitadas:*\n${ordersSummary}\n\n` +
             `💰 *Status:* ${statusText}\n` +
             `💳 *Forma de Pagamento:* ${methodText}${noteText}\n` +
-            `⏰ *Data/Hora:* ${format(new Date(), "dd/MM/yyyy 'às' HH:mm")}\n\n` +
-            `Qualquer dúvida, estamos à disposição!`;
+            `⏰ *Data do Pagamento:* ${format(new Date(exactPaidAt), "dd/MM/yyyy 'às' HH:mm")}\n\n` +
+            `Agradecemos a preferência! Qualquer dúvida, estamos à disposição!`;
 
-          const res = await sendEvolutionText(order.client.phone, msg);
-          if (res && res.success) {
-            toast.success("✅ Recibo de pagamento entregue no WhatsApp do cliente!", { id: toastId });
-          } else {
-            toast.info("WhatsApp Evolution API indisponível. Abrindo link do WhatsApp Web...", { id: toastId });
-            window.open(`https://wa.me/${order.client.phone.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`, '_blank');
+          const res = await sendEvolutionText(targetClient.phone, msg);
+          if (res) {
+            toast.success("✅ Recibo de quitação entregue no WhatsApp!", { id: toastId });
           }
         } catch (e) {
-          toast.error("Erro no envio do WhatsApp.", { id: toastId });
+          console.warn('Erro ao notificar via WhatsApp:', e);
+          toast.info("WhatsApp Evolution API indisponível.", { id: toastId });
         }
       }
 
       if (onStatusUpdated) onStatusUpdated();
       onClose();
-    } catch (err) {
-      console.error("Erro ao atualizar pagamento:", err);
-      toast.error("Erro ao atualizar pagamento.");
+    } catch (err: any) {
+      console.error('Erro ao dar baixa:', err);
+      toast.error('Erro ao atualizar status de pagamento: ' + (err?.message || 'Tente novamente'));
     } finally {
       setSaving(false);
     }
   };
 
-
   return (
-    <div className="fixed inset-0 z-[999999] flex items-center justify-center p-2 sm:p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200 overflow-y-auto">
-      <div 
-        className="relative w-full max-w-md max-h-[92vh] bg-white dark:bg-[#12121a] border border-slate-200 dark:border-white/10 rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col my-auto"
-        onClick={e => e.stopPropagation()}
-      >
-        {/* Header */}
-        <div className="p-5 border-b border-slate-200 dark:border-white/10 flex items-center justify-between bg-slate-50 dark:bg-white/5">
-          <div className="flex items-center gap-3">
-            <div 
-              className="p-2.5 rounded-2xl text-white shadow-md"
-              style={{ backgroundColor: settings.primaryColor }}
+    <AnimatePresence>
+      <div className="fixed inset-0 z-[99999999] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={{ opacity: 0, scale: 0.95 }}
+          className="relative w-full max-w-lg bg-[#0e0e17] border border-emerald-500/30 rounded-3xl shadow-2xl overflow-hidden p-6 space-y-5 text-white"
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between border-b border-white/10 pb-4">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-2xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center shadow-lg">
+                <DollarSign className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-black text-white">
+                  {isMultiple ? `Quitar ${targetOrders.length} Encomendas em Lote` : `Dar Baixa no Pedido #${targetOrders[0]?.order_number || 'Bordado'}`}
+                </h3>
+                <p className="text-xs text-zinc-400">
+                  {targetClient?.name ? `Cliente: ${targetClient.name}` : 'Registrar recebimento'}
+                </p>
+              </div>
+            </div>
+
+            <button
+              onClick={onClose}
+              className="p-2 rounded-xl text-zinc-400 hover:text-white hover:bg-white/10 transition-colors"
             >
-              <DollarSign className="h-5 w-5" />
-            </div>
-            <div>
-              <h3 className="text-base font-black text-slate-900 dark:text-white">
-                Atualizar Pagamento #{order.order_number || order.id.slice(0, 6)}
-              </h3>
-              <p className="text-xs text-slate-500 dark:text-zinc-400">
-                {order.client?.name || 'Cliente'} • Total: <strong className="text-slate-800 dark:text-zinc-200">R$ {(order.total_amount || 0).toFixed(2)}</strong>
-              </p>
-            </div>
+              <X className="h-5 w-5" />
+            </button>
           </div>
 
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-xl hover:bg-slate-200 dark:hover:bg-white/10 text-slate-500 dark:text-zinc-400 transition-colors"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-
-        {/* Content */}
-        <div className="p-6 space-y-5">
-
-          {/* Trilha do último registro: quando o cliente pagou x quando deu baixa, e por quem */}
-          {(() => {
-            const { metadata: meta } = parsePaymentMetadata(order.notes);
-            if (!meta.paidAt && !meta.registeredAt) return null;
-
-            const fmt = (iso?: string) => {
-              if (!iso) return null;
-              try { return format(new Date(iso), "dd/MM/yyyy 'às' HH:mm"); } catch { return null; }
-            };
-            const pagoEm = fmt(meta.paidAt);
-            const baixaEm = fmt(meta.registeredAt);
-            const defasado = pagoEm && baixaEm && pagoEm !== baixaEm;
-
-            return (
-              <div className="p-3.5 rounded-2xl bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 space-y-1.5">
-                <p className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400">
-                  Último registro de pagamento
-                </p>
-                {pagoEm && (
-                  <p className="text-xs text-slate-700 dark:text-zinc-200">
-                    💰 <strong>Cliente pagou em:</strong> {pagoEm}
-                  </p>
-                )}
-                {baixaEm && (
-                  <p className="text-xs text-slate-700 dark:text-zinc-200">
-                    🧾 <strong>Baixa dada em:</strong> {baixaEm}
-                    {defasado && <span className="text-amber-500 dark:text-amber-400 font-bold"> (retroativo)</span>}
-                  </p>
-                )}
-                {meta.paidByOperator && (
-                  <p className="text-xs text-slate-700 dark:text-zinc-200">
-                    👤 <strong>Registrado por:</strong> {meta.paidByOperator}
-                  </p>
-                )}
-              </div>
-            );
-          })()}
+          {/* Resumo dos Valores */}
+          <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-extrabold text-emerald-300 uppercase tracking-wider">
+                {isMultiple ? `Total das ${targetOrders.length} Encomendas:` : 'Valor da Encomenda:'}
+              </span>
+              <span className="text-xl font-black text-emerald-400">
+                R$ {totalSumToPay.toFixed(2)}
+              </span>
+            </div>
+            {isMultiple && (
+              <p className="text-[11px] text-zinc-300 font-mono truncate">
+                Pedidos: #{targetOrders.map(o => o.order_number || o.id.slice(0, 4)).join(', #')}
+              </p>
+            )}
+          </div>
 
           {/* Seletor de Status */}
           <div className="space-y-2">
-            <label className="text-[11px] font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400 block">
-              Status do Pagamento
+            <label className="text-xs font-black text-zinc-300 uppercase tracking-wider">
+              Status do Pagamento:
             </label>
-            <div className="grid grid-cols-3 gap-2">
-              {[
-                { 
-                  id: 'pending', 
-                  label: isBaixaMode ? 'Pendente (Sem Baixa)' : 'Pendente', 
-                  color: 'bg-amber-500/20 text-amber-500 border-amber-500/50' 
-                },
-                { id: 'half_paid', label: 'Sinal 50%', color: 'bg-blue-500/20 text-blue-400 border-blue-500/50' },
-                { id: 'paid', label: 'Pago (100%)', color: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/50' },
-              ].map(st => (
-                <button
-                  key={st.id}
-                  type="button"
-                  onClick={() => handleStatusChange(st.id as any)}
-                  className={`py-2 px-2 rounded-xl text-xs font-bold border transition-all text-center flex flex-col items-center gap-1 ${
-                    status === st.id ? st.color + ' shadow-sm' : 'border-slate-200 dark:border-white/10 text-slate-400 opacity-60 hover:opacity-100'
-                  }`}
-                >
-                  <span>{st.label}</span>
-                  {status === st.id && <Check className="h-3 w-3" />}
-                </button>
-              ))}
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => handleStatusChange('paid')}
+                className={`py-3 px-4 rounded-2xl font-black text-xs border transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                  status === 'paid'
+                    ? 'bg-emerald-600 border-emerald-400 text-white shadow-lg shadow-emerald-600/30'
+                    : 'bg-white/5 border-white/10 text-zinc-400 hover:bg-white/10'
+                }`}
+              >
+                <Check className="h-4 w-4" /> Quitado (100%)
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleStatusChange('half_paid')}
+                className={`py-3 px-4 rounded-2xl font-black text-xs border transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                  status === 'half_paid'
+                    ? 'bg-blue-600 border-blue-400 text-white shadow-lg shadow-blue-600/30'
+                    : 'bg-white/5 border-white/10 text-zinc-400 hover:bg-white/10'
+                }`}
+              >
+                <DollarSign className="h-4 w-4" /> Sinal / Entrada (50%)
+              </button>
             </div>
           </div>
 
-          {/* Campo de Entrada de Valor do Sinal / Pago */}
-          <AnimatePresence>
-            {status === 'half_paid' && (
-              <motion.div
-                initial={{ opacity: 0, height: 0, marginTop: 0 }}
-                animate={{ opacity: 1, height: 'auto', marginTop: 12 }}
-                exit={{ opacity: 0, height: 0, marginTop: 0 }}
-                className="space-y-1.5 overflow-hidden"
-              >
-                <div className="flex items-center justify-between">
-                  <label className="text-[11px] font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400">
-                    Valor Recebido / Entrada (R$)
-                  </label>
-                  <span className="text-[10px] font-bold text-slate-400 dark:text-zinc-500">
-                    Total do Pedido: R$ {(order.total_amount || 0).toFixed(2)}
-                  </span>
-                </div>
-                <div className="relative">
-                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-black text-slate-400 dark:text-zinc-500">
-                    R$
-                  </span>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={customAmount}
-                    onChange={e => setCustomAmount(e.target.value === '' ? '' : Number(e.target.value))}
-                    className="w-full bg-slate-50 dark:bg-white/5 border border-slate-300 dark:border-white/10 rounded-xl pl-10 pr-4 py-2.5 text-sm font-black text-slate-900 dark:text-white focus:outline-none focus:border-brand transition-all"
-                    style={{ borderColor: `${settings.primaryColor}30` }}
-                  />
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* Forma de Pagamento (Exibida Apenas se Sinal 50% ou Pago 100%) */}
-          {status !== 'pending' ? (
-            <div className="space-y-3 animate-in fade-in duration-200">
-              <div className="space-y-2">
-                <label className="text-[11px] font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400 flex items-center justify-between">
-                  <span>Forma de Pagamento</span>
-                  {!method && (
-                    <span className="text-[10px] font-bold text-amber-400 animate-pulse">⚠️ Escolha uma opção</span>
-                  )}
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  {[
-                    { id: 'pix', label: '⚡ PIX' },
-                    { id: 'credit_card', label: '💳 Cartão' },
-                    { id: 'cash', label: '💵 Dinheiro' },
-                    { id: 'transfer', label: '🏦 Transferência' },
-                  ].map(pm => (
-                    <button
-                      key={pm.id}
-                      type="button"
-                      onClick={() => setMethod(pm.id)}
-                      className={`py-2.5 px-3 rounded-xl text-xs font-bold border transition-all text-center cursor-pointer ${
-                        method === pm.id
-                          ? 'bg-purple-500/20 text-purple-400 border-purple-500/60 shadow-md ring-1 ring-purple-500/30'
-                          : !method
-                          ? 'border-amber-500/40 text-zinc-400 hover:bg-white/5'
-                          : 'border-slate-200 dark:border-white/10 text-slate-500 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-white/5'
-                      }`}
-                    >
-                      {pm.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Data/Hora Efetiva do Pagamento (Para Baixas Retroativas) */}
-              <div className="pt-1">
-                <label className="text-[11px] font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400 block mb-1">
-                  📅 Data/Hora Real do Pagamento
-                </label>
-                <input
-                  type="datetime-local"
-                  value={customPaidAt}
-                  onChange={(e) => setCustomPaidAt(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-white/5 border border-slate-300 dark:border-white/10 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-purple-500"
-                />
-                <p className="text-[10px] text-zinc-500 mt-1">
-                  Altere caso o cliente tenha pago em data/horário anterior (ex: no final de semana).
-                </p>
+          {/* Seletor de Forma de Pagamento */}
+          {status !== 'pending' && (
+            <div className="space-y-2">
+              <label className="text-xs font-black text-zinc-300 uppercase tracking-wider">
+                Forma de Pagamento Recebida: <span className="text-rose-400">*</span>
+              </label>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {[
+                  { id: 'pix', label: '🔑 PIX' },
+                  { id: 'dinheiro', label: '💵 Dinheiro' },
+                  { id: 'cartao', label: '💳 Cartão' },
+                  { id: 'transferencia', label: '🏦 Transf.' },
+                ].map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => setMethod(item.id)}
+                    className={`py-2.5 px-3 rounded-xl text-xs font-black border transition-all cursor-pointer ${
+                      method === item.id
+                        ? 'bg-purple-600 border-purple-400 text-white shadow-md'
+                        : 'bg-white/5 border-white/10 text-zinc-400 hover:bg-white/10'
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                ))}
               </div>
             </div>
-          ) : (
-            <>
-              {/* Guia sutil para o operador quando pendente */}
-              <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-700 dark:text-amber-300 flex items-start gap-2.5">
-                <span className="text-base leading-none mt-0.5">⚠️</span>
-                <span>{isBaixaMode ? 'Atenção: Ao manter o status como Pendente, nenhuma baixa será dada e o valor não entrará no caixa.' : 'Para dar baixa, selecione Pago (100%) ou Sinal 50% acima, escolha a forma de pagamento e salve.'}</span>
-              </div>
-
-              {/* Agendar Data Prevista de Pagamento — só exibe no status Pendente */}
-              <div className="p-3.5 rounded-2xl bg-purple-500/5 dark:bg-purple-500/10 border border-purple-500/20 dark:border-purple-500/30 space-y-1.5 animate-in fade-in duration-200">
-                <label className="text-[11px] font-black uppercase tracking-wider text-purple-600 dark:text-purple-400 flex items-center gap-1.5">
-                  <Calendar className="h-4 w-4 text-purple-500" />
-                  <span>Agendar Vencimento (Faturas A Receber)</span>
-                </label>
-                <input
-                  type="date"
-                  value={scheduledDueDate}
-                  onChange={e => setScheduledDueDate(e.target.value)}
-                  className="w-full bg-white dark:bg-black/40 border border-slate-300 dark:border-white/10 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-purple-500 font-bold cursor-pointer"
-                />
-                <p className="text-[10px] text-slate-500 dark:text-zinc-400">
-                  💡 Opcional: agende a data combinada com o cliente. O pedido aparece automaticamente no <strong>A Receber</strong>.
-                </p>
-              </div>
-            </>
           )}
 
-          {/* Alerta inteligente: data agendada no futuro com sinal dado */}
-          {status === 'half_paid' && scheduledDueDate && (() => {
-            const scheduled = new Date(scheduledDueDate);
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-            if (scheduled > today) {
-              return (
-                <div className="p-3 rounded-2xl bg-blue-500/10 border border-blue-500/20 text-xs text-blue-700 dark:text-blue-300 flex items-start gap-2">
-                  <span className="text-base leading-none">📅</span>
-                  <span>Vencimento agendado para <strong>{format(scheduled, 'dd/MM/yyyy')}</strong>. O saldo restante continuará visível no <strong>A Receber</strong> até a quitação total.</span>
-                </div>
-              );
-            }
-            return null;
-          })()}
+          {/* Data do Pagamento Real */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-black text-zinc-300 uppercase tracking-wider block mb-1">
+                Data do Recebimento:
+              </label>
+              <input
+                type="datetime-local"
+                value={customPaidAt}
+                onChange={(e) => setCustomPaidAt(e.target.value)}
+                className="w-full bg-black/50 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500"
+              />
+            </div>
 
-          {/* Observação do Pagamento (Persistida no Banco de Dados) */}
-          <div className="space-y-1.5 pt-1">
-            <label className="text-[11px] font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400 flex items-center gap-1.5">
-              <FileText className="h-3.5 w-3.5 text-purple-400" />
-              <span>Observação do Pagamento (Opcional)</span>
-            </label>
-            <input
-              type="text"
-              value={paymentNote}
-              onChange={e => setPaymentNote(e.target.value)}
-              placeholder="Ex: Pago com desconto, enviado comprovante no WhatsApp..."
-              className="w-full bg-slate-50 dark:bg-white/5 border border-slate-300 dark:border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-zinc-500 focus:outline-none focus:border-purple-500/50 transition-all"
-            />
+            <div>
+              <label className="text-xs font-black text-zinc-300 uppercase tracking-wider block mb-1">
+                Valor Recebido (R$):
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                value={customAmount}
+                onChange={(e) => setCustomAmount(Number(e.target.value))}
+                className="w-full bg-black/50 border border-white/10 rounded-xl px-3 py-2 text-xs text-white font-black focus:outline-none focus:border-emerald-500 text-emerald-400"
+              />
+            </div>
           </div>
 
-          {/* Card Interativo Notificar via WhatsApp (Estilo Verde WhatsApp Premium) */}
+          {/* Toggle de Recibo WhatsApp Customizado Estilo iOS Glass */}
           <div 
             onClick={() => setNotifyWhatsApp(!notifyWhatsApp)}
-            className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between ${
-              notifyWhatsApp
-                ? 'bg-emerald-500/10 border-emerald-500/40 text-emerald-600 dark:text-emerald-400 shadow-md shadow-emerald-500/5'
-                : 'bg-slate-100 dark:bg-white/5 border-slate-200 dark:border-white/10 text-slate-400 opacity-70 hover:opacity-100'
+            className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 select-none ${
+              notifyWhatsApp 
+                ? 'bg-emerald-500/15 border-emerald-500/40 shadow-lg shadow-emerald-500/10' 
+                : 'bg-white/5 border-white/10 opacity-70 hover:opacity-100'
             }`}
           >
             <div className="flex items-center gap-3">
-              <div className={`p-2 rounded-xl transition-all ${notifyWhatsApp ? 'bg-[#25D366] text-white shadow-md shadow-[#25D366]/30' : 'bg-slate-200 dark:bg-white/10 text-slate-400'}`}>
-                <MessageCircle className="h-4 w-4" />
+              <div className={`h-8 w-8 rounded-xl flex items-center justify-center transition-colors ${
+                notifyWhatsApp ? 'bg-[#25D366] text-black shadow-md shadow-emerald-500/30' : 'bg-white/10 text-zinc-400'
+              }`}>
+                <MessageCircle className="h-4.5 w-4.5" />
               </div>
               <div>
-                <p className="text-xs font-black text-slate-900 dark:text-white flex items-center gap-1.5">
-                  Notificar via WhatsApp
-                  {notifyWhatsApp && <span className="text-[10px] bg-[#25D366]/20 text-[#25D366] px-2 py-0.2 rounded-full font-bold">Ativo</span>}
-                </p>
-                <p className="text-[10px] text-slate-500 dark:text-zinc-400">Enviar recibo atualizado ao salvar</p>
+                <span className="text-xs font-black text-white block">
+                  Enviar Recibo de Quitação no WhatsApp
+                </span>
+                <span className="text-[10px] font-semibold text-emerald-400">
+                  {notifyWhatsApp ? '✅ Cliente receberá o comprovante oficial no WhatsApp' : '⚡ Notificação automática desativada'}
+                </span>
               </div>
             </div>
 
-            {/* Toggle Switch */}
-            <div className={`w-10 h-6 rounded-full p-1 transition-colors flex items-center ${notifyWhatsApp ? 'bg-[#25D366]' : 'bg-slate-300 dark:bg-white/20'}`}>
-              <div className={`w-4 h-4 rounded-full bg-white transition-transform shadow-md ${notifyWhatsApp ? 'translate-x-4' : 'translate-x-0'}`} />
+            {/* iOS Switch Toggle Button */}
+            <div className={`w-11 h-6 rounded-full transition-colors p-0.5 relative shrink-0 ${
+              notifyWhatsApp ? 'bg-[#25D366] shadow-md shadow-emerald-500/40' : 'bg-zinc-700'
+            }`}>
+              <div className={`w-5 h-5 rounded-full bg-white shadow-md transition-transform duration-200 ${
+                notifyWhatsApp ? 'translate-x-5' : 'translate-x-0'
+              }`} />
             </div>
           </div>
 
-        </div>
+          {/* Botões de Ação */}
+          <div className="flex items-center justify-end gap-3 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2.5 rounded-xl text-xs font-bold bg-white/5 hover:bg-white/10 text-zinc-300 transition-colors"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              disabled={isSaveDisabled}
+              onClick={handleSave}
+              className="px-6 py-2.5 rounded-xl text-xs font-black bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-600/30 transition-all flex items-center gap-2 disabled:opacity-50 cursor-pointer"
+            >
+              <Save className="h-4 w-4" />
+              <span>{isMultiple ? 'Confirmar Quitação em Lote' : 'Salvar Quitação'}</span>
+            </button>
+          </div>
 
-        {/* Footer */}
-        <div className="p-4 border-t border-slate-200 dark:border-white/10 flex items-center justify-end gap-2 bg-slate-50 dark:bg-white/5">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-2 rounded-xl text-xs font-bold text-slate-500 dark:text-zinc-400 hover:bg-slate-200 dark:hover:bg-white/10 transition-colors"
-          >
-            Cancelar
-          </button>
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={isSaveDisabled}
-            className={`px-5 py-2.5 rounded-xl text-xs font-bold shadow-lg flex items-center gap-1.5 transition-all ${
-              isSaveDisabled
-                ? 'bg-zinc-800 text-zinc-400 border border-zinc-700 cursor-not-allowed opacity-70'
-                : 'text-white hover:opacity-90 active:scale-95 cursor-pointer'
-            }`}
-            style={{ backgroundColor: isSaveDisabled ? undefined : settings.primaryColor }}
-          >
-            {saving ? (
-              <>
-                <RefreshCw className="h-4 w-4 animate-spin" /> Salvando...
-              </>
-            ) : isMethodRequired && !isMethodSelected ? (
-              <>
-                ⚠️ Selecione a Forma de Pagamento
-              </>
-            ) : (
-              <>
-                <Save className="h-4 w-4" /> Salvar Pagamento
-              </>
-            )}
-          </button>
-        </div>
-
+        </motion.div>
       </div>
-    </div>
+    </AnimatePresence>
   );
 };

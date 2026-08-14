@@ -20,7 +20,7 @@ export const TaskDock: React.FC = () => {
   if (tasks.length === 0) return null;
 
   return (
-    <div className="fixed z-[99990] bottom-5 left-5 w-80 sm:w-88 flex flex-col gap-2 transition-all duration-300 pointer-events-auto">
+    <div className="fixed z-[999999999] bottom-5 left-5 w-80 sm:w-88 flex flex-col gap-2 transition-all duration-300 pointer-events-auto">
       <div className="flex items-center justify-between px-3 py-1.5 rounded-xl bg-slate-900/90 dark:bg-black/90 border border-slate-700/60 dark:border-white/15 backdrop-blur-md shadow-xl">
         <div className="flex items-center gap-2">
           <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />

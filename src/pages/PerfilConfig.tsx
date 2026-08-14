@@ -51,6 +51,7 @@ export const PerfilConfig: React.FC = () => {
   const [primaryColor, setPrimaryColor] = useState(settings.primaryColor);
   const [pixKey, setPixKey] = useState(settings.pixKey || '');
   const [phone, setPhone] = useState(settings.phone || '');
+  const [ownerPhone, setOwnerPhone] = useState(settings.ownerPhone || '');
   const [email, setEmail] = useState(settings.email || '');
   const [address, setAddress] = useState(settings.address || '');
   const [docNumber, setDocNumber] = useState(settings.document || '');
@@ -300,6 +301,20 @@ export const PerfilConfig: React.FC = () => {
                 onChange={(e) => setPhone(e.target.value)}
                 className="w-full bg-slate-50 dark:bg-black/50 border border-slate-300 dark:border-white/10 rounded-2xl px-4 py-3 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-purple-500 transition-colors"
                 placeholder="Ex: (21) 98624-3396"
+              />
+            </div>
+
+            {/* WhatsApp do Chefe / Diretor (Alertas Gabi AI) */}
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-purple-600 dark:text-purple-400 uppercase tracking-wider flex items-center gap-1.5">
+                <Crown className="h-3.5 w-3.5 text-amber-400" /> WhatsApp do Chefe / Diretor (Alertas Gabi AI)
+              </label>
+              <input
+                type="text"
+                value={ownerPhone}
+                onChange={(e) => setOwnerPhone(e.target.value)}
+                className="w-full bg-slate-50 dark:bg-black/50 border border-purple-500/30 rounded-2xl px-4 py-3 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-purple-500 font-bold transition-colors"
+                placeholder="Ex: (21) 98624-3396 (Receberá alertas diretos da Gabi)"
               />
             </div>
 

@@ -40,6 +40,9 @@ import { MobileBottomNav } from './MobileBottomNav';
 import { PWAManager } from '../pwa/PWAManager';
 import { GlobalNotificationCenter } from '../notifications/GlobalNotificationCenter';
 import { CobrancasHub } from '@/pages/CobrancasHub';
+import { LuxurySlideTransition } from '../effects/LuxurySlideTransition';
+import { FastDustTransition } from '../effects/FastDustTransition';
+import { processGabiInstallmentReminders } from '@/services/whatsappService';
 
 interface NavItem {
   label: string;
@@ -79,13 +82,6 @@ const navItems: NavItem[] = [
   { label: 'GABI Automações', path: '/gabi', icon: Sparkles, badge: <Zap className="h-3 w-3 fill-current text-amber-400" /> },
 ];
 
-
-
-// Subcomponente otimizado e memorizado para isolar o estado de hover da Sidebar
-// Isso previne que a tela principal (Kanban, Faturamento, etc) sofra re-renderizações desnecessárias
-
-// Subcomponente otimizado e memorizado para isolar o estado de hover da Sidebar
-// Isso previne que a tela principal (Kanban, Faturamento, etc) sofra re-renderizações desnecessárias
 const DesktopSidebar: React.FC<{
   settings: any;
   isDark: boolean;
@@ -94,7 +90,8 @@ const DesktopSidebar: React.FC<{
   signOut: () => void;
   primaryStyle: any;
   onOpenCobrancasHub: () => void;
-}> = React.memo(({ settings, isDark, visibleNavItems, location, signOut, primaryStyle, onOpenCobrancasHub }) => {
+  isChefe: boolean;
+}> = React.memo(({ settings, isDark, visibleNavItems, location, signOut, primaryStyle, onOpenCobrancasHub, isChefe }) => {
   const [isSidebarHovered, setIsSidebarHovered] = useState(false);
 
   return (
@@ -234,14 +231,25 @@ const DesktopSidebar: React.FC<{
 
 export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { settings } = useCompanySettings();
-  const { isUnlocked, permissions } = useProfile();
+  const { activeProfile, isUnlocked, permissions } = useProfile();
+  const isChefe = activeProfile?.role === 'chefe' || isUnlocked || (permissions?.canSeeFinancials === true);
   const { user, profile: authProfile, signOut } = useAuth();
   const navigate = useNavigate();
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
   const [isCobrancasHubOpen, setIsCobrancasHubOpen] = useState(false);
+  const [slideTransition, setSlideTransition] = useState<{ active: boolean; direction: 'open' | 'close'; pendingOpen: boolean } | null>(null);
   const [isNotifOpen, setIsNotifOpen] = useState(false);
+
+  const handleToggleCobrancasHub = (open: boolean) => {
+    if (slideTransition?.active) return;
+    setSlideTransition({
+      active: true,
+      direction: open ? 'open' : 'close',
+      pendingOpen: open
+    });
+  };
   const [isMobileProfileOpen, setIsMobileProfileOpen] = useState(false);
   const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
   const [hasUnsyncedData, setHasUnsyncedData] = useState(false);
@@ -265,6 +273,17 @@ export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children })
     window.addEventListener('focus', checkUnsynced);
     return () => window.removeEventListener('focus', checkUnsynced);
   }, [location.pathname]);
+
+  useEffect(() => {
+    // Executa a checagem em segundo plano dos lembretes automáticos de parcelamentos da Gabi AI
+    processGabiInstallmentReminders().then(({ sentCount }) => {
+      if (sentCount > 0) {
+        console.log(`🤖 [Gabi AI Engine] ${sentCount} lembrete(s) de parcelamento disparado(s) via WhatsApp!`);
+      }
+    }).catch(err => {
+      console.warn('⚠️ [Gabi AI Engine] Erro na rotina de parcelamentos:', err);
+    });
+  }, []);
 
   useEffect(() => {
     // Aplica o fator de zoom e ajusta a altura proporcional no elemento raiz para eliminar vãos pretos no rodape
@@ -346,7 +365,7 @@ export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children })
 
   return (
     <div className={`flex h-full ${isDark ? 'bg-[#09090d] text-zinc-100' : 'bg-slate-50 text-slate-900'} overflow-hidden transition-colors duration-300`}>
-      {/* Sidebar Desktop Otimizada via Subcomponente Memorizado */}
+      {/* Subcomponente Sidebar Desktop */}
       <DesktopSidebar
         settings={settings}
         isDark={isDark}
@@ -354,7 +373,8 @@ export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children })
         location={location}
         signOut={signOut}
         primaryStyle={primaryStyle}
-        onOpenCobrancasHub={() => setIsCobrancasHubOpen(true)}
+        onOpenCobrancasHub={() => handleToggleCobrancasHub(true)}
+        isChefe={isChefe}
       />
 
       {/* Main Content Container */}
@@ -408,14 +428,16 @@ export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children })
               <span className="uppercase tracking-wider">Novo Pedido</span>
             </button>
 
-            {/* Hub Cobranças Button */}
-            <button
-              onClick={() => setIsCobrancasHubOpen(true)}
-              className="hidden lg:flex items-center gap-1.5 px-3.5 py-2 rounded-2xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:brightness-110 text-white text-xs font-black shadow-lg shadow-purple-600/20 active:scale-95 transition-all cursor-pointer"
-            >
-              <CreditCard className="h-4 w-4" />
-              <span className="uppercase tracking-wider">Hub Cobranças</span>
-            </button>
+            {/* Hub Cobranças Button (Apenas Chefe) */}
+            {isChefe && (
+              <button
+                onClick={() => handleToggleCobrancasHub(true)}
+                className="hidden lg:flex items-center gap-1.5 px-3.5 py-2 rounded-2xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:brightness-110 text-white text-xs font-black shadow-lg shadow-purple-600/20 active:scale-95 transition-all cursor-pointer"
+              >
+                <CreditCard className="h-4 w-4" />
+                <span className="uppercase tracking-wider">Hub Cobranças</span>
+              </button>
+            )}
           </div>
 
           <div className="flex items-center gap-3">
@@ -605,8 +627,21 @@ export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children })
       {/* Hub Inteligente de Cobranças (Modo Cobrança Imersivo) */}
       <CobrancasHub
         isOpen={isCobrancasHubOpen}
-        onClose={() => setIsCobrancasHubOpen(false)}
+        onClose={() => handleToggleCobrancasHub(false)}
       />
+
+      {/* Lateral Luxury Slide Reveal Transition (100% Flicker-Free 60 FPS) */}
+      {slideTransition?.active && (
+        <LuxurySlideTransition
+          direction={slideTransition.direction}
+          onCommitNav={() => {
+            setIsCobrancasHubOpen(slideTransition.pendingOpen);
+          }}
+          onComplete={() => {
+            setSlideTransition(null);
+          }}
+        />
+      )}
 
       {/* Global Notification Center (Bell Drawer) */}
       <GlobalNotificationCenter isOpen={isNotifOpen} onClose={() => setIsNotifOpen(false)} />

@@ -110,6 +110,26 @@ export const DEFAULT_TEMPLATES: WhatsAppTemplate[] = [
     availableTags: ['{nome_cliente}', '{numero_pedido}', '{nome_matriz}', '{valor_entrada}', '{chave_pix}', '{nome_oficina}']
   },
   {
+    id: 'tpl_gabi_lembrete_cliente',
+    title: '🤖 Gabi Secretária — Lembrete de Parcela ao Cliente',
+    category: 'cobranca',
+    description: 'Notificação automática enviada pela Gabi secretária lembrando o cliente sobre a parcela a vencer',
+    triggerEvent: 'cobranca_pix',
+    enabled: true,
+    templateText: 'Olá *{nome_cliente}*! Aqui é a *Gabi*, secretária virtual da *{nome_oficina}* 🤖✨\n\nPassando para te lembrar que a parcela do seu acordo no valor de *{valor_total}* está com vencimento em *{previsao_entrega}*.\n\n🔑 Chave PIX: *{chave_pix}*\n\nQualquer dúvida ou caso necessite ajustar a data, por favor nos avise por aqui!',
+    availableTags: ['{nome_cliente}', '{nome_oficina}', '{valor_total}', '{previsao_entrega}', '{chave_pix}']
+  },
+  {
+    id: 'tpl_gabi_alerta_chefe',
+    title: '🚀 Gabi Secretária — Relatório de Fatura ao Chefe',
+    category: 'cobranca',
+    description: 'Aviso enviado pela Gabi direto para o WhatsApp do Chefe/Diretor alertando sobre os vencimentos do dia',
+    triggerEvent: 'alerta_operador',
+    enabled: true,
+    templateText: '👑 *RELATÓRIO PARA O CHEFE — GABI AI*\n\nChefe, a parcela do cliente *{nome_cliente}* no valor de *{valor_total}* está com vencimento programado para *{previsao_entrega}*.\n\n📋 Referência: Pedido *#{numero_pedido}*\n🔑 PIX registrado: *{chave_pix}*',
+    availableTags: ['{nome_cliente}', '{valor_total}', '{previsao_entrega}', '{numero_pedido}', '{chave_pix}']
+  },
+  {
     id: 'tpl_solicitar_imagem',
     title: '🖼️ Solicitação de Imagem / Arte do Bordado',
     category: 'cliente',

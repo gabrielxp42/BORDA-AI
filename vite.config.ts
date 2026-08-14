@@ -8,14 +8,18 @@ export default defineConfig({
     alias: {
       '@': path.resolve(__dirname, './src'),
     },
+    dedupe: ['react', 'react-dom'],
+  },
+  optimizeDeps: {
+    include: ['react', 'react-dom', 'lucide-react', 'sonner', 'framer-motion'],
   },
   server: {
     port: 3000,
     host: true,
-    watch: {
-      usePolling: true,
-    },
     strictPort: false,
+    hmr: {
+      overlay: true,
+    },
   },
   clearScreen: false,
 });

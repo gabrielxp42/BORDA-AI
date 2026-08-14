@@ -238,15 +238,31 @@ export const WhatsAppBillingModal: React.FC<WhatsAppBillingModalProps> = ({ isOp
             />
           </div>
 
-          <div className="flex items-center gap-2 p-3 bg-white/5 rounded-xl border border-white/10 cursor-pointer" onClick={() => setAttachPDF(!attachPDF)}>
-            <input 
-              type="checkbox" 
-              checked={attachPDF}
-              onChange={(e) => setAttachPDF(e.target.checked)}
-              className="h-4 w-4 accent-emerald-500"
-            />
-            <FileText className="h-4 w-4 text-emerald-400" />
-            <span className="text-xs font-bold text-zinc-300">Anexar Ficha do Pedido em PDF</span>
+          <div 
+            onClick={() => setAttachPDF(!attachPDF)}
+            className={`flex items-center justify-between p-3.5 rounded-2xl border cursor-pointer select-none transition-all ${
+              attachPDF 
+                ? 'bg-emerald-500/15 border-emerald-500/40 text-white shadow-md' 
+                : 'bg-white/5 border-white/10 text-zinc-400 hover:bg-white/10'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <div className={`h-8 w-8 rounded-xl flex items-center justify-center shrink-0 ${
+                attachPDF ? 'bg-emerald-500 text-black font-black' : 'bg-zinc-800 text-zinc-400'
+              }`}>
+                <FileText className="h-4 w-4" />
+              </div>
+              <span className="text-xs font-bold text-white">Anexar Ficha do Pedido em PDF</span>
+            </div>
+
+            {/* Chave de Alternância iOS Switch */}
+            <div className={`w-11 h-6 rounded-full p-0.5 transition-colors duration-300 shrink-0 flex items-center ${
+              attachPDF ? 'bg-emerald-500' : 'bg-zinc-800 border border-white/10'
+            }`}>
+              <div className={`w-5 h-5 rounded-full bg-white shadow-md transform transition-transform duration-300 ${
+                attachPDF ? 'translate-x-5' : 'translate-x-0'
+              }`} />
+            </div>
           </div>
 
           <div className="space-y-2">

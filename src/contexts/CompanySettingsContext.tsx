@@ -18,6 +18,7 @@ interface CompanySettings {
   logoUrl: string | null;
   pixKey?: string | null;
   phone?: string | null;
+  ownerPhone?: string | null;
   email?: string | null;
   address?: string | null;
   document?: string | null;
