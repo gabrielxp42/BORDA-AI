@@ -39,6 +39,7 @@ import { ProfileSwitcher } from './ProfileSwitcher';
 import { MobileBottomNav } from './MobileBottomNav';
 import { PWAManager } from '../pwa/PWAManager';
 import { GlobalNotificationCenter } from '../notifications/GlobalNotificationCenter';
+import { CobrancasHub } from '@/pages/CobrancasHub';
 
 interface NavItem {
   label: string;
@@ -92,7 +93,8 @@ const DesktopSidebar: React.FC<{
   location: any;
   signOut: () => void;
   primaryStyle: any;
-}> = React.memo(({ settings, isDark, visibleNavItems, location, signOut, primaryStyle }) => {
+  onOpenCobrancasHub: () => void;
+}> = React.memo(({ settings, isDark, visibleNavItems, location, signOut, primaryStyle, onOpenCobrancasHub }) => {
   const [isSidebarHovered, setIsSidebarHovered] = useState(false);
 
   return (
@@ -128,6 +130,34 @@ const DesktopSidebar: React.FC<{
         {visibleNavItems.map((item: NavItem) => {
           const isActive = location.pathname === item.path;
           const Icon = item.icon;
+
+          if (item.path === '/cobrancas') {
+            return (
+              <button
+                key={item.path}
+                type="button"
+                onClick={onOpenCobrancasHub}
+                className={`w-full flex items-center rounded-2xl font-bold text-xs transition-all duration-200 cursor-pointer ${
+                  isSidebarHovered ? 'justify-between px-4 py-3' : 'justify-center p-3'
+                } bg-purple-500/10 text-purple-300 border border-purple-500/30 hover:bg-purple-500/20 shadow-md`}
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <Icon className="h-4.5 w-4.5 shrink-0 text-purple-400" />
+                  <span className={`transition-all duration-300 ease-in-out origin-left truncate ${
+                    isSidebarHovered ? 'opacity-100 max-w-[150px]' : 'opacity-0 max-w-0 pointer-events-none'
+                  }`}>
+                    {item.label}
+                  </span>
+                </div>
+                {isSidebarHovered && (
+                  <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full border border-purple-500/40 bg-purple-500/20 text-purple-300 shrink-0">
+                    HUB
+                  </span>
+                )}
+              </button>
+            );
+          }
+
           return (
             <Link
               key={item.path}
@@ -210,6 +240,7 @@ export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children })
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
+  const [isCobrancasHubOpen, setIsCobrancasHubOpen] = useState(false);
   const [isNotifOpen, setIsNotifOpen] = useState(false);
   const [isMobileProfileOpen, setIsMobileProfileOpen] = useState(false);
   const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
@@ -323,6 +354,7 @@ export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children })
         location={location}
         signOut={signOut}
         primaryStyle={primaryStyle}
+        onOpenCobrancasHub={() => setIsCobrancasHubOpen(true)}
       />
 
       {/* Main Content Container */}
@@ -374,6 +406,15 @@ export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children })
             >
               <Plus className="h-4 w-4 stroke-[3]" />
               <span className="uppercase tracking-wider">Novo Pedido</span>
+            </button>
+
+            {/* Hub Cobranças Button */}
+            <button
+              onClick={() => setIsCobrancasHubOpen(true)}
+              className="hidden lg:flex items-center gap-1.5 px-3.5 py-2 rounded-2xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:brightness-110 text-white text-xs font-black shadow-lg shadow-purple-600/20 active:scale-95 transition-all cursor-pointer"
+            >
+              <CreditCard className="h-4 w-4" />
+              <span className="uppercase tracking-wider">Hub Cobranças</span>
             </button>
           </div>
 
@@ -559,6 +600,12 @@ export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children })
       <CreateOrderModal 
         isOpen={isOrderModalOpen} 
         onClose={() => setIsOrderModalOpen(false)} 
+      />
+
+      {/* Hub Inteligente de Cobranças (Modo Cobrança Imersivo) */}
+      <CobrancasHub
+        isOpen={isCobrancasHubOpen}
+        onClose={() => setIsCobrancasHubOpen(false)}
       />
 
       {/* Global Notification Center (Bell Drawer) */}

@@ -35,7 +35,7 @@ export const WhatsAppBillingModal: React.FC<WhatsAppBillingModalProps> = ({ isOp
   const [phoneNumber, setPhoneNumber] = useState(clientData?.phone || '');
   const [isSending, setIsSending] = useState(false);
   const [sendSuccess, setSendSuccess] = useState(false);
-  const [attachPDF, setAttachPDF] = useState(false);
+  const [attachPDF, setAttachPDF] = useState(true);
 
   if (!isOpen || !clientData) return null;
 
@@ -192,7 +192,7 @@ export const WhatsAppBillingModal: React.FC<WhatsAppBillingModalProps> = ({ isOp
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-[99999999] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-200">
       <div className="bg-[#0f0f13] border border-white/10 w-full max-w-md rounded-3xl overflow-hidden shadow-2xl shadow-black relative">
         
         {/* Header */}
