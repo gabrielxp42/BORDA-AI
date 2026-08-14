@@ -197,38 +197,45 @@ export const FinancialReportModal: React.FC<FinancialReportModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
-      <div className="relative w-full max-w-5xl max-h-[92vh] flex flex-col rounded-3xl border border-slate-200 dark:border-white/10 bg-white dark:bg-[#0d0d14] text-slate-900 dark:text-zinc-100 shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+      <div className="relative w-full max-w-5xl max-h-[92vh] flex flex-col rounded-3xl border border-slate-200 dark:border-white/10 bg-white dark:bg-[#0c0c14] text-slate-900 dark:text-zinc-100 shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
 
-        {/* Header */}
-        <div className="flex items-center justify-between p-5 border-b border-slate-200 dark:border-white/10 bg-slate-100/80 dark:bg-gradient-to-r dark:from-purple-900/25 dark:via-indigo-900/20 dark:to-emerald-900/20">
-          <div className="flex items-center gap-3">
-            <div className="h-11 w-11 rounded-2xl bg-purple-500/20 border border-purple-500/30 flex items-center justify-center">
-              <CalendarRange className="h-5 w-5 text-purple-600 dark:text-purple-300" />
+        {/* Header de Alto Padrão com Contraste Perfeito */}
+        <div className="flex items-center justify-between p-5 sm:p-6 border-b border-slate-200 dark:border-white/10 bg-slate-100 dark:bg-gradient-to-r dark:from-purple-950/80 dark:via-zinc-900 dark:to-black">
+          <div className="flex items-center gap-3.5">
+            <div className="h-11 w-11 rounded-2xl bg-purple-500/20 text-purple-600 dark:text-purple-400 border border-purple-500/30 flex items-center justify-center font-black shadow-lg shadow-purple-500/10 shrink-0">
+              <CalendarRange className="h-5 w-5 text-purple-600 dark:text-purple-400" />
             </div>
             <div>
-              <h2 className="text-slate-900 dark:text-white font-black text-base sm:text-lg">Relatório Financeiro</h2>
-              <p className="text-slate-500 dark:text-zinc-400 text-xs">Entradas e saídas por período — pedidos, insumos e lançamentos manuais</p>
+              <h2 className="text-slate-900 dark:text-white font-black text-base sm:text-lg tracking-tight">
+                Relatório Financeiro
+              </h2>
+              <p className="text-slate-500 dark:text-zinc-400 text-xs mt-0.5">
+                Entradas e saídas por período — pedidos, insumos e lançamentos manuais
+              </p>
             </div>
           </div>
+
           <button
+            type="button"
             onClick={onClose}
-            className="p-2 rounded-xl text-slate-400 hover:text-slate-700 dark:text-zinc-400 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-white/10 transition-colors"
+            className="p-2.5 rounded-2xl bg-slate-200 hover:bg-slate-300 text-slate-700 dark:bg-white/10 dark:hover:bg-rose-600/80 dark:text-white border border-slate-300 dark:border-white/10 shadow-sm transition-all active:scale-95 cursor-pointer shrink-0"
+            title="Fechar Relatório"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
 
         {/* Filtros */}
-        <div className="p-4 sm:p-5 border-b border-slate-200 dark:border-white/10 space-y-3 bg-slate-50/70 dark:bg-black/20">
+        <div className="p-4 sm:p-5 border-b border-slate-200 dark:border-white/10 space-y-3.5 bg-slate-50/80 dark:bg-black/30">
           <div className="flex flex-wrap gap-2">
             {PRESETS.map(p => (
               <button
                 key={p.id}
                 onClick={() => setPreset(p.id)}
-                className={`px-3 py-1.5 rounded-xl text-[11px] font-black uppercase tracking-wide transition-all ${
+                className={`px-3.5 py-1.5 rounded-xl text-[11px] font-black uppercase tracking-wide transition-all cursor-pointer ${
                   preset === p.id
-                    ? 'bg-purple-600 text-white shadow-lg shadow-purple-500/25'
-                    : 'bg-white dark:bg-white/5 text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-white/10'
+                    ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/30 border border-purple-500'
+                    : 'bg-white dark:bg-white/5 text-slate-700 dark:text-zinc-300 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-white/10 hover:bg-slate-100 dark:hover:bg-white/10'
                 }`}
               >
                 {p.label}
@@ -279,10 +286,10 @@ export const FinancialReportModal: React.FC<FinancialReportModalProps> = ({
                 <button
                   key={f.id}
                   onClick={() => setTypeFilter(f.id)}
-                  className={`px-3 py-2 rounded-xl text-[11px] font-black uppercase transition-all ${
+                  className={`px-3.5 py-2 rounded-xl text-[11px] font-black uppercase transition-all cursor-pointer ${
                     typeFilter === f.id
-                      ? 'bg-purple-600 text-white shadow-md'
-                      : 'bg-white dark:bg-white/5 text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-white/10'
+                      ? 'bg-purple-600 text-white shadow-md border border-purple-500'
+                      : 'bg-white dark:bg-white/5 text-slate-700 dark:text-zinc-300 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-white/10'
                   }`}
                 >
                   {f.label}
@@ -293,20 +300,20 @@ export const FinancialReportModal: React.FC<FinancialReportModalProps> = ({
 
           {/* Totais */}
           <div className="grid grid-cols-3 gap-2 sm:gap-3">
-            <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2.5">
+            <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-3.5 py-2.5">
               <span className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-300">
                 <TrendingUp className="h-3 w-3" /> Entradas
               </span>
               <p className="text-sm sm:text-lg font-black text-emerald-700 dark:text-emerald-400 mt-0.5">{brl(totals.inSum)}</p>
             </div>
-            <div className="rounded-2xl border border-rose-500/30 bg-rose-500/10 px-3 py-2.5">
+            <div className="rounded-2xl border border-rose-500/30 bg-rose-500/10 px-3.5 py-2.5">
               <span className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-wider text-rose-700 dark:text-rose-300">
                 <TrendingDown className="h-3 w-3" /> Saídas
               </span>
               <p className="text-sm sm:text-lg font-black text-rose-700 dark:text-rose-400 mt-0.5">{brl(totals.outSum)}</p>
             </div>
-            <div className="rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-100 dark:bg-white/5 px-3 py-2.5">
-              <span className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-wider text-slate-600 dark:text-zinc-400">
+            <div className="rounded-2xl border border-purple-500/30 bg-purple-500/10 dark:bg-purple-950/20 px-3.5 py-2.5">
+              <span className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-wider text-purple-700 dark:text-purple-300">
                 <Wallet className="h-3 w-3" /> Saldo
               </span>
               <p className={`text-sm sm:text-lg font-black mt-0.5 ${totals.balance >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'}`}>
@@ -329,7 +336,7 @@ export const FinancialReportModal: React.FC<FinancialReportModalProps> = ({
               const dOut = items.filter(i => i.type === 'expense').reduce((s, i) => s + i.amount, 0);
               const dBal = dIn - dOut;
               return (
-                <div key={day} className="rounded-2xl border border-slate-200 dark:border-white/10 overflow-hidden">
+                <div key={day} className="rounded-2xl border border-slate-200 dark:border-white/10 overflow-hidden bg-white dark:bg-white/[0.02]">
                   <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 bg-slate-100 dark:bg-white/5 border-b border-slate-200 dark:border-white/10">
                     <span className="text-xs font-black text-slate-900 dark:text-white capitalize">
                       {format(new Date(`${day}T12:00:00`), "EEEE, dd 'de' MMMM", { locale: ptBR })}
@@ -380,13 +387,13 @@ export const FinancialReportModal: React.FC<FinancialReportModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="px-5 py-4 border-t border-slate-200 dark:border-white/10 bg-slate-100/80 dark:bg-white/5 flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div className="px-5 py-4 border-t border-slate-200 dark:border-white/10 bg-slate-100 dark:bg-black/60 flex flex-col sm:flex-row items-center justify-between gap-3">
           <p className="text-[11px] text-slate-600 dark:text-zinc-400 font-semibold">
             {filtered.length} lançamento(s) • {periodLabel}
           </p>
           <button
             onClick={handleExport}
-            className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-2.5 rounded-2xl bg-gradient-to-r from-purple-600 to-indigo-500 hover:brightness-110 text-white text-xs font-black uppercase tracking-wider shadow-lg shadow-purple-500/25 active:scale-95 transition-all"
+            className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-2.5 rounded-2xl bg-gradient-to-r from-purple-600 to-indigo-500 hover:brightness-110 text-white text-xs font-black uppercase tracking-wider shadow-lg shadow-purple-500/25 active:scale-95 transition-all cursor-pointer"
           >
             <FileDown className="h-4 w-4" /> Exportar Relatório em PDF
           </button>

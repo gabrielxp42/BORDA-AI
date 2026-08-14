@@ -149,8 +149,33 @@ export const ReceberDetailsModal: React.FC<ReceberDetailsModalProps> = ({
 
     const combined = [...ordersFormatted, ...txFormatted];
 
-    return combined.filter(item => {
-      // Filtro de Status de Entrega
+    // Ordenação por Vencimento: Vencidos VÊM NO TOPO da lista!
+    const sorted = combined.sort((a, b) => {
+      const getDueDateTs = (item: any) => {
+        const dStr = item.due_date || item.created_at;
+        return dStr ? new Date(dStr).getTime() : 9999999999999;
+      };
+      const dueA = getDueDateTs(a);
+      const dueB = getDueDateTs(b);
+      
+      const todayTs = new Date().setHours(0, 0, 0, 0);
+      const isOverdueA = dueA < todayTs;
+      const isOverdueB = dueB < todayTs;
+
+      if (isOverdueA && !isOverdueB) return -1;
+      if (!isOverdueA && isOverdueB) return 1;
+
+      return dueA - dueB;
+    });
+
+    return sorted.filter(item => {
+      const dueStr = item.due_date || item.created_at;
+      const dueTs = dueStr ? new Date(dueStr).getTime() : Date.now();
+      const todayTs = new Date().setHours(0, 0, 0, 0);
+      const isOverdue = dueTs < todayTs;
+
+      // Filtro de Status
+      if (subFilter === 'overdue' && !isOverdue) return false;
       if (subFilter === 'production' && item.status === 'entregue') return false;
       if (subFilter === 'delivered' && item.status !== 'entregue') return false;
 
@@ -280,6 +305,7 @@ export const ReceberDetailsModal: React.FC<ReceberDetailsModalProps> = ({
               <div className="flex items-center gap-1 bg-white dark:bg-black/40 border border-slate-200 dark:border-white/10 rounded-2xl p-1 shrink-0">
                 {[
                   { id: 'all', label: '📂 Todos' },
+                  { id: 'overdue', label: '🚨 Inadimplentes' },
                   { id: 'production', label: '⏳ Em Produção' },
                   { id: 'delivered', label: '📦 Entregues' },
                 ].map(sub => (
@@ -288,7 +314,7 @@ export const ReceberDetailsModal: React.FC<ReceberDetailsModalProps> = ({
                     onClick={() => setSubFilter(sub.id as any)}
                     className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer ${
                       subFilter === sub.id
-                        ? 'bg-purple-600 text-white shadow-md'
+                        ? (sub.id === 'overdue' ? 'bg-rose-600 text-white shadow-md' : 'bg-purple-600 text-white shadow-md')
                         : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white'
                     }`}
                   >
@@ -349,13 +375,30 @@ export const ReceberDetailsModal: React.FC<ReceberDetailsModalProps> = ({
                 const createdDate = o.created_at ? format(new Date(o.created_at), 'dd/MM/yyyy') : '-';
                 const isManual = o.isManualTx;
 
+                const dueStr = o.due_date || o.created_at;
+                const dueTs = dueStr ? new Date(dueStr).getTime() : Date.now();
+                const todayTs = new Date().setHours(0, 0, 0, 0);
+                const isOverdue = dueTs < todayTs;
+                const daysOverdue = isOverdue ? Math.floor((todayTs - dueTs) / (1000 * 60 * 60 * 24)) : 0;
+
                 return (
-                  <div key={o.id} className="p-4 rounded-2xl bg-slate-50 dark:bg-zinc-900/40 hover:bg-slate-100 dark:hover:bg-zinc-900/80 border border-slate-200 dark:border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all">
+                  <div key={o.id} className={`p-4 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all ${
+                    isOverdue 
+                      ? 'bg-rose-500/10 dark:bg-rose-950/20 border-rose-500/40 shadow-sm' 
+                      : 'bg-slate-50 dark:bg-zinc-900/40 hover:bg-slate-100 dark:hover:bg-zinc-900/80 border-slate-200 dark:border-white/10'
+                  }`}>
                     <div className="space-y-1.5">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="font-black text-slate-900 dark:text-white text-sm">
                           {isManual ? (o.isAgreementParcel ? `🤝 ${o.description}` : `✨ ${o.description || 'Entrada Futura'}`) : `#${o.order_number || o.id.slice(0, 4)} - ${o.clients?.name || 'Cliente Geral'}`}
                         </span>
+
+                        {isOverdue && (
+                          <span className="px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/40 animate-pulse flex items-center gap-1">
+                            ⚠️ VENCIDO {daysOverdue > 0 ? `HÁ ${daysOverdue} DIA(S)` : 'HOJE'}
+                          </span>
+                        )}
+
                         <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase ${
                           isHalf 
                             ? 'bg-cyan-500/15 text-cyan-700 dark:text-cyan-400 border border-cyan-500/30' 

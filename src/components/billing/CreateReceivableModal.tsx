@@ -117,16 +117,58 @@ export const CreateReceivableModal: React.FC<CreateReceivableModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handleSave = async () => {
-    const numericAmount = parseFloat(amount);
-    if (isNaN(numericAmount) || numericAmount <= 0) {
-      toast.error('Por favor, informe um valor válido maior que zero.');
-      return;
-    }
+  // Estado para Parcelamento Customizado (Cheques / Parcelas com datas e valores editáveis)
+  const [installments, setInstallments] = useState<{ dueDate: string; amount: string }[]>([
+    { dueDate: new Date().toISOString().split('T')[0], amount: '' }
+  ]);
+  const [isMultiInstallment, setIsMultiInstallment] = useState<boolean>(false);
 
+  const handleAddInstallment = () => {
+    const today = new Date();
+    today.setDate(today.getDate() + 30 * installments.length);
+    setInstallments(prev => [...prev, { dueDate: today.toISOString().split('T')[0], amount: '' }]);
+  };
+
+  const handleRemoveInstallment = (index: number) => {
+    setInstallments(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleUpdateInstallment = (index: number, field: 'dueDate' | 'amount', value: string) => {
+    setInstallments(prev => {
+      const copy = [...prev];
+      copy[index] = { ...copy[index], [field]: value };
+      return copy;
+    });
+  };
+
+  const handleSave = async () => {
     if (!selectedClientId) {
       toast.error('Por favor, selecione o cliente.');
       return;
+    }
+
+    const selectedClient = clients.find(c => c.id === selectedClientId);
+    const clientName = selectedClient?.name || 'Cliente';
+
+    // Validação de valores
+    if (isMultiInstallment) {
+      if (installments.length === 0) {
+        toast.error('Adicione pelo menos uma parcela.');
+        return;
+      }
+      for (let i = 0; i < installments.length; i++) {
+        const val = parseFloat(installments[i].amount);
+        if (isNaN(val) || val <= 0) {
+          toast.error(`Informe um valor válido para a parcela ${i + 1}.`);
+          return;
+        }
+      }
+    } else {
+      const numericAmount = parseFloat(amount);
+      if (isNaN(numericAmount) || numericAmount <= 0) {
+        toast.error('Por favor, informe um valor válido maior que zero.');
+        return;
+      }
     }
 
     setSaving(true);
@@ -135,36 +177,82 @@ export const CreateReceivableModal: React.FC<CreateReceivableModalProps> = ({
       const userId = authData?.user?.id;
       if (!userId) throw new Error('Usuário não autenticado');
 
-      const selectedClient = clients.find(c => c.id === selectedClientId);
-      const clientName = selectedClient?.name || 'Cliente';
       const desc = description.trim() || `Lançamento a Receber - ${clientName}`;
 
       const notesMetadata = {
         productionStatus,
         associatedOrderIds: selectedOrderIds,
         clientName,
+        clientPhone: selectedClient?.phone || '',
         userNotes: notes.trim()
       };
 
-      const { error } = await supabase
-        .from('financial_transactions')
-        .insert({
-          user_id: userId,
-          type: 'income',
-          amount: numericAmount,
-          description: desc,
-          category: productionStatus === 'em_producao' ? 'A Receber (Em Produção)' : 'A Receber (Já Entregue)',
-          payment_method: 'other',
-          date: dueDate,
-          due_date: dueDate,
-          status: 'pending',
-          order_id: selectedOrderIds.length === 1 ? selectedOrderIds[0] : null,
-          notes: JSON.stringify(notesMetadata)
-        });
+      if (isMultiInstallment) {
+        // Registra cada parcela com sua data e valor específicos
+        for (let i = 0; i < installments.length; i++) {
+          const inst = installments[i];
+          const instVal = parseFloat(inst.amount);
+          const instDesc = `${desc} (Parcela ${i + 1}/${installments.length})`;
 
-      if (error) throw error;
+          const { error } = await supabase
+            .from('financial_transactions')
+            .insert({
+              user_id: userId,
+              type: 'income',
+              amount: instVal,
+              description: instDesc,
+              category: 'Parcela de Acordo',
+              payment_method: 'other',
+              date: inst.dueDate,
+              due_date: inst.dueDate,
+              status: 'pending',
+              order_id: selectedOrderIds.length === 1 ? selectedOrderIds[0] : null,
+              notes: JSON.stringify({ ...notesMetadata, installmentIndex: i + 1, totalInstallments: installments.length })
+            });
 
-      toast.success(`✨ Lançamento a receber de ${formatCurrency(numericAmount, true)} registrado com sucesso!`);
+          if (error) throw error;
+        }
+      } else {
+        const numericAmount = parseFloat(amount);
+        const { error } = await supabase
+          .from('financial_transactions')
+          .insert({
+            user_id: userId,
+            type: 'income',
+            amount: numericAmount,
+            description: desc,
+            category: productionStatus === 'em_producao' ? 'A Receber (Em Produção)' : 'A Receber (Já Entregue)',
+            payment_method: 'other',
+            date: dueDate,
+            due_date: dueDate,
+            status: 'pending',
+            order_id: selectedOrderIds.length === 1 ? selectedOrderIds[0] : null,
+            notes: JSON.stringify(notesMetadata)
+          });
+
+        if (error) throw error;
+      }
+
+      // IMPORTANTE: Atualiza os pedidos vinculados adicionando tag [ACORDO COMERCIAL]
+      // para que ELES SUMAM da lista solta de "A Receber" e fique apenas o Acordo Comercial!
+      if (selectedOrderIds.length > 0) {
+        for (const ordId of selectedOrderIds) {
+          const ord = clientOrders.find(o => o.id === ordId);
+          const currentNotes = ord?.notes || '';
+          if (!currentNotes.includes('[ACORDO COMERCIAL')) {
+            const updatedNotes = currentNotes 
+              ? `${currentNotes}\n[ACORDO COMERCIAL - Vinculado em ${new Date().toLocaleDateString('pt-BR')}]`
+              : `[ACORDO COMERCIAL - Vinculado em ${new Date().toLocaleDateString('pt-BR')}]`;
+
+            await supabase
+              .from('orders')
+              .update({ notes: updatedNotes })
+              .eq('id', ordId);
+          }
+        }
+      }
+
+      toast.success(`✨ Acordo / Entrada a receber registrado com sucesso!`);
       
       if (onSuccess) onSuccess();
       onClose();
