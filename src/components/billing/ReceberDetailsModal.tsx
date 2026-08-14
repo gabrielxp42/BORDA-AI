@@ -127,10 +127,12 @@ export const ReceberDetailsModal: React.FC<ReceberDetailsModalProps> = ({
 
       const clientName = metadata.clientName || t.description || 'Entrada Futura';
       const statusStr = metadata.productionStatus === 'ja_entregue' ? 'entregue' : 'producao';
+      const isAgreement = t.category === 'Parcela de Acordo' || Boolean(metadata.associatedOrders);
 
       return {
         id: t.id,
         isManualTx: true,
+        isAgreementParcel: isAgreement,
         order_number: undefined,
         created_at: t.due_date || t.date,
         due_date: t.due_date || t.date,
@@ -139,8 +141,9 @@ export const ReceberDetailsModal: React.FC<ReceberDetailsModalProps> = ({
         status: statusStr,
         description: t.description,
         userNotes: metadata.userNotes,
-        clients: { name: clientName, phone: '' },
-        rawTx: t
+        clients: { name: clientName, phone: metadata.clientPhone || '' },
+        rawTx: t,
+        metadata
       };
     });
 
@@ -351,7 +354,7 @@ export const ReceberDetailsModal: React.FC<ReceberDetailsModalProps> = ({
                     <div className="space-y-1.5">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="font-black text-slate-900 dark:text-white text-sm">
-                          {isManual ? `✨ ${o.description || 'Entrada Futura'}` : `#${o.order_number || o.id.slice(0, 4)} - ${o.clients?.name || 'Cliente Geral'}`}
+                          {isManual ? (o.isAgreementParcel ? `🤝 ${o.description}` : `✨ ${o.description || 'Entrada Futura'}`) : `#${o.order_number || o.id.slice(0, 4)} - ${o.clients?.name || 'Cliente Geral'}`}
                         </span>
                         <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase ${
                           isHalf 
@@ -368,8 +371,12 @@ export const ReceberDetailsModal: React.FC<ReceberDetailsModalProps> = ({
                           {o.status === 'entregue' ? '📦 Entregue' : '⏳ Produção'}
                         </span>
                         {isManual && (
-                          <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-purple-500/15 text-purple-700 dark:text-purple-300 border border-purple-500/30">
-                            📝 Avulso
+                          <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase border ${
+                            o.isAgreementParcel 
+                              ? 'bg-purple-500/20 text-purple-300 border-purple-500/40' 
+                              : 'bg-purple-500/15 text-purple-700 dark:text-purple-300 border-purple-500/30'
+                          }`}>
+                            {o.isAgreementParcel ? '🤝 Parcela Acordo' : '📝 Avulso'}
                           </span>
                         )}
                       </div>

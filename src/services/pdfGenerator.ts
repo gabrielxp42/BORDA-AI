@@ -413,7 +413,7 @@ const getClientStatementHTML = (data: ClientStatementPDFData) => {
               </thead>
               <tbody>
                 ${hasItems ? o.items!.map(it => {
-                  const desc = it.description || it.item_name || it.name || 'Bordado Personalizado';
+                  const desc = formatItemDesc(it.description || it.item_name || it.name || 'Bordado Personalizado');
                   const qty = it.quantity || 1;
                   const unitPrice = it.unit_price ?? it.unitPrice ?? (qty ? (it.total_price ?? it.totalPrice ?? o.totalAmount) / qty : 0);
                   const totalPrice = it.total_price ?? it.totalPrice ?? (qty * unitPrice);
