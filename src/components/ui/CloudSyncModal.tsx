@@ -20,12 +20,12 @@ interface SyncStats {
  * ainda não sincronizados com a nuvem.
  */
 export const CloudSyncModal: React.FC = () => {
-  const [phase, setPhase] = useState<SyncPhase>('idle');
-  const [stats, setStats] = useState<SyncStats>({ total: 0, uploaded: 0, skipped: 0, errors: 0 });
-  const [progress, setProgress] = useState(0);
-  const [visible, setVisible] = useState(false);
-  const [statusMessage, setStatusMessage] = useState('');
-  const hasRun = useRef(false);
+  const [phase, setPhase] = React.useState<SyncPhase>('idle');
+  const [stats, setStats] = React.useState<SyncStats>({ total: 0, uploaded: 0, skipped: 0, errors: 0 });
+  const [progress, setProgress] = React.useState(0);
+  const [visible, setVisible] = React.useState(false);
+  const [statusMessage, setStatusMessage] = React.useState('');
+  const hasRun = React.useRef(false);
 
   useEffect(() => {
     if (hasRun.current) return;
