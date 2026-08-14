@@ -19,6 +19,7 @@ import { Faturamento } from '@/pages/Faturamento';
 import { Estoque } from '@/pages/Estoque';
 import { PerfilConfig } from '@/pages/PerfilConfig';
 import { GabiAutomations } from '@/pages/GabiAutomations';
+import { CobrancasHub } from '@/pages/CobrancasHub';
 import { Admin } from '@/pages/Admin';
 import { Login } from '@/pages/Login';
 
@@ -57,6 +58,7 @@ export const App: React.FC = () => {
                           <Route path="/pedidos-kanban" element={<Pedidos />} />
                           <Route path="/estoque" element={<Estoque />} />
                           <Route path="/faturamento" element={<Faturamento />} />
+                          <Route path="/cobrancas" element={<CobrancasHub />} />
                           <Route path="/relatorios" element={<Faturamento />} />
                           <Route path="/maquinas" element={<Maquinas />} />
                           <Route path="/configuracoes" element={<Configuracoes />} />

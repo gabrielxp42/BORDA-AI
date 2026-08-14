@@ -35,7 +35,13 @@ export interface OrderPDFData {
 
 const formatItemDesc = (desc?: string): string => {
   if (!desc || !desc.trim()) return 'Bordado Personalizado';
-  return desc.trim();
+  return desc
+    .replace(/\s*\(\s*\d+([\.,]\d+)?\s*(pts|pontos|ponto|p)\s*,\s*\d+\s*(cores|cor|c)\s*\)/gi, '')
+    .replace(/\s*\(\s*\d+\s*(cores|cor|c)\s*,\s*\d+([\.,]\d+)?\s*(pts|pontos|ponto|p)\s*\)/gi, '')
+    .replace(/\s*\(\s*\d+([\.,]\d+)?\s*(pts|pontos|ponto|p)\s*\)/gi, '')
+    .replace(/\s*\(\s*\d+\s*(cores|cor|c)\s*\)/gi, '')
+    .replace(/\s*-\s*\d+([\.,]\d+)?\s*(pts|pontos|ponto|p)/gi, '')
+    .trim();
 };
 
 const getOrderHTML = (order: OrderPDFData) => {

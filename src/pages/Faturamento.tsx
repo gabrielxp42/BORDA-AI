@@ -507,8 +507,26 @@ export const Faturamento: React.FC = () => {
     return { manualExpenses: expSum, manualIncomes: incSum, manualIncomesPaid: incPaidSum };
   }, [financialTransactions, selectedMonthOffset]);
 
-  // Total Recebido em Caixa Unificado (Pedidos Pagos + Entradas Manuais Quitadas no mês)
-  const effectivePaidTotal = paidTotal + manualIncomesPaid;
+  // Total de Pedidos Pagos no Mês Selecionado pela Data do Pagamento (Regime de Caixa Efetivo)
+  const paidTotalInMonth = useMemo(() => {
+    let sum = 0;
+    allTimePaidOrders.forEach(o => {
+      const { metadata } = parsePaymentMetadata(o.notes);
+      const dateStr = metadata.paidAt || o.created_at;
+      if (dateStr) {
+        const paidDate = new Date(dateStr);
+        if (paidDate >= targetMonthStart && paidDate <= targetMonthEnd) {
+          const isHalf = o.payment_status === 'half_paid';
+          const val = isHalf ? (metadata.depositAmount || Number(o.total_amount || 0) * 0.5) : Number(o.total_amount || 0);
+          sum += val;
+        }
+      }
+    });
+    return sum;
+  }, [allTimePaidOrders, selectedMonthOffset]);
+
+  // Total Recebido em Caixa Unificado (Pedidos Pagos na data do pagamento + Entradas Manuais Quitadas no mês)
+  const effectivePaidTotal = paidTotalInMonth + manualIncomesPaid;
 
   // DRE Sintético do Mês
   const totalRevenue = grandTotal + manualIncomes;
