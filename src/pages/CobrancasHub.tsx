@@ -15,6 +15,7 @@ import { sendEvolutionText } from '@/services/whatsappService';
 import { groupIntoAgreements, Agreement } from '@/services/installmentService';
 import { AgreementsPanel } from '@/components/billing/AgreementsPanel';
 import { AgreementDetailsModal } from '@/components/billing/AgreementDetailsModal';
+import { ChefeOverviewPanel } from '@/components/billing/ChefeOverviewPanel';
 import { parsePaymentMetadata } from '@/utils/paymentHelper';
 import { formatCurrency } from '@/utils/currencyFormatter';
 import { format, differenceInDays, parseISO, addDays } from 'date-fns';
@@ -85,7 +86,7 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
   const [loading, setLoading] = useState(true);
   const [pendingOrders, setPendingOrders] = useState<PendingOrder[]>([]);
   const [agreements, setAgreements] = useState<Agreement[]>([]);
-  const [vista, setVista] = useState<'faturas' | 'parcelas'>('faturas');
+  const [vista, setVista] = useState<'chefe' | 'faturas' | 'parcelas'>('chefe');
   const [acordoAberto, setAcordoAberto] = useState<Agreement | null>(null);
   const [recentPaidOrders, setRecentPaidOrders] = useState<RecentPaidOrder[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -681,6 +682,16 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
         {/* Alternador: Faturas avulsas x Acordos parcelados */}
         <div className="px-4 pt-4 flex gap-2">
           <button
+            onClick={() => setVista('chefe')}
+            className={`flex-1 px-4 py-2.5 rounded-2xl text-xs font-black uppercase tracking-wide border transition-all ${
+              vista === 'chefe'
+                ? 'bg-amber-600 border-amber-400 text-white shadow-lg shadow-amber-600/30'
+                : 'bg-white/5 border-white/10 text-zinc-400 hover:text-white hover:bg-white/10'
+            }`}
+          >
+            Visão do chefe
+          </button>
+          <button
             onClick={() => setVista('faturas')}
             className={`flex-1 px-4 py-2.5 rounded-2xl text-xs font-black uppercase tracking-wide border transition-all ${
               vista === 'faturas'
@@ -708,7 +719,7 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
         </div>
 
         {/* Botões Filtros em Cards Maiores */}
-        <div className={`p-4 border-b border-white/10 bg-white/[0.01] space-y-3 ${vista === 'parcelas' ? 'hidden' : ''}`}>
+        <div className={`p-4 border-b border-white/10 bg-white/[0.01] space-y-3 ${vista !== 'faturas' ? 'hidden' : ''}`}>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
             
             <button
@@ -847,7 +858,20 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
 
         {/* Lista de Clientes */}
         <div className="flex-1 overflow-y-auto p-4 space-y-3 scrollbar-thin scrollbar-thumb-white/10">
-          {vista === 'parcelas' ? (
+          {vista === 'chefe' ? (
+            <ChefeOverviewPanel
+              debtors={clientDebtsList as any}
+              agreements={agreements}
+              recentPaidTotal={recentPaidOrders.reduce((acc, o) => acc + Number(o.total_amount || 0), 0)}
+              recentPaidCount={recentPaidOrders.length}
+              canSeeFinancials={isUnlocked}
+              onOpenAgreement={setAcordoAberto}
+              onOpenDebtor={(d) => {
+                setVista('faturas');
+                setSearchTerm(d.clientName);
+              }}
+            />
+          ) : vista === 'parcelas' ? (
             <AgreementsPanel
               agreements={agreements}
               canSeeFinancials={isUnlocked}

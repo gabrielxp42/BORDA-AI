@@ -126,6 +126,8 @@ export const Faturamento: React.FC = () => {
         paymentMethod: methodStr || 'PIX / Dinheiro',
         profileName: metadata.paymentNote?.includes('Perfil:') ? metadata.paymentNote : (o.created_by_profile || 'Atendimento'),
         amount: amountVal,
+        orderTotal: Number(o.total_amount || 0),
+        category: undefined as string | undefined,
         originalOrder: o
       };
     });
@@ -158,9 +160,11 @@ export const Faturamento: React.FC = () => {
             ? `Parcela ${meta.installmentIndex}/${meta.totalInstallments}`
             : undefined,
           orderStatus: 'paid',
+          category: t.category,
           paymentMethod: formatPaymentMethodName(t.payment_method || 'Outros'),
           profileName: t.created_by_profile || 'Caixa',
           amount: Number(t.amount || 0),
+          orderTotal: undefined as number | undefined,
           originalTx: t
         };
       });

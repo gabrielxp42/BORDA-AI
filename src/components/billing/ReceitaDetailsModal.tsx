@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { X, Receipt, Trash2, Search } from 'lucide-react';
 import { format } from 'date-fns';
+import { classifyIncome } from '@/utils/incomeKind';
 import { formatCurrency } from '@/utils/currencyFormatter';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -97,39 +98,19 @@ export const ReceitaDetailsModal: React.FC<ReceitaDetailsModalProps> = ({
           {filteredIncomes.length === 0 ? (
             <p className="text-center text-zinc-500 text-xs py-8">Nenhuma entrada encontrada neste filtro.</p>
           ) : (
-            filteredIncomes.map(entry => (
-              <div key={entry.id} className={`p-3.5 rounded-2xl border flex items-center justify-between text-xs transition-all ${
-                (entry as any).isInstallment
-                  ? 'bg-indigo-500/[0.07] hover:bg-indigo-500/[0.12] border-indigo-500/25'
-                  : entry.isOrder
-                    ? 'bg-white/[0.03] hover:bg-white/[0.06] border-white/10'
-                    : 'bg-sky-500/[0.05] hover:bg-sky-500/[0.09] border-sky-500/20'
-              }`}>
+            filteredIncomes.map(entry => {
+              const tipo = classifyIncome(entry as any);
+              return (
+              <div key={entry.id} className={`p-3.5 rounded-2xl border flex items-center justify-between text-xs transition-all ${tipo.rowClass}`}>
                 <div className="space-y-1">
                   <p className="font-bold text-white text-xs flex items-center gap-2">
                     {entry.title}
-                    {entry.isOrder && (
-                      <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase ${
-                        entry.orderStatus === 'half_paid' 
-                          ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30' 
-                          : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                      }`}>
-                        {entry.orderStatus === 'half_paid' ? '⚡ Sinal 50%' : '✅ Quitação'}
-                      </span>
-                    )}
-                    {/* Parcela não é pedido: recebe rótulo e cor próprios para
-                        o usuário não confundir uma coisa com a outra. */}
-                    {(entry as any).isInstallment && (
-                      <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
-                        📆 {(entry as any).installmentLabel || 'Parcela de acordo'}
-                      </span>
-                    )}
-                    {!entry.isOrder && !(entry as any).isInstallment && (
-                      <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-sky-500/20 text-sky-300 border border-sky-500/30">
-                        ✍️ Lançamento manual
-                      </span>
-                    )}
+                    <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase whitespace-nowrap ${tipo.badgeClass}`}>
+                      {tipo.emoji} {tipo.label}
+                    </span>
                   </p>
+                  {/* Diz em palavras o que aquele valor representa */}
+                  <p className="text-[10px] text-zinc-300 font-semibold">{tipo.explanation}</p>
                   <p className="text-[10px] text-zinc-400 flex flex-wrap items-center gap-2">
                     <span>💳 {entry.paymentMethod}</span>
                     <span>•</span>
@@ -140,7 +121,7 @@ export const ReceitaDetailsModal: React.FC<ReceitaDetailsModalProps> = ({
                 </div>
 
                 <div className="flex items-center gap-3">
-                  <p className="font-black text-emerald-400 text-sm">+ {formatCurrency(entry.amount)}</p>
+                  <p className={`font-black text-sm ${tipo.amountClass}`}>+ {formatCurrency(entry.amount)}</p>
                   {!entry.isOrder && (
                     <button onClick={() => handleDelete(entry.originalTx?.id)} className="text-zinc-500 hover:text-rose-400 p-1 cursor-pointer">
                       <Trash2 className="h-4 w-4" />
@@ -148,7 +129,8 @@ export const ReceitaDetailsModal: React.FC<ReceitaDetailsModalProps> = ({
                   )}
                 </div>
               </div>
-            ))
+              );
+            })
           )}
         </div>
 
