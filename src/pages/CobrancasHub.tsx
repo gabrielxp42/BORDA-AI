@@ -26,17 +26,22 @@ import { CreateInstallmentAgreementModal } from '@/components/billing/CreateInst
 import { PaymentStatusModal, calculateOrderPendingVal, calculateOrderExactValue } from '@/components/orders/PaymentStatusModal';
 import { WebGLDustTransition } from '@/components/effects/WebGLDustTransition';
 
-interface PendingOrder {
+interface PendingItem {
   id: string;
   order_number?: number;
-  client_id: string;
+  client_id?: string;
   total_amount: number;
-  payment_status: 'pending' | 'half_paid';
+  payment_status: 'pending' | 'half_paid' | 'in_agreement' | string;
   created_at: string;
   due_date?: string;
   notes?: string;
+  description?: string;
+  isManualTx?: boolean;
+  isAgreementParcel?: boolean;
   order_items?: any[];
   items?: any[];
+  rawTx?: any;
+  metadata?: any;
   client?: {
     id: string;
     name: string;
@@ -50,7 +55,8 @@ interface ClientDebts {
   clientName: string;
   clientPhone?: string;
   clientCompany?: string;
-  orders: PendingOrder[];
+  orders: PendingItem[];
+  manualTxs: PendingItem[];
   totalPending: number;
   hasOverdue: boolean;
   overdueDays: number;
@@ -84,7 +90,8 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
   const { isUnlocked } = useProfile();
   const { settings } = useCompanySettings();
   const [loading, setLoading] = useState(true);
-  const [pendingOrders, setPendingOrders] = useState<PendingOrder[]>([]);
+  const [pendingOrders, setPendingOrders] = useState<PendingItem[]>([]);
+  const [pendingTransactions, setPendingTransactions] = useState<any[]>([]);
   const [agreements, setAgreements] = useState<Agreement[]>([]);
   const [vista, setVista] = useState<'chefe' | 'faturas' | 'parcelas'>('chefe');
   const [acordoAberto, setAcordoAberto] = useState<Agreement | null>(null);
@@ -113,7 +120,7 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
 
   useEffect(() => {
     if (aberto) {
-      fetchPendingOrders();
+      fetchPendingData();
       fetchAgreements();
       fetchRecentPaidOrders();
     }
@@ -129,7 +136,6 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        // Se algum sub-modal estiver aberto, fecha ele primeiro
         if (selectedOrderForDetails) {
           setSelectedOrderForDetails(null);
           return;
@@ -151,7 +157,6 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
           setSelectedClientForInstallments(null);
           return;
         }
-        // Caso contrário, dispara o efeito de saída WebGL2 Dust e fecha o Hub
         handleCloseHub();
       }
     };
@@ -169,37 +174,49 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
     selectedClientForInstallments
   ]);
 
-  const fetchPendingOrders = async () => {
+  // Carrega tanto Encomendas quanto Entradas Manuais/Acordos (Tudo a receber em um só lugar!)
+  const fetchPendingData = async () => {
     setLoading(true);
     try {
       const { data: authData } = await supabase.auth.getUser();
       const userId = authData?.user?.id;
       if (!userId) return;
 
-      const { data, error } = await supabase
-        .from('orders')
-        .select(`
-          id, order_number, client_id, total_amount, payment_status, created_at, due_date, notes,
-          client:clients (id, name, phone, company_name),
-          order_items (id, description, quantity, unit_price, total_price)
-        `)
-        .eq('user_id', userId)
-        .or('payment_status.neq.paid,payment_status.is.null')
-        .order('created_at', { ascending: false });
+      const [ordersRes, txsRes] = await Promise.all([
+        supabase
+          .from('orders')
+          .select(`
+            id, order_number, client_id, total_amount, payment_status, created_at, due_date, notes,
+            client:clients (id, name, phone, company_name),
+            order_items (id, description, quantity, unit_price, total_price)
+          `)
+          .eq('user_id', userId)
+          .or('payment_status.neq.paid,payment_status.is.null')
+          .order('created_at', { ascending: true }),
 
-      if (error) throw error;
+        supabase
+          .from('financial_transactions')
+          .select('*')
+          .eq('user_id', userId)
+          .eq('type', 'income')
+          .eq('status', 'pending')
+          .order('due_date', { ascending: true })
+      ]);
+
+      if (ordersRes.error) throw ordersRes.error;
 
       // Pedido já coberto por acordo de parcelamento não entra aqui: quem
       // representa a dívida passa a ser a parcela. Sem isso o mesmo valor
       // aparece duas vezes — como pedido e como parcela.
-      const semDuplicidade = ((data as any) || []).filter((o: any) => {
-        const { metadata } = parsePaymentMetadata(o.notes);
-        return !metadata.agreementId;
+      const semDuplicidade = ((ordersRes.data as any) || []).filter((o: any) => {
+        if (o.payment_status === 'in_agreement') return false;
+        return !parsePaymentMetadata(o.notes).metadata.agreementId;
       });
 
       setPendingOrders(semDuplicidade);
+      setPendingTransactions((txsRes.data as any) || []);
     } catch (err) {
-      console.error('Erro ao carregar débitos:', err);
+      console.error('Erro ao carregar débitos e faturas:', err);
       toast.error('Erro ao carregar faturas a receber.');
     } finally {
       setLoading(false);
@@ -251,35 +268,61 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
     }
   };
 
-  // Agrupa os débitos por cliente e calcula o valor pendente dinâmico de forma exata
-  const clientDebtsList = useMemo(() => {
+  // Quitar Lançamento Manual / Parcela de Acordo com 1 clique
+  const handleMarkManualTxPaid = async (txId: string) => {
+    try {
+      const { error } = await supabase
+        .from('financial_transactions')
+        .update({ status: 'paid', updated_at: new Date().toISOString() })
+        .eq('id', txId);
+
+      if (error) throw error;
+      toast.success('Lançamento a receber quitado e registrado no caixa!');
+      fetchPendingData();
+      fetchRecentPaidOrders();
+    } catch (err: any) {
+      console.error('Erro ao quitar lançamento manual:', err);
+      toast.error('Erro ao quitar lançamento: ' + (err.message || ''));
+    }
+  };
+
+  // Agrupa os débitos por cliente (Encomendas + Entradas Manuais + Acordos) sem duplicar valores
+  const { clientDebtsList, rawMap } = useMemo(() => {
     const map: Record<string, ClientDebts> = {};
     const now = new Date();
 
+    // 1. Processa Encomendas (Orders)
     pendingOrders.forEach(o => {
-      if (!o.client?.id) return;
-      const cId = o.client.id;
-      
-      const pendingVal = calculateOrderPendingVal(o);
+      const cId = o.client?.id || (o.notes && o.notes.includes('client_') ? o.notes : `order_client_${o.id}`);
+      const cName = o.client?.name || 'Cliente Geral';
+      const cPhone = o.client?.phone || '';
+      const cCompany = o.client?.company_name || '';
+
+      const isInAgreement = o.payment_status === 'in_agreement' || (o.notes && o.notes.includes('[ACORDO_ATIVO'));
+      const pendingVal = isInAgreement ? 0 : calculateOrderPendingVal(o as any);
 
       if (!map[cId]) {
         map[cId] = {
           clientId: cId,
-          clientName: o.client.name,
-          clientPhone: o.client.phone,
-          clientCompany: o.client.company_name,
+          clientName: cName,
+          clientPhone: cPhone,
+          clientCompany: cCompany,
           orders: [],
+          manualTxs: [],
           totalPending: 0,
           hasOverdue: false,
           overdueDays: 0,
         };
       }
 
-      map[cId].orders.push(o);
+      map[cId].orders.push({
+        ...o,
+        isManualTx: false,
+      });
       map[cId].totalPending += pendingVal;
 
       const dueDate = parseLocalDate(o.due_date) || new Date(o.created_at);
-      if (dueDate < now) {
+      if (!isInAgreement && dueDate < now) {
         map[cId].hasOverdue = true;
         const days = differenceInDays(now, dueDate);
         if (days > map[cId].overdueDays) {
@@ -289,6 +332,77 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
 
       if (!map[cId].oldestDueDate || dueDate < (parseLocalDate(map[cId].oldestDueDate) || new Date(8640000000000000))) {
         map[cId].oldestDueDate = dueDate.toISOString();
+      }
+    });
+
+    // 2. Processa Lançamentos Manuais / Parcelas de Acordo (financial_transactions)
+    pendingTransactions.forEach(t => {
+      let metadata: any = {};
+      try {
+        if (t.notes && t.notes.startsWith('{')) {
+          metadata = JSON.parse(t.notes);
+        }
+      } catch (e) {}
+
+      const clientName = metadata.clientName || t.description || 'Entrada Futura';
+      const clientPhone = metadata.clientPhone || '';
+      const isAgreement = t.category === 'Parcela de Acordo' || Boolean(metadata.associatedOrders);
+      const amountVal = Number(t.amount || 0);
+
+      // Vincula ao cliente correspondente por Telefone ou Nome
+      let targetKey: string | null = null;
+      for (const key of Object.keys(map)) {
+        const c = map[key];
+        if (clientPhone && c.clientPhone && clientPhone.replace(/\D/g, '') === c.clientPhone.replace(/\D/g, '')) {
+          targetKey = key;
+          break;
+        }
+        if (c.clientName.trim().toLowerCase() === clientName.trim().toLowerCase()) {
+          targetKey = key;
+          break;
+        }
+      }
+
+      if (!targetKey) {
+        targetKey = `tx_client_${t.id}`;
+        map[targetKey] = {
+          clientId: targetKey,
+          clientName: clientName,
+          clientPhone: clientPhone,
+          orders: [],
+          manualTxs: [],
+          totalPending: 0,
+          hasOverdue: false,
+          overdueDays: 0,
+        };
+      }
+
+      const dueDate = t.due_date ? new Date(t.due_date) : new Date(t.date || t.created_at);
+
+      map[targetKey].manualTxs.push({
+        id: t.id,
+        isManualTx: true,
+        isAgreementParcel: isAgreement,
+        description: t.description,
+        total_amount: amountVal,
+        payment_status: 'pending',
+        created_at: t.date || t.created_at,
+        due_date: t.due_date || t.date,
+        rawTx: t,
+        metadata
+      });
+      map[targetKey].totalPending += amountVal;
+
+      if (dueDate < now) {
+        map[targetKey].hasOverdue = true;
+        const days = differenceInDays(now, dueDate);
+        if (days > map[targetKey].overdueDays) {
+          map[targetKey].overdueDays = days;
+        }
+      }
+
+      if (!map[targetKey].oldestDueDate || new Date(dueDate) < new Date(map[targetKey].oldestDueDate!)) {
+        map[targetKey].oldestDueDate = dueDate.toISOString();
       }
     });
 
@@ -311,47 +425,28 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
       list = list.filter(c => c.totalPending >= 1000);
     }
 
-    return list.sort((a, b) => {
-      if (a.hasOverdue && !b.hasOverdue) return -1;
-      if (!a.hasOverdue && b.hasOverdue) return 1;
-      if (b.overdueDays !== a.overdueDays) return b.overdueDays - a.overdueDays;
-      return b.totalPending - a.totalPending;
+    // Ordenação estrita por data do débito mais antigo (sequência cronológica: da mais antiga para a mais recente)
+    const sorted = list.sort((a, b) => {
+      const dateA = a.oldestDueDate ? new Date(a.oldestDueDate).getTime() : 9999999999999;
+      const dateB = b.oldestDueDate ? new Date(b.oldestDueDate).getTime() : 9999999999999;
+      return dateA - dateB;
     });
-  }, [pendingOrders, searchTerm, filterTopic]);
+
+    return { clientDebtsList: sorted, rawMap: map };
+  }, [pendingOrders, pendingTransactions, searchTerm, filterTopic]);
 
   // Contagem por Tópicos Inteligentes
   const topicCounts = useMemo(() => {
     const map: Record<string, number> = { all: 0, critical: 0, recent_overdue: 0, upcoming: 0, vip: 0 };
-    const now = new Date();
-
-    const clientMap: Record<string, { hasOverdue: boolean; overdueDays: number; totalPending: number }> = {};
-    pendingOrders.forEach(o => {
-      if (!o.client?.id) return;
-      const cId = o.client.id;
-      const pendingVal = calculateOrderPendingVal(o);
-
-      if (!clientMap[cId]) {
-        clientMap[cId] = { hasOverdue: false, overdueDays: 0, totalPending: 0 };
-      }
-      clientMap[cId].totalPending += pendingVal;
-
-      const dueDate = parseLocalDate(o.due_date) || new Date(o.created_at);
-      if (dueDate < now) {
-        clientMap[cId].hasOverdue = true;
-        const days = differenceInDays(now, dueDate);
-        if (days > clientMap[cId].overdueDays) clientMap[cId].overdueDays = days;
-      }
-    });
-
-    const clients = Object.values(clientMap);
-    map.all = clients.length;
-    map.critical = clients.filter(c => c.hasOverdue && c.overdueDays >= 30).length;
-    map.recent_overdue = clients.filter(c => c.hasOverdue && c.overdueDays < 30).length;
-    map.upcoming = clients.filter(c => !c.hasOverdue).length;
-    map.vip = clients.filter(c => c.totalPending >= 1000).length;
+    const allDebts = Object.values(rawMap);
+    map.all = allDebts.length;
+    map.critical = allDebts.filter(c => c.hasOverdue && c.overdueDays >= 30).length;
+    map.recent_overdue = allDebts.filter(c => c.hasOverdue && c.overdueDays < 30).length;
+    map.upcoming = allDebts.filter(c => !c.hasOverdue).length;
+    map.vip = allDebts.filter(c => c.totalPending >= 1000).length;
 
     return map;
-  }, [pendingOrders]);
+  }, [rawMap]);
 
   // Top 3 Clientes em Débito para o Widget Satélite Flutuante
   const topDebtors = useMemo(() => {
@@ -407,11 +502,12 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
       try {
         const ordersListText = debt.orders
           .map(o => `• Pedido #${o.order_number || o.id.slice(0, 4)}: R$ ${(o.payment_status === 'half_paid' ? Number(o.total_amount) * 0.5 : Number(o.total_amount)).toFixed(2)}`)
+          .concat(debt.manualTxs.map(t => `• ${t.description}: R$ ${t.total_amount.toFixed(2)}`))
           .join('\n');
 
         const msg = `*${settings.systemName || 'GUAÇU BORDADOS'}* — Lembrete de Fechamento de Faturas 📋\n\n` +
           `Olá, *${debt.clientName}*! Esperamos que esteja bem.\n\n` +
-          `Passando para lembrar das suas encomendas pendentes:\n${ordersListText}\n\n` +
+          `Passando para lembrar das suas faturas/encomendas pendentes:\n${ordersListText}\n\n` +
           `💰 *Total:* R$ ${debt.totalPending.toFixed(2)}\n` +
           `${settings.pixKey ? `🔑 *Chave PIX:* ${settings.pixKey}\n` : ''}\n` +
           `Qualquer dúvida estamos à disposição!`;
@@ -453,13 +549,13 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
   if (!aberto) return null;
 
   return (
-    <div className="fixed inset-0 z-[999999] flex items-center justify-center p-3 sm:p-6 bg-black/95 backdrop-blur-md overflow-y-auto">
+    <div className="fixed inset-0 z-[999999] flex items-center justify-center p-3 sm:p-6 bg-slate-900/60 dark:bg-black/95 backdrop-blur-md overflow-y-auto">
         
         {/* Botão Flutuante de Fechar Inteligente [X] (Visível no Mobile e Desktop + Tecla ESC) */}
         <button
           type="button"
           onClick={handleCloseHub}
-          className="fixed top-4 right-4 sm:top-6 sm:right-6 z-[9999999] h-12 w-12 rounded-2xl bg-zinc-900/90 hover:bg-rose-600/90 text-white border border-white/20 hover:border-rose-400/50 shadow-2xl backdrop-blur-xl flex items-center justify-center transition-all cursor-pointer group active:scale-95"
+          className="fixed top-4 right-4 sm:top-6 sm:right-6 z-[9999999] h-12 w-12 rounded-2xl bg-white/90 hover:bg-rose-600 dark:bg-zinc-900/90 dark:hover:bg-rose-600/90 text-slate-800 hover:text-white dark:text-white border border-slate-300 hover:border-rose-400 dark:border-white/20 dark:hover:border-rose-400/50 shadow-2xl backdrop-blur-xl flex items-center justify-center transition-all cursor-pointer group active:scale-95"
           title="Fechar Modo Cobrança (Atalho: Tecla ESC)"
         >
           <X className="h-6 w-6 group-hover:rotate-90 transition-transform duration-300" />
@@ -469,67 +565,64 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
       <div className="hidden xl:flex flex-col gap-4 fixed left-6 top-8 bottom-8 w-80 z-20 pointer-events-auto overflow-y-auto pr-1">
         
         {/* Card 0: Vitória Financeira - Caixa Recuperado de Cobranças (Visão Patrão) */}
-        <div className="p-5 rounded-3xl bg-gradient-to-br from-emerald-950/60 via-zinc-900/80 to-black backdrop-blur-2xl border border-emerald-500/40 shadow-2xl space-y-2.5 hover:border-emerald-500/60 transition-all">
+        <div className="p-5 rounded-3xl bg-gradient-to-br from-emerald-50 via-white to-emerald-50/40 dark:from-emerald-950/60 dark:via-zinc-900/80 dark:to-black backdrop-blur-2xl border border-emerald-300 dark:border-emerald-500/40 shadow-2xl space-y-2.5 hover:border-emerald-500/60 transition-all">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-black uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
+            <span className="text-[11px] font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-400 flex items-center gap-1.5">
               <TrendingUp className="h-4 w-4" /> Caixa Recuperado (Cobranças)
             </span>
-            <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+            <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-emerald-500/15 dark:bg-emerald-500/20 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-500/30">
               📈 Entradas
             </span>
           </div>
-          <div className="text-2xl font-black text-white tracking-tight">
+          <div className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">
             {formatCurrency(recentPaidOrders.reduce((acc, o) => acc + Number(o.total_amount || 0), 0), true)}
           </div>
-          <p className="text-[11px] text-zinc-400 leading-relaxed">
-            ⚡ {recentPaidOrders.length} fatura(s) baixada(s) e injetadas no DRE do Faturamento!
+          <p className="text-[11px] text-slate-600 dark:text-zinc-400 leading-relaxed">
+            Total de valores pendentes quitados recentemente que já entraram na sua DRE.
           </p>
         </div>
 
-        {/* Card 1: Top Clientes em Débito */}
-        <div className="p-5 rounded-3xl bg-[#0a0a12]/80 backdrop-blur-2xl border border-white/10 shadow-2xl space-y-4 hover:border-purple-500/40 transition-all">
+        {/* Card 1: Top Débitos Ativos (Visão Executiva) */}
+        <div className="p-5 rounded-3xl bg-white/95 dark:bg-zinc-950/90 backdrop-blur-2xl border border-slate-200 dark:border-white/10 shadow-2xl space-y-4">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-amber-400">
-              <Trophy className="h-4 w-4" />
-              <h4 className="text-xs font-black uppercase tracking-wider text-white">Top Débitos</h4>
-            </div>
-            <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/20">
-              Ranking
+            <span className="text-xs font-black uppercase tracking-wider text-purple-700 dark:text-purple-400 flex items-center gap-1.5">
+              <Flame className="h-4 w-4 text-amber-500 animate-pulse" /> Maiores Saldos Devedores
+            </span>
+            <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-purple-500/15 dark:bg-purple-500/20 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-500/30">
+              TOP 3
             </span>
           </div>
 
           <div className="space-y-2.5">
             {topDebtors.length === 0 ? (
-              <p className="text-xs text-zinc-500 italic">Nenhum débito registrado.</p>
+              <p className="text-xs text-slate-400 dark:text-zinc-500 text-center py-4">Nenhum cliente em aberto 🎉</p>
             ) : (
               topDebtors.map((debt, idx) => (
                 <div 
                   key={debt.clientId}
-                  onClick={() => {
-                    setSelectedClientForWhatsAppModal({
-                      id: debt.clientId,
-                      name: debt.clientName,
-                      phone: debt.clientPhone,
-                      totalAmount: debt.totalPending,
-                      orderCount: debt.orders.length,
-                      orders: debt.orders,
-                    });
-                  }}
-                  className="p-3 rounded-2xl bg-white/5 border border-white/5 hover:border-purple-500/40 hover:bg-white/10 transition-all cursor-pointer space-y-1 group"
+                  onClick={() => setSelectedClientForWhatsAppModal({
+                    id: debt.clientId,
+                    name: debt.clientName,
+                    phone: debt.clientPhone,
+                    totalAmount: debt.totalPending,
+                    orderCount: debt.orders.length + debt.manualTxs.length,
+                    orders: [...debt.orders, ...debt.manualTxs]
+                  })}
+                  className="p-3 rounded-2xl bg-slate-50 dark:bg-white/[0.03] hover:bg-purple-50 dark:hover:bg-purple-950/30 border border-slate-200 dark:border-white/5 hover:border-purple-400 dark:hover:border-purple-500/40 transition-all cursor-pointer group"
                 >
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-black text-white group-hover:text-purple-300 transition-colors flex items-center gap-1.5 truncate">
-                      <span className="text-[10px] text-zinc-500 font-mono">#{idx + 1}</span> {debt.clientName}
+                    <span className="text-xs font-black text-slate-800 dark:text-white group-hover:text-purple-700 dark:group-hover:text-purple-300 transition-colors truncate max-w-[140px]">
+                      {idx + 1}. {debt.clientName}
                     </span>
-                    <span className="text-xs font-black text-rose-400 shrink-0">
+                    <span className="text-xs font-black text-purple-700 dark:text-purple-300">
                       {formatCurrency(debt.totalPending, true)}
                     </span>
                   </div>
-                  <div className="flex items-center justify-between text-[10px] text-zinc-400">
-                    <span>{debt.orders.length} encomenda(s)</span>
-                    <span className="text-purple-400 font-bold flex items-center gap-1">
-                      Cobrar <Send className="h-2.5 w-2.5" />
-                    </span>
+                  <div className="flex items-center justify-between text-[10px] text-slate-500 dark:text-zinc-400 mt-1">
+                    <span>{debt.orders.length} enc. • {debt.manualTxs.length} avulsos</span>
+                    {debt.hasOverdue && (
+                      <span className="text-rose-600 dark:text-rose-400 font-bold">Atraso {debt.overdueDays}d</span>
+                    )}
                   </div>
                 </div>
               ))
@@ -537,71 +630,68 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
           </div>
         </div>
 
-        {/* Card 2: Gabi AI Secretária */}
-        <div className="p-5 rounded-3xl bg-gradient-to-br from-purple-950/40 via-zinc-900/60 to-black backdrop-blur-2xl border border-purple-500/30 shadow-2xl space-y-3">
-          <div className="flex items-center gap-2 text-purple-300 font-black text-xs">
-            <Sparkles className="h-4 w-4 text-amber-400 animate-pulse" />
-            <span>Gabi AI Secretária</span>
+        {/* Card 2: Status Gabi AI & Notificações Automáticas */}
+        <div className="p-5 rounded-3xl bg-white/95 dark:bg-zinc-950/90 backdrop-blur-2xl border border-slate-200 dark:border-white/10 shadow-2xl space-y-3">
+          <div className="flex items-center gap-2">
+            <div className="h-8 w-8 rounded-xl bg-purple-500/20 border border-purple-300 dark:border-purple-500/30 flex items-center justify-center text-purple-700 dark:text-purple-400">
+              <Sparkles className="h-4 w-4" />
+            </div>
+            <div>
+              <h4 className="text-xs font-black text-slate-900 dark:text-white">Gabi AI — Autocobrança</h4>
+              <p className="text-[10px] text-slate-500 dark:text-zinc-400">Lembretes inteligentes de faturas</p>
+            </div>
           </div>
-          <p className="text-xs text-zinc-300 leading-relaxed">
-            Dispare cobranças com a <strong>Evolution API</strong> no tom <strong>Amigável</strong> para manter o bom relacionamento com o cliente.
-          </p>
+          <div className="p-3 rounded-2xl bg-slate-50 dark:bg-black/50 border border-slate-200 dark:border-white/5 space-y-1.5">
+            <div className="flex items-center justify-between text-[11px]">
+              <span className="text-slate-500 dark:text-zinc-400">Motor de Disparo:</span>
+              <span className="font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                <span className="h-2 w-2 rounded-full bg-emerald-500 animate-ping" /> Ativo
+              </span>
+            </div>
+            <div className="flex items-center justify-between text-[11px]">
+              <span className="text-slate-500 dark:text-zinc-400">Proteção Anti-Ban:</span>
+              <span className="font-bold text-purple-700 dark:text-purple-300">Delay 4.5s - 7.5s</span>
+            </div>
+            <div className="flex items-center justify-between text-[11px]">
+              <span className="text-slate-500 dark:text-zinc-400">Extrato em PDF:</span>
+              <span className="font-bold text-blue-600 dark:text-blue-400">Automático</span>
+            </div>
+          </div>
         </div>
 
       </div>
 
-      {/* ✅ WIDGET SATÉLITE DIREITA: FLUTUANTE NOS CANTOS DA TELA (Desktop) */}
+      {/* 🏆 WIDGET SATÉLITE DIREITA: ÚLTIMAS BAIXAS REALIZADAS (Desktop) */}
       <div className="hidden xl:flex flex-col gap-4 fixed right-6 top-8 bottom-8 w-80 z-20 pointer-events-auto overflow-y-auto pl-1">
         
-        {/* Card 0: Saúde Financeira das Cobranças */}
-        <div className="p-5 rounded-3xl bg-[#0a0a12]/80 backdrop-blur-2xl border border-blue-500/30 shadow-2xl space-y-3">
-          <div className="flex items-center gap-2 text-blue-400 font-black text-xs uppercase tracking-wider">
-            <Activity className="h-4 w-4" /> Saúde das Cobranças
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div className="p-3 rounded-2xl bg-blue-500/10 border border-blue-500/20 text-center">
-              <span className="text-[10px] text-blue-300 block">Total Atraso</span>
-              <span className="text-sm font-black text-white">{formatCurrency(grandTotalPendingVal, true)}</span>
-            </div>
-            <div className="p-3 rounded-2xl bg-purple-500/10 border border-purple-500/20 text-center">
-              <span className="text-[10px] text-purple-300 block">Taxa Sucesso</span>
-              <span className="text-sm font-black text-white">98.2%</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Card 1: Feed em Tempo Real dos Últimos Pagamentos */}
-        <div className="p-5 rounded-3xl bg-[#0a0a12]/80 backdrop-blur-2xl border border-emerald-500/30 shadow-2xl space-y-4 hover:border-emerald-500/50 transition-all">
+        {/* Card: Histórico ao Vivo de Baixas / Recebimentos */}
+        <div className="p-5 rounded-3xl bg-white/95 dark:bg-zinc-950/90 backdrop-blur-2xl border border-slate-200 dark:border-white/10 shadow-2xl space-y-4">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-emerald-400">
-              <History className="h-4 w-4" />
-              <h4 className="text-xs font-black uppercase tracking-wider text-white">Últimas Baixas</h4>
-            </div>
-            <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">
-              Quitados
+            <span className="text-xs font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-400 flex items-center gap-1.5">
+              <History className="h-4 w-4" /> Feed de Baixas Recentes
+            </span>
+            <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-emerald-500/15 dark:bg-emerald-500/20 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-500/30">
+              AO VIVO
             </span>
           </div>
 
           <div className="space-y-2.5">
             {recentPaidOrders.length === 0 ? (
-              <p className="text-xs text-zinc-500 italic">Nenhum pagamento recente.</p>
+              <p className="text-xs text-slate-400 dark:text-zinc-500 text-center py-6">Nenhuma baixa recente registrada.</p>
             ) : (
-              recentPaidOrders.map((ord) => (
-                <div 
-                  key={ord.id}
-                  className="p-3 rounded-2xl bg-emerald-500/5 border border-emerald-500/10 space-y-1"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-black text-white truncate">
-                      {ord.client?.name || 'Cliente'}
+              recentPaidOrders.map(ord => (
+                <div key={ord.id} className="p-3 rounded-2xl bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-500/30 space-y-1">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-black text-slate-800 dark:text-white truncate max-w-[130px]">
+                      {ord.client?.name || 'Cliente Geral'}
                     </span>
-                    <span className="text-xs font-black text-emerald-400 shrink-0">
-                      + {formatCurrency(ord.total_amount || 0, true)}
+                    <span className="font-black text-emerald-700 dark:text-emerald-400">
+                      +{formatCurrency(ord.total_amount, true)}
                     </span>
                   </div>
-                  <div className="flex items-center justify-between text-[10px] text-zinc-400">
+                  <div className="flex items-center justify-between text-[10px] text-slate-500 dark:text-zinc-400">
                     <span>Pedido #{ord.order_number || ord.id.slice(0, 4)}</span>
-                    <span>{format(new Date(ord.updated_at), "dd/MM 'às' HH:mm")}</span>
+                    <span>{ord.payment_method || 'Quitado'}</span>
                   </div>
                 </div>
               ))
@@ -609,247 +699,174 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
           </div>
         </div>
 
-        {/* Card 2: Status do WhatsApp Evolution API */}
-        <div className="p-5 rounded-3xl bg-[#0a0a12]/80 backdrop-blur-2xl border border-white/10 shadow-2xl space-y-3">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-black text-white flex items-center gap-2">
-              <Zap className="h-4 w-4 text-emerald-400" /> Evolution API
-            </span>
-            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-              Conectado
-            </span>
-          </div>
-          <p className="text-xs text-zinc-400 leading-relaxed">
-            Envio automático com delay humano de 4.5s a 7.5s entre mensagens para máxima segurança.
-          </p>
-        </div>
-
       </div>
 
-      {/* 🎯 PAINEL PRINCIPAL CENTRAL TOTALMENTE AMPLO E ESPAÇOSO (Sem limitações de Grid) */}
-      <div className="relative w-full max-w-4xl flex flex-col bg-[#0a0a12] border border-purple-500/40 rounded-3xl shadow-2xl overflow-hidden max-h-[92vh] z-10 my-auto">
+      {/* PAINEL CENTRAL FLUTUANTE (Modo Cinema de Alta Densidade) */}
+      <div className="relative w-full max-w-4xl bg-white dark:bg-[#0a0a12] border border-purple-300 dark:border-purple-500/30 rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh] my-auto text-slate-900 dark:text-white transition-all">
         
-        {/* Banner do MODO DE COBRANÇA ATIVADO */}
-        <div className="p-5 border-b border-purple-500/30 bg-gradient-to-r from-purple-950/90 via-zinc-900/90 to-black flex flex-col md:flex-row md:items-center justify-between gap-4">
+        {/* Header Hero com Gradiente Executivo */}
+        <div className="p-6 border-b border-slate-200 dark:border-white/10 bg-gradient-to-r from-purple-100 via-white to-slate-50 dark:from-purple-950/80 dark:via-zinc-900/90 dark:to-black flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div className="flex items-center gap-3.5">
-            <div className="h-12 w-12 rounded-2xl bg-purple-600 text-white flex items-center justify-center shadow-xl shadow-purple-600/40 font-black animate-pulse shrink-0">
-              <Target className="h-6 w-6" />
+            <div className="h-12 w-12 rounded-2xl bg-purple-600 text-white flex items-center justify-center shadow-lg shadow-purple-600/40 font-black">
+              <CreditCard className="h-6 w-6" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <span className="px-2.5 py-0.5 rounded-full bg-purple-500/30 text-purple-300 border border-purple-500/40 text-[10px] font-black uppercase tracking-wider">
-                  🎯 MODO DE COBRANÇA ATIVADO
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="px-2.5 py-0.5 rounded-full bg-purple-500/15 text-purple-800 dark:text-purple-300 border border-purple-300 dark:border-purple-500/30 text-[10px] font-black uppercase tracking-wider">
+                  ⚡ MODO DE COBRANÇA ATIVADO
                 </span>
-                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-black uppercase tracking-wider">
+                <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-800 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-500/30 text-[10px] font-black uppercase tracking-wider flex items-center gap-1">
                   <ShieldCheck className="h-3 w-3" /> Anti-Ban WhatsApp
                 </span>
               </div>
-              <h2 className="text-xl font-black text-white tracking-tight mt-0.5">
-                Central Inteligente de Faturas
+              <h2 className="text-xl font-black text-slate-900 dark:text-white tracking-tight mt-1">
+                Central Unificada de Cobrança & Faturas
               </h2>
             </div>
           </div>
 
-          <div className="flex items-center gap-4 shrink-0">
-            <div className="text-right hidden sm:block">
-              <span className="text-[10px] font-black uppercase tracking-wider text-purple-300 block">Total a Receber</span>
-              <span className="text-xl font-black text-purple-200">
+          <div className="flex items-center gap-3 self-end sm:self-center">
+            <div className="text-right">
+              <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400 block">Total a Receber</span>
+              <span className="text-xl font-black text-purple-700 dark:text-purple-300">
                 {formatCurrency(grandTotalPendingVal, true)}
               </span>
             </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => {
-                  fetchPendingOrders();
-                  fetchRecentPaidOrders();
-                }}
-                className="p-2.5 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 text-zinc-300 text-xs font-bold transition-all cursor-pointer"
-                title="Recarregar débitos"
-              >
-                <RefreshCw className="h-4 w-4 text-purple-400" />
-              </button>
-              <button
-                onClick={handleCloseHub}
-                className="p-2.5 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 text-zinc-400 hover:text-white transition-colors cursor-pointer"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={() => {
+                fetchPendingData();
+                fetchRecentPaidOrders();
+              }}
+              className="p-2.5 rounded-2xl bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-700 dark:text-zinc-300 border border-slate-200 dark:border-white/10 transition-colors cursor-pointer"
+              title="Atualizar Dados em Tempo Real"
+            >
+              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin text-purple-600' : ''}`} />
+            </button>
           </div>
         </div>
 
-        {/* Alternador: Faturas avulsas x Acordos parcelados */}
-        <div className="px-4 pt-4 flex gap-2">
+        {/* Alternador: visão do chefe / faturas avulsas / acordos parcelados */}
+        <div className="px-4 sm:px-6 pt-4 flex gap-2">
           <button
             onClick={() => setVista('chefe')}
-            className={`flex-1 px-4 py-2.5 rounded-2xl text-xs font-black uppercase tracking-wide border transition-all ${
+            className={`flex-1 px-3 py-2.5 rounded-2xl text-[11px] sm:text-xs font-black uppercase tracking-wide border transition-all ${
               vista === 'chefe'
                 ? 'bg-amber-600 border-amber-400 text-white shadow-lg shadow-amber-600/30'
-                : 'bg-white/5 border-white/10 text-zinc-400 hover:text-white hover:bg-white/10'
+                : 'bg-slate-100 dark:bg-white/5 border-slate-200 dark:border-white/10 text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
             Visão do chefe
           </button>
           <button
             onClick={() => setVista('faturas')}
-            className={`flex-1 px-4 py-2.5 rounded-2xl text-xs font-black uppercase tracking-wide border transition-all ${
+            className={`flex-1 px-3 py-2.5 rounded-2xl text-[11px] sm:text-xs font-black uppercase tracking-wide border transition-all ${
               vista === 'faturas'
                 ? 'bg-purple-600 border-purple-400 text-white shadow-lg shadow-purple-600/30'
-                : 'bg-white/5 border-white/10 text-zinc-400 hover:text-white hover:bg-white/10'
+                : 'bg-slate-100 dark:bg-white/5 border-slate-200 dark:border-white/10 text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
-            Faturas a receber
+            Faturas
           </button>
           <button
             onClick={() => setVista('parcelas')}
-            className={`flex-1 px-4 py-2.5 rounded-2xl text-xs font-black uppercase tracking-wide border transition-all flex items-center justify-center gap-2 ${
+            className={`flex-1 px-3 py-2.5 rounded-2xl text-[11px] sm:text-xs font-black uppercase tracking-wide border transition-all flex items-center justify-center gap-1.5 ${
               vista === 'parcelas'
                 ? 'bg-indigo-600 border-indigo-400 text-white shadow-lg shadow-indigo-600/30'
-                : 'bg-white/5 border-white/10 text-zinc-400 hover:text-white hover:bg-white/10'
+                : 'bg-slate-100 dark:bg-white/5 border-slate-200 dark:border-white/10 text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
-            Parcelas e acordos
+            Parcelas
             {agreements.filter(a => !a.isSettled).length > 0 && (
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-black/30 text-white">
+              <span className="px-1.5 py-0.5 rounded-full text-[9px] font-black bg-black/25 text-white">
                 {agreements.filter(a => !a.isSettled).length}
               </span>
             )}
           </button>
         </div>
 
-        {/* Botões Filtros em Cards Maiores */}
-        <div className={`p-4 border-b border-white/10 bg-white/[0.01] space-y-3 ${vista !== 'faturas' ? 'hidden' : ''}`}>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
-            
-            <button
-              onClick={() => setFilterTopic('all')}
-              className={`p-2.5 rounded-2xl border text-left transition-all cursor-pointer flex items-center justify-between gap-1.5 ${
-                filterTopic === 'all'
-                  ? 'bg-purple-600 border-purple-400 text-white shadow-lg shadow-purple-600/30 scale-[1.02]'
-                  : 'bg-white/5 border-white/10 text-zinc-400 hover:bg-white/10 hover:text-white'
-              }`}
-            >
-              <div className="flex items-center gap-2 min-w-0">
-                <FileText className="h-4 w-4 shrink-0 text-purple-300" />
-                <span className="text-xs font-black truncate">Todos</span>
-              </div>
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-black/30 text-white shrink-0">
-                {topicCounts.all}
-              </span>
-            </button>
+        {/* Filtros Inteligentes por Tópico */}
+        <div className={`px-6 py-3 bg-slate-50 dark:bg-black/40 border-b border-slate-200 dark:border-white/5 items-center gap-2 overflow-x-auto custom-scrollbar ${vista === 'faturas' ? 'flex' : 'hidden'}`}>
+          {[
+            { id: 'all', label: 'Todos', count: topicCounts.all, icon: Package, color: 'purple' },
+            { id: 'critical', label: 'Críticos (30d+)', count: topicCounts.critical, icon: AlertTriangle, color: 'rose' },
+            { id: 'recent_overdue', label: 'Atrasados', count: topicCounts.recent_overdue, icon: Clock, color: 'amber' },
+            { id: 'upcoming', label: 'A Vencer', count: topicCounts.upcoming, icon: Calendar, color: 'blue' },
+            { id: 'vip', label: 'Grandes Contas (R$ 1k+)', count: topicCounts.vip, icon: Sparkles, color: 'emerald' },
+          ].map(tab => {
+            const isActive = filterTopic === tab.id;
+            const Icon = tab.icon;
 
-            <button
-              onClick={() => setFilterTopic('critical')}
-              className={`p-2.5 rounded-2xl border text-left transition-all cursor-pointer flex items-center justify-between gap-1.5 ${
-                filterTopic === 'critical'
-                  ? 'bg-rose-600 border-rose-400 text-white shadow-lg shadow-rose-600/30 scale-[1.02]'
-                  : 'bg-rose-500/10 border-rose-500/20 text-rose-400 hover:bg-rose-500/20'
-              }`}
-            >
-              <div className="flex items-center gap-2 min-w-0">
-                <AlertTriangle className="h-4 w-4 shrink-0 text-rose-400" />
-                <span className="text-xs font-black truncate">Críticos</span>
-              </div>
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-rose-950/60 text-rose-200 border border-rose-500/30 shrink-0">
-                {topicCounts.critical}
-              </span>
-            </button>
 
-            <button
-              onClick={() => setFilterTopic('recent_overdue')}
-              className={`p-2.5 rounded-2xl border text-left transition-all cursor-pointer flex items-center justify-between gap-1.5 ${
-                filterTopic === 'recent_overdue'
-                  ? 'bg-amber-600 border-amber-400 text-white shadow-lg shadow-amber-600/30 scale-[1.02]'
-                  : 'bg-amber-500/10 border-amber-500/20 text-amber-300 hover:bg-amber-500/20'
-              }`}
-            >
-              <div className="flex items-center gap-2 min-w-0">
-                <Clock className="h-4 w-4 shrink-0 text-amber-400" />
-                <span className="text-xs font-black truncate">Atrasados</span>
-              </div>
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-950/60 text-amber-200 border border-amber-500/30 shrink-0">
-                {topicCounts.recent_overdue}
-              </span>
-            </button>
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setFilterTopic(tab.id as any)}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer ${
+                  isActive
+                    ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/30'
+                    : 'bg-white dark:bg-white/5 text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-white/5 hover:bg-slate-100 dark:hover:bg-white/10'
+                }`}
+              >
+                <Icon className="h-3.5 w-3.5" />
+                <span>{tab.label}</span>
+                <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${
+                  isActive ? 'bg-white/20 text-white' : 'bg-slate-200 dark:bg-white/10 text-slate-700 dark:text-zinc-300'
+                }`}>
+                  {tab.count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
 
-            <button
-              onClick={() => setFilterTopic('upcoming')}
-              className={`p-2.5 rounded-2xl border text-left transition-all cursor-pointer flex items-center justify-between gap-1.5 ${
-                filterTopic === 'upcoming'
-                  ? 'bg-blue-600 border-blue-400 text-white shadow-lg shadow-blue-600/30 scale-[1.02]'
-                  : 'bg-blue-500/10 border-blue-500/20 text-blue-300 hover:bg-blue-500/20'
-              }`}
-            >
-              <div className="flex items-center gap-2 min-w-0">
-                <Calendar className="h-4 w-4 shrink-0 text-blue-400" />
-                <span className="text-xs font-black truncate">A Vencer</span>
-              </div>
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-blue-950/60 text-blue-200 border border-blue-500/30 shrink-0">
-                {topicCounts.upcoming}
-              </span>
-            </button>
-
-            <button
-              onClick={() => setFilterTopic('vip')}
-              className={`p-2.5 rounded-2xl border text-left transition-all cursor-pointer flex items-center justify-between gap-1.5 ${
-                filterTopic === 'vip'
-                  ? 'bg-emerald-600 border-emerald-400 text-white shadow-lg shadow-emerald-600/30 scale-[1.02]'
-                  : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-300 hover:bg-emerald-500/20'
-              }`}
-            >
-              <div className="flex items-center gap-2 min-w-0">
-                <Sparkles className="h-4 w-4 shrink-0 text-emerald-400" />
-                <span className="text-xs font-black truncate">VIPs</span>
-              </div>
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-950/60 text-emerald-200 border border-emerald-500/30 shrink-0">
-                {topicCounts.vip}
-              </span>
-            </button>
-
+        {/* Barra de Busca & Ação de Marcar Todos */}
+        <div className="p-4 bg-white dark:bg-black/20 border-b border-slate-200 dark:border-white/5 flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div className="relative w-full sm:w-80">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 dark:text-zinc-500" />
+            <input
+              type="text"
+              placeholder="Filtrar por cliente, empresa..."
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              className="w-full bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl pl-10 pr-4 py-2 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-zinc-500 outline-none focus:border-purple-500 transition-colors"
+            />
           </div>
 
-          {/* Busca & Seleção */}
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-1">
-            <div className="relative w-full sm:w-80">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-400" />
-              <input
-                type="text"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Filtrar cliente..."
-                className="w-full bg-black/50 border border-white/10 rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500"
-              />
-            </div>
-
+          <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
             <button
               type="button"
               onClick={handleToggleSelectAll}
-              className="w-full sm:w-auto px-4 py-2 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 text-zinc-300 text-xs font-extrabold transition-all flex items-center justify-center gap-2 shrink-0 cursor-pointer"
+              className="flex items-center gap-2 text-xs font-bold text-slate-600 dark:text-zinc-300 hover:text-purple-700 dark:hover:text-purple-400 transition-colors cursor-pointer"
             >
               {selectedClientIds.length === clientDebtsList.length && clientDebtsList.length > 0 ? (
-                <CheckSquare className="h-4 w-4 text-purple-400" />
+                <CheckSquare className="h-4 w-4 text-purple-600 dark:text-purple-400" />
               ) : (
-                <Square className="h-4 w-4 text-zinc-400" />
+                <Square className="h-4 w-4" />
               )}
               <span>Marcar Todos ({clientDebtsList.length})</span>
             </button>
           </div>
         </div>
 
-        {/* Progresso de Disparo em Massa */}
+        {/* Barra de Progresso do Disparo em Massa */}
         {isMassSending && (
-          <div className="p-4 bg-purple-950/70 border-b border-purple-500/40 flex items-center justify-between text-xs animate-in fade-in duration-200">
+          <div className="p-4 bg-purple-50 dark:bg-purple-950/40 border-b border-purple-200 dark:border-purple-500/30 flex items-center justify-between gap-4 animate-in fade-in duration-200">
             <div className="flex items-center gap-3">
-              <Loader2 className="h-5 w-5 text-purple-400 animate-spin" />
+              <Loader2 className="h-5 w-5 text-purple-600 animate-spin" />
               <div>
-                <span className="font-black text-white">Disparando com delay humano anti-banimento...</span>
-                <p className="text-[11px] text-purple-300">Enviando para: <strong>{massSendProgress.currentName}</strong> ({massSendProgress.current} de {massSendProgress.total})</p>
+                <span className="text-xs font-black text-purple-900 dark:text-purple-200 block">
+                  Disparando Cobrança: {massSendProgress.currentName} ({massSendProgress.current}/{massSendProgress.total})
+                </span>
+                <span className="text-[10px] text-purple-700 dark:text-purple-400">
+                  Delay de segurança anti-ban ativo entre envios...
+                </span>
               </div>
             </div>
-            <div className="w-48 bg-black/50 rounded-full h-2 overflow-hidden border border-purple-500/30">
+            <div className="w-48 bg-slate-200 dark:bg-black/50 rounded-full h-2 overflow-hidden border border-purple-300 dark:border-purple-500/30">
               <div 
-                className="bg-purple-500 h-full transition-all duration-300"
+                className="bg-purple-600 h-full transition-all duration-300"
                 style={{ width: `${(massSendProgress.current / massSendProgress.total) * 100}%` }}
               />
             </div>
@@ -857,7 +874,7 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
         )}
 
         {/* Lista de Clientes */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-3 scrollbar-thin scrollbar-thumb-white/10">
+        <div className="flex-1 overflow-y-auto p-4 space-y-3 scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-white/10">
           {vista === 'chefe' ? (
             <ChefeOverviewPanel
               debtors={clientDebtsList as any}
@@ -878,15 +895,15 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
               onOpenAgreement={setAcordoAberto}
             />
           ) : loading ? (
-            <div className="h-64 flex items-center justify-center text-zinc-500 text-xs font-bold gap-2">
-              <Loader2 className="h-5 w-5 animate-spin text-purple-400" />
-              Carregando faturas pendentes...
+            <div className="h-64 flex items-center justify-center text-slate-500 dark:text-zinc-500 text-xs font-bold gap-2">
+              <Loader2 className="h-5 w-5 animate-spin text-purple-600 dark:text-purple-400" />
+              Carregando faturas e débitos a receber...
             </div>
           ) : clientDebtsList.length === 0 ? (
-            <div className="p-12 text-center border border-dashed border-white/10 rounded-3xl space-y-3">
-              <CheckCircle2 className="h-10 w-10 text-emerald-400 mx-auto" />
-              <h3 className="text-base font-black text-white">Nenhum débito pendente neste filtro!</h3>
-              <p className="text-xs text-zinc-400 max-w-xs mx-auto">
+            <div className="p-12 text-center border border-dashed border-slate-200 dark:border-white/10 rounded-3xl space-y-3">
+              <CheckCircle2 className="h-10 w-10 text-emerald-500 dark:text-emerald-400 mx-auto" />
+              <h3 className="text-base font-black text-slate-900 dark:text-white">Nenhum débito pendente neste filtro!</h3>
+              <p className="text-xs text-slate-500 dark:text-zinc-400 max-w-xs mx-auto">
                 Todos os clientes desta categoria estão com os pagamentos quitados.
               </p>
             </div>
@@ -895,16 +912,17 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
               {clientDebtsList.map(debt => {
                 const isSelected = selectedClientIds.includes(debt.clientId);
                 const isExpanded = !!expandedClients[debt.clientId];
+                const totalItemsCount = debt.orders.length + debt.manualTxs.length;
 
                 return (
                   <div
                     key={debt.clientId}
                     className={`rounded-3xl border transition-all overflow-hidden ${
                       isSelected
-                        ? 'bg-purple-950/20 border-purple-500/50 shadow-xl shadow-purple-950/30'
+                        ? 'bg-purple-50 dark:bg-purple-950/30 border-purple-400 dark:border-purple-500/60 shadow-xl'
                         : debt.hasOverdue
-                        ? 'bg-gradient-to-r from-rose-950/20 via-zinc-900/40 to-black border-rose-500/30'
-                        : 'bg-white/[0.02] hover:bg-white/[0.04] border-white/10'
+                        ? 'bg-rose-50/70 hover:bg-rose-100/80 dark:bg-black dark:hover:bg-black/90 border-rose-200 dark:border-rose-500/40 hover:dark:border-rose-500/70'
+                        : 'bg-slate-50/90 hover:bg-slate-100/90 dark:bg-black dark:hover:bg-black/90 border-slate-200 dark:border-white/10 hover:dark:border-white/20'
                     }`}
                   >
                     {/* Header do Card do Cliente */}
@@ -916,50 +934,50 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
                         <button
                           type="button"
                           onClick={(e) => handleToggleSelectClient(debt.clientId, e)}
-                          className="p-1 text-zinc-400 hover:text-purple-400 transition-colors cursor-pointer shrink-0"
+                          className="p-1 text-slate-400 hover:text-purple-600 dark:text-zinc-400 dark:hover:text-purple-400 transition-colors cursor-pointer shrink-0"
                         >
                           {isSelected ? (
-                            <CheckSquare className="h-5 w-5 text-purple-400" />
+                            <CheckSquare className="h-5 w-5 text-purple-600 dark:text-purple-400" />
                           ) : (
                             <Square className="h-5 w-5" />
                           )}
                         </button>
 
                         <div className={`h-10 w-10 rounded-2xl flex items-center justify-center font-black text-sm shrink-0 ${
-                          debt.hasOverdue ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' : 'bg-purple-500/20 text-purple-400 border border-purple-500/30'
+                          debt.hasOverdue ? 'bg-rose-500/15 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-500/30' : 'bg-purple-500/15 text-purple-700 dark:text-purple-400 border border-purple-200 dark:border-purple-500/30'
                         }`}>
                           <User className="h-5 w-5" />
                         </div>
 
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <h3 className="text-base font-black text-white truncate">{debt.clientName}</h3>
+                            <h3 className="text-base font-black text-slate-900 dark:text-white truncate">{debt.clientName}</h3>
                             {debt.clientCompany && (
-                              <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-white/10 text-zinc-300 border border-white/10">
+                              <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-slate-200 dark:bg-white/10 text-slate-700 dark:text-zinc-300 border border-slate-300 dark:border-white/10">
                                 🏢 {debt.clientCompany}
                               </span>
                             )}
-                            <span className="px-3 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/40 text-[11px] font-black flex items-center gap-1.5 shrink-0 shadow-md">
-                              <Package className="h-3.5 w-3.5 text-purple-400" />
-                              {debt.orders.length} {debt.orders.length === 1 ? 'Encomenda Pendente' : 'Encomendas Pendentes'}
+                            <span className="px-3 py-0.5 rounded-full bg-purple-500/15 dark:bg-purple-500/20 text-purple-800 dark:text-purple-300 border border-purple-200 dark:border-purple-500/40 text-[11px] font-black flex items-center gap-1.5 shrink-0 shadow-sm">
+                              <Package className="h-3.5 w-3.5 text-purple-600 dark:text-purple-400" />
+                              {totalItemsCount} {totalItemsCount === 1 ? 'Item Pendente' : 'Itens Pendentes'}
                             </span>
                             {debt.hasOverdue && (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-rose-500/20 text-rose-400 border border-rose-500/40 text-[10px] font-black uppercase tracking-wider animate-pulse">
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-rose-500/15 dark:bg-rose-500/20 text-rose-800 dark:text-rose-400 border border-rose-300 dark:border-rose-500/40 text-[10px] font-black uppercase tracking-wider">
                                 ⚠️ ATRASO {debt.overdueDays} DIAS
                               </span>
                             )}
                           </div>
-                          <p className="text-[11px] text-zinc-400 mt-0.5">
-                            {debt.clientPhone ? `📞 ${debt.clientPhone}` : 'Sem WhatsApp'} • Clique para expandir encomendas
+                          <p className="text-[11px] text-slate-500 dark:text-zinc-400 mt-0.5">
+                            {debt.clientPhone ? `📞 ${debt.clientPhone}` : 'Sem WhatsApp'} • Clique para expandir detalhes
                           </p>
                         </div>
                       </div>
 
-                      {/* Lado Direito: Total & Ações Rápida */}
+                      {/* Lado Direito: Total & Ações Rápidas */}
                       <div className="flex items-center gap-3 shrink-0">
                         <div className="text-right">
-                          <span className="text-[9px] font-black uppercase tracking-wider text-zinc-400 block">A Pagar</span>
-                          <span className={`text-base font-black ${debt.hasOverdue ? 'text-rose-400' : 'text-purple-300'}`}>
+                          <span className="text-[9px] font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400 block">A Pagar</span>
+                          <span className={`text-base font-black ${debt.hasOverdue ? 'text-rose-600 dark:text-rose-400' : 'text-purple-700 dark:text-purple-300'}`}>
                             {formatCurrency(debt.totalPending, true)}
                           </span>
                         </div>
@@ -974,118 +992,192 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
                                 name: debt.clientName,
                                 phone: debt.clientPhone,
                                 totalAmount: debt.totalPending,
-                                orderCount: debt.orders.length,
-                                orders: debt.orders,
+                                orderCount: totalItemsCount,
+                                orders: [...debt.orders, ...debt.manualTxs],
                               });
                             }}
-                            className="px-3 py-1.5 rounded-xl text-xs font-black bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-600/20 transition-all flex items-center gap-1 cursor-pointer"
+                            className="px-3 py-1.5 rounded-xl text-xs font-black bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-600/20 transition-all flex items-center gap-1 cursor-pointer active:scale-95"
                             title="Abrir Central de Cobrança WhatsApp (Evolution API + PDF)"
                           >
                             <Send className="h-3 w-3" /> Cobrar WhatsApp
                           </button>
 
-                          <button
-                            type="button"
-                            onClick={(e) => handleOpenInstallmentsModal(debt, e)}
-                            className="px-3 py-1.5 rounded-xl text-xs font-black bg-purple-600 hover:bg-purple-500 text-white shadow-md shadow-purple-600/20 transition-all flex items-center gap-1 cursor-pointer"
-                            title="Agrupar pedidos e parcelar"
-                          >
-                            <Layers className="h-3 w-3" /> Parcelar
-                          </button>
+                          {debt.orders.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={(e) => handleOpenInstallmentsModal(debt, e)}
+                              className="px-3 py-1.5 rounded-xl text-xs font-black bg-purple-600 hover:bg-purple-500 text-white shadow-md shadow-purple-600/20 transition-all flex items-center gap-1 cursor-pointer active:scale-95"
+                              title="Agrupar pedidos e parcelar"
+                            >
+                              <Layers className="h-3 w-3" /> Parcelar
+                            </button>
+                          )}
 
-                          <div className="p-1 rounded-lg text-zinc-400 hover:text-white">
+                          <div className="p-1 rounded-lg text-slate-400 hover:text-slate-800 dark:text-zinc-400 dark:hover:text-white">
                             {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                           </div>
                         </div>
                       </div>
                     </div>
 
-                    {/* Conteúdo Expandido do Accordion (Clique no Pedido abre OrderDetailsModal!) */}
+                    {/* Conteúdo Expandido do Accordion (Encomendas + Lançamentos Manuais / Acordos) */}
                     {isExpanded && (
-                      <div className="p-4 bg-black/40 border-t border-white/10 space-y-3 animate-in slide-in-from-top-1 duration-200">
-                        <div className="flex items-center justify-between flex-wrap gap-2 pb-1 border-b border-white/5">
+                      <div className="p-4 bg-slate-100/90 dark:bg-black border-t border-slate-200 dark:border-white/10 space-y-3 animate-in slide-in-from-top-1 duration-200">
+                        <div className="flex items-center justify-between flex-wrap gap-2 pb-1 border-b border-slate-200 dark:border-white/5">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-[11px] font-black uppercase tracking-wider text-purple-300">
-                              Detalhamento das Encomendas ({debt.orders.length}):
+                            <span className="text-[11px] font-black uppercase tracking-wider text-purple-800 dark:text-purple-300">
+                              Detalhamento das Contas ({totalItemsCount}):
                             </span>
-                            {debt.orders.length > 1 && (
+                            {debt.orders.filter(o => o.payment_status !== 'in_agreement').length > 1 && (
                               <button
                                 type="button"
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   setSelectedOrderForPaymentModal(null);
-                                  setSelectedClientOrdersForPaymentModal(debt.orders);
+                                  setSelectedClientOrdersForPaymentModal(debt.orders.filter(o => o.payment_status !== 'in_agreement'));
                                 }}
-                                className="px-3 py-1 rounded-xl text-[11px] font-black bg-gradient-to-r from-emerald-600/30 to-emerald-500/20 hover:from-emerald-600 hover:to-emerald-500 text-emerald-300 hover:text-white border border-emerald-500/40 shadow-lg transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
+                                className="px-3 py-1 rounded-xl text-[11px] font-black bg-emerald-500/15 hover:bg-emerald-600 text-emerald-800 dark:text-emerald-300 hover:text-white border border-emerald-300 dark:border-emerald-500/40 shadow-sm transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
                                 title="Dar baixa e quitar todas as encomendas deste cliente de uma só vez (Baixa em Lote)"
                               >
-                                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" /> Quitar Tudo ({formatCurrency(debt.totalPending, true)})
+                                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" /> Quitar Todas Encomendas ({formatCurrency(debt.totalPending, true)})
                               </button>
                             )}
                           </div>
-                          <span className="text-[10px] text-zinc-400 italic">
-                            💡 Toque/Clique em qualquer card para ver a Ficha Técnica Completa do Pedido
+                          <span className="text-[10px] text-slate-500 dark:text-zinc-400 italic">
+                            💡 Toque/Clique no card para ver detalhes completos ou dar baixa individual
                           </span>
                         </div>
 
+                        {/* Grade de Itens (Encomendas e Faturas/Parcelas Manuais) */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                          {/* Encomendas de Produção */}
                           {debt.orders.map(ord => {
-                            const pendingVal = calculateOrderPendingVal(ord);
+                            const isInAgreement = ord.payment_status === 'in_agreement' || (ord.notes && ord.notes.includes('[ACORDO_ATIVO'));
+                            const pendingVal = isInAgreement ? 0 : calculateOrderPendingVal(ord as any);
 
                             return (
                               <div
                                 key={ord.id}
                                 onClick={() => setSelectedOrderForDetails(ord)}
-                                className="p-4 rounded-2xl bg-white/5 border border-white/10 hover:border-purple-500/60 hover:bg-white/10 active:scale-[0.98] transition-all space-y-3 group shadow-md cursor-pointer select-none"
+                                className="p-4 rounded-2xl bg-white dark:bg-zinc-950 border border-slate-200 dark:border-white/10 hover:border-purple-400 dark:hover:border-purple-500/60 hover:bg-slate-50 dark:hover:bg-zinc-900/60 active:scale-[0.98] transition-all space-y-3 group shadow-sm cursor-pointer select-none"
                               >
                                 <div className="flex items-center justify-between">
                                   <div className="flex items-center gap-1.5">
-                                    <span className="font-black text-white text-xs group-hover:text-purple-300 transition-colors flex items-center gap-1">
+                                    <span className="font-black text-slate-900 dark:text-white text-xs group-hover:text-purple-700 dark:group-hover:text-purple-300 transition-colors flex items-center gap-1">
                                       Pedido #{ord.order_number || ord.id.slice(0, 4)}
                                     </span>
-                                    <ExternalLink className="h-3 w-3 text-purple-400 opacity-60 group-hover:opacity-100 transition-opacity" />
+                                    <ExternalLink className="h-3 w-3 text-purple-600 dark:text-purple-400 opacity-60 group-hover:opacity-100 transition-opacity" />
                                   </div>
                                   <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-md ${
-                                    ord.payment_status === 'half_paid'
-                                      ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
-                                      : 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
+                                    isInAgreement
+                                      ? 'bg-purple-500/20 text-purple-700 dark:text-purple-300 border border-purple-400/40'
+                                      : ord.payment_status === 'half_paid'
+                                      ? 'bg-blue-500/15 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-500/30'
+                                      : 'bg-rose-500/15 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-500/30'
                                   }`}>
-                                    {ord.payment_status === 'half_paid' ? 'Sinal 50%' : 'Pendente'}
+                                    {isInAgreement ? '🤝 Em Acordo' : ord.payment_status === 'half_paid' ? 'Sinal 50%' : 'Pendente'}
                                   </span>
                                 </div>
 
                                 <div className="flex items-center justify-between text-[11px] pt-1">
-                                  <span className="text-zinc-400">
+                                  <span className="text-slate-500 dark:text-zinc-400">
                                     Data: {format(new Date(ord.created_at), 'dd/MM/yyyy')}
                                   </span>
-                                  <span className="font-black text-purple-200">
-                                    {formatCurrency(pendingVal, true)}
+                                  <span className="font-black text-purple-800 dark:text-purple-200">
+                                    {isInAgreement ? 'Parcelado' : formatCurrency(pendingVal, true)}
                                   </span>
                                 </div>
 
-                                <div className="pt-1 grid grid-cols-2 gap-1.5" onClick={(e) => e.stopPropagation()}>
+                                {!isInAgreement && (
+                                  <div className="pt-1 grid grid-cols-2 gap-1.5" onClick={(e) => e.stopPropagation()}>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setSelectedOrderForPaymentModal(ord);
+                                      }}
+                                      className="py-1.5 px-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-600 text-emerald-800 dark:text-emerald-200 hover:text-white border border-emerald-300 dark:border-emerald-500/30 text-[10px] font-black transition-all flex items-center justify-center gap-1 cursor-pointer active:scale-95"
+                                      title="Registrar pagamento deste pedido (Alimenta a DRE do Faturamento)"
+                                    >
+                                      <DollarSign className="h-3 w-3 text-emerald-600 dark:text-emerald-400" /> Quitar
+                                    </button>
+
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setSelectedOrderForCollectionModal(ord);
+                                      }}
+                                      className="py-1.5 px-2 rounded-xl bg-purple-500/15 hover:bg-purple-600 text-purple-800 dark:text-purple-200 hover:text-white border border-purple-300 dark:border-purple-500/30 text-[10px] font-black transition-all flex items-center justify-center gap-1 cursor-pointer active:scale-95"
+                                      title="Cobrar via WhatsApp com Evolution API"
+                                    >
+                                      <Send className="h-3 w-3 text-purple-600 dark:text-purple-400" /> Cobrar
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+
+                          {/* Lançamentos Manuais / Parcelas de Acordo */}
+                          {debt.manualTxs.map(tx => {
+                            const dueStr = tx.due_date || tx.created_at;
+                            const dueTs = dueStr ? new Date(dueStr).getTime() : Date.now();
+                            const isOverdue = dueTs < new Date().setHours(0, 0, 0, 0);
+
+                            return (
+                              <div
+                                key={tx.id}
+                                className="p-4 rounded-2xl bg-white dark:bg-zinc-950 border border-slate-200 dark:border-white/10 hover:border-purple-400 dark:hover:border-purple-500/60 hover:bg-slate-50 dark:hover:bg-zinc-900/60 transition-all space-y-3 group shadow-sm"
+                              >
+                                <div className="flex items-center justify-between gap-1">
+                                  <span className="font-black text-slate-900 dark:text-white text-xs truncate">
+                                    {tx.isAgreementParcel ? `🤝 ${tx.description}` : `📝 ${tx.description || 'Entrada Futura'}`}
+                                  </span>
+                                  <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-md shrink-0 ${
+                                    tx.isAgreementParcel
+                                      ? 'bg-purple-500/20 text-purple-700 dark:text-purple-300 border border-purple-400/40'
+                                      : 'bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-400/40'
+                                  }`}>
+                                    {tx.isAgreementParcel ? 'Acordo' : 'Avulso'}
+                                  </span>
+                                </div>
+
+                                <div className="flex items-center justify-between text-[11px] pt-1">
+                                  <span className={`font-semibold ${isOverdue ? 'text-rose-600 dark:text-rose-400' : 'text-slate-500 dark:text-zinc-400'}`}>
+                                    Venc: {format(new Date(dueStr), 'dd/MM/yyyy')} {isOverdue && '⚠️'}
+                                  </span>
+                                  <span className="font-black text-purple-800 dark:text-purple-200">
+                                    {formatCurrency(tx.total_amount, true)}
+                                  </span>
+                                </div>
+
+                                <div className="pt-1 grid grid-cols-2 gap-1.5">
                                   <button
                                     type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setSelectedOrderForPaymentModal(ord);
-                                    }}
-                                    className="py-1.5 px-2 rounded-xl bg-emerald-600/30 hover:bg-emerald-600 text-emerald-200 hover:text-white border border-emerald-500/30 text-[10px] font-black transition-all flex items-center justify-center gap-1 cursor-pointer"
-                                    title="Registrar pagamento deste pedido (Alimenta a DRE do Faturamento)"
+                                    onClick={() => handleMarkManualTxPaid(tx.id)}
+                                    className="py-1.5 px-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-600 text-emerald-800 dark:text-emerald-200 hover:text-white border border-emerald-300 dark:border-emerald-500/30 text-[10px] font-black transition-all flex items-center justify-center gap-1 cursor-pointer active:scale-95"
+                                    title="Dar baixa e marcar como recebido no caixa"
                                   >
-                                    <DollarSign className="h-3 w-3 text-emerald-400" /> Quitar
+                                    <DollarSign className="h-3 w-3 text-emerald-600 dark:text-emerald-400" /> Quitar
                                   </button>
 
                                   <button
                                     type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setSelectedOrderForCollectionModal(ord);
+                                    onClick={() => {
+                                      setSelectedClientForWhatsAppModal({
+                                        id: debt.clientId,
+                                        name: debt.clientName,
+                                        phone: debt.clientPhone,
+                                        totalAmount: tx.total_amount,
+                                        orderCount: 1,
+                                        orders: [tx]
+                                      });
                                     }}
-                                    className="py-1.5 px-2 rounded-xl bg-purple-600/30 hover:bg-purple-600 text-purple-200 hover:text-white border border-purple-500/30 text-[10px] font-black transition-all flex items-center justify-center gap-1 cursor-pointer"
-                                    title="Cobrar via WhatsApp com Evolution API"
+                                    className="py-1.5 px-2 rounded-xl bg-purple-500/15 hover:bg-purple-600 text-purple-800 dark:text-purple-200 hover:text-white border border-purple-300 dark:border-purple-500/30 text-[10px] font-black transition-all flex items-center justify-center gap-1 cursor-pointer active:scale-95"
+                                    title="Cobrar este lançamento via WhatsApp"
                                   >
-                                    <Send className="h-3 w-3" /> Cobrar
+                                    <Send className="h-3 w-3 text-purple-600 dark:text-purple-400" /> Cobrar
                                   </button>
                                 </div>
                               </div>
@@ -1104,16 +1196,16 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
 
         {/* Footer Flutuante de Disparo em Massa Anti-Ban */}
         {selectedClientIds.length > 0 && (
-          <div className="p-4 bg-gradient-to-r from-purple-950 via-zinc-900 to-black border-t border-purple-500/30 flex flex-col sm:flex-row items-center justify-between gap-3 animate-in slide-in-from-bottom duration-200">
+          <div className="p-4 bg-slate-100 dark:bg-gradient-to-r dark:from-purple-950 dark:via-zinc-900 dark:to-black border-t border-slate-200 dark:border-purple-500/30 flex flex-col sm:flex-row items-center justify-between gap-3 animate-in slide-in-from-bottom duration-200">
             <div className="flex items-center gap-3">
-              <div className="h-9 w-9 rounded-xl bg-purple-500/20 text-purple-300 border border-purple-500/30 flex items-center justify-center font-black">
+              <div className="h-9 w-9 rounded-xl bg-purple-500/20 text-purple-800 dark:text-purple-300 border border-purple-300 dark:border-purple-500/30 flex items-center justify-center font-black">
                 {selectedClientIds.length}
               </div>
               <div>
-                <span className="text-xs font-black text-white block">
+                <span className="text-xs font-black text-slate-900 dark:text-white block">
                   {selectedClientIds.length} Cliente(s) Selecionado(s) para Cobrança
                 </span>
-                <span className="text-[10px] text-purple-300">
+                <span className="text-[10px] text-purple-700 dark:text-purple-300 font-semibold">
                   Total Acumulado: {formatCurrency(clientDebtsList.filter(c => selectedClientIds.includes(c.clientId)).reduce((acc, c) => acc + c.totalPending, 0), true)}
                 </span>
               </div>
@@ -1123,7 +1215,7 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
               <button
                 type="button"
                 onClick={() => setSelectedClientIds([])}
-                className="px-4 py-2.5 rounded-xl text-xs font-bold bg-white/5 hover:bg-white/10 text-zinc-300 transition-colors cursor-pointer"
+                className="px-4 py-2.5 rounded-xl text-xs font-bold bg-white dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-700 dark:text-zinc-300 border border-slate-200 dark:border-transparent transition-colors cursor-pointer"
               >
                 Limpar Seleção
               </button>
@@ -1139,8 +1231,8 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
                         name: target.clientName,
                         phone: target.clientPhone,
                         totalAmount: target.totalPending,
-                        orderCount: target.orders.length,
-                        orders: target.orders,
+                        orderCount: target.orders.length + target.manualTxs.length,
+                        orders: [...target.orders, ...target.manualTxs],
                       });
                     }
                   } else {
@@ -1165,7 +1257,7 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
           onClose={() => setSelectedOrderForDetails(null)}
           order={selectedOrderForDetails}
           onOrderUpdated={() => {
-            fetchPendingOrders();
+            fetchPendingData();
             fetchRecentPaidOrders();
           }}
         />
@@ -1203,7 +1295,7 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
           order={selectedOrderForPaymentModal}
           orders={selectedClientOrdersForPaymentModal}
           onStatusUpdated={() => {
-            fetchPendingOrders();
+            fetchPendingData();
             fetchRecentPaidOrders();
           }}
           isBaixaMode={true}
@@ -1216,7 +1308,7 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
         onClose={() => setAcordoAberto(null)}
         agreement={acordoAberto}
         canSeeFinancials={isUnlocked}
-        onChanged={() => { fetchAgreements(); fetchPendingOrders(); }}
+        onChanged={() => { fetchAgreements(); fetchPendingData(); }}
       />
 
       {selectedClientForInstallments && (
@@ -1228,54 +1320,54 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
             name: selectedClientForInstallments.clientName,
             phone: selectedClientForInstallments.clientPhone,
             company_name: selectedClientForInstallments.clientCompany,
-            orders: selectedClientForInstallments.orders
+            orders: selectedClientForInstallments.orders as any
           }}
           onAgreementCreated={() => {
-            fetchPendingOrders();
+            fetchPendingData();
             fetchRecentPaidOrders();
           }}
         />
       )}
 
       {massSendReport && (
-        <div className="fixed inset-0 z-[99999999] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200 overflow-y-auto">
-          <div className="relative w-full max-w-lg bg-[#0e0e17] border border-rose-500/30 rounded-3xl shadow-2xl overflow-hidden p-6 space-y-4 my-auto text-white">
+        <div className="fixed inset-0 z-[99999999] flex items-center justify-center p-4 bg-slate-900/60 dark:bg-black/85 backdrop-blur-md animate-in fade-in duration-200 overflow-y-auto">
+          <div className="relative w-full max-w-lg bg-white dark:bg-[#0e0e17] border border-rose-300 dark:border-rose-500/30 rounded-3xl shadow-2xl overflow-hidden p-6 space-y-4 my-auto text-slate-900 dark:text-white">
             
-            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-white/10 pb-3">
               <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-2xl bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center justify-center">
+                <div className="h-10 w-10 rounded-2xl bg-amber-500/20 text-amber-700 dark:text-amber-400 border border-amber-300 dark:border-amber-500/30 flex items-center justify-center">
                   <ShieldAlert className="h-5 w-5" />
                 </div>
                 <div>
-                  <h3 className="text-base font-black text-white">
+                  <h3 className="text-base font-black text-slate-900 dark:text-white">
                     Relatório do Disparo em Massa
                   </h3>
-                  <p className="text-xs text-zinc-400">
+                  <p className="text-xs text-slate-500 dark:text-zinc-400">
                     {massSendReport.success} enviado(s) com sucesso • {massSendReport.failures.length} falha(s)
                   </p>
                 </div>
               </div>
               <button
                 onClick={() => setMassSendReport(null)}
-                className="p-2 rounded-xl text-zinc-400 hover:text-white hover:bg-white/10 transition-colors"
+                className="p-2 rounded-xl text-slate-400 hover:text-slate-700 dark:text-zinc-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/10 transition-colors cursor-pointer"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
 
             <div className="space-y-2">
-              <label className="text-xs font-extrabold uppercase tracking-wider text-rose-300 block">
+              <label className="text-xs font-extrabold uppercase tracking-wider text-rose-700 dark:text-rose-300 block">
                 Clientes que não receberam (Motivo do Erro):
               </label>
 
               <div className="max-h-56 overflow-y-auto space-y-2 pr-1">
                 {massSendReport.failures.map((item, idx) => (
-                  <div key={idx} className="p-3 rounded-2xl bg-rose-500/10 border border-rose-500/20 space-y-1">
+                  <div key={idx} className="p-3 rounded-2xl bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 space-y-1">
                     <div className="flex items-center justify-between text-xs">
-                      <span className="font-black text-rose-300">{item.name}</span>
-                      <span className="text-[10px] text-zinc-400 font-mono">{item.phone}</span>
+                      <span className="font-black text-rose-800 dark:text-rose-300">{item.name}</span>
+                      <span className="text-[10px] text-slate-500 dark:text-zinc-400 font-mono">{item.phone}</span>
                     </div>
-                    <p className="text-xs text-zinc-300">
+                    <p className="text-xs text-slate-700 dark:text-zinc-300">
                       💡 {item.reason}
                     </p>
                   </div>
@@ -1287,7 +1379,7 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
               <button
                 type="button"
                 onClick={() => setMassSendReport(null)}
-                className="px-5 py-2.5 rounded-xl text-xs font-black bg-purple-600 hover:bg-purple-500 text-white transition-colors cursor-pointer"
+                className="px-5 py-2.5 rounded-xl text-xs font-black bg-purple-600 hover:bg-purple-500 text-white transition-colors cursor-pointer active:scale-95"
               >
                 Entendido
               </button>

@@ -21,7 +21,8 @@ import {
   Trash2,
   Check,
   ArrowRight,
-  Pencil
+  Pencil,
+  Layers
 } from 'lucide-react';
 import { Client } from '@/types/borda';
 import { supabase } from '@/integrations/supabase/client';
@@ -34,6 +35,7 @@ import { formatCurrency } from '@/utils/currencyFormatter';
 import { printClientStatementPDF } from '@/services/pdfGenerator';
 import { WhatsAppBillingModal } from '@/components/billing/WhatsAppBillingModal';
 import { PaymentStatusModal } from '@/components/orders/PaymentStatusModal';
+import { CreateInstallmentAgreementModal } from '@/components/billing/CreateInstallmentAgreementModal';
 
 interface ClientDetailsModalProps {
   isOpen: boolean;
@@ -60,6 +62,7 @@ export const ClientDetailsModal: React.FC<ClientDetailsModalProps> = ({
   const [loading, setLoading] = useState(false);
   const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
   const [isBillingModalOpen, setIsBillingModalOpen] = useState(false);
+  const [isInstallmentAgreementOpen, setIsInstallmentAgreementOpen] = useState(false);
   const [selectedOrderForStatusModal, setSelectedOrderForStatusModal] = useState<any | null>(null);
 
   const handleUpdateDueDate = async (orderId: string, newDate: string) => {
@@ -560,23 +563,33 @@ export const ClientDetailsModal: React.FC<ClientDetailsModalProps> = ({
                 </span>
               </div>
 
-              <div className="flex items-center gap-2 w-full sm:w-auto">
+              <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
                 <button
                   type="button"
                   onClick={handlePrintStatement}
-                  className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl bg-purple-500/10 hover:bg-purple-500/20 text-purple-300 border border-purple-500/30 font-bold text-xs transition-all flex items-center justify-center gap-2 active:scale-95"
+                  className="flex-1 sm:flex-none px-3.5 py-2.5 rounded-xl bg-purple-500/10 hover:bg-purple-500/20 text-purple-300 border border-purple-500/30 font-bold text-xs transition-all flex items-center justify-center gap-1.5 active:scale-95"
                 >
                   <FileText className="h-3.5 w-3.5" />
-                  <span>Gerar Extrato PDF</span>
+                  <span>Extrato PDF</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setIsInstallmentAgreementOpen(true)}
+                  className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-xs transition-all flex items-center justify-center gap-1.5 shadow-lg shadow-purple-600/30 active:scale-95 cursor-pointer"
+                  title="Criar Acordo de Parcelamento dos pedidos selecionados"
+                >
+                  <Layers className="h-3.5 w-3.5" />
+                  <span>🤝 Criar Acordo</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={handleCobrarWhatsApp}
-                  className="flex-1 sm:flex-none px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs transition-all shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2 active:scale-95"
+                  className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs transition-all shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-1.5 active:scale-95"
                 >
                   <Send className="h-3.5 w-3.5" />
-                  <span>Cobrar via WhatsApp</span>
+                  <span>Cobrar Zap</span>
                   <ArrowRight className="h-3.5 w-3.5" />
                 </button>
               </div>
@@ -610,6 +623,24 @@ export const ClientDetailsModal: React.FC<ClientDetailsModalProps> = ({
           setSelectedOrderForStatusModal(null);
         }}
       />
+
+      {isInstallmentAgreementOpen && (
+        <CreateInstallmentAgreementModal
+          isOpen={isInstallmentAgreementOpen}
+          onClose={() => setIsInstallmentAgreementOpen(false)}
+          clientData={{
+            id: client.id,
+            name: client.name,
+            phone: client.phone,
+            company_name: client.company_name,
+            orders: selectedOrders.length > 0 ? selectedOrders : openOrders
+          }}
+          onAgreementCreated={() => {
+            fetchClientOrders();
+            setIsInstallmentAgreementOpen(false);
+          }}
+        />
+      )}
     </div>
   );
 

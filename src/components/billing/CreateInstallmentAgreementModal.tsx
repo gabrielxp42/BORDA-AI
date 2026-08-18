@@ -199,7 +199,6 @@ export const CreateInstallmentAgreementModal: React.FC<CreateInstallmentAgreemen
             reminderTiming: reminderTiming,
             notifyClientOnDue: notifyClient,
             notifyOwnerOnDue: notifyOwner,
-            reminded_dates: []
           })
         });
       }
@@ -207,11 +206,16 @@ export const CreateInstallmentAgreementModal: React.FC<CreateInstallmentAgreemen
       // 2b. Marca os pedidos como cobertos pelo acordo.
       // Sem isso o pedido continua "pendente" e o sistema cobra duas vezes:
       // uma pelo pedido original e outra pela parcela gerada dele.
+      //
+      // Gravamos DOIS sinais: o payment_status 'in_agreement', que as consultas
+      // de pendência filtram direto, e o agreementId estruturado, que é o que
+      // permite agrupar, abrir detalhes e remarcar vencimentos depois.
       for (const ord of selectedOrders) {
         const { cleanNotes, metadata } = parsePaymentMetadata((ord as any).notes);
         await supabase
           .from('orders')
           .update({
+            payment_status: 'in_agreement',
             notes: serializePaymentMetadata(cleanNotes, {
               ...metadata,
               agreementId,

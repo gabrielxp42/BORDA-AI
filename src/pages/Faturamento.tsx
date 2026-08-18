@@ -413,7 +413,17 @@ export const Faturamento: React.FC = () => {
         `)
         .eq('user_id', userId)
         .or('payment_status.neq.paid,payment_status.is.null');
-      setAllTimePendingOrders(pendingOrders || []);
+
+      // Oculta da lista "A Receber" os pedidos individuais que já fazem parte de um Acordo Comercial!
+      // Assim o saldo não fica duplicado e apenas a conta do Acordo é exibida no A Receber.
+      const unagreedOrders = (pendingOrders || []).filter(o => {
+        const notesStr = o.notes || '';
+        if (notesStr.includes('[ACORDO COMERCIAL') || notesStr.includes('agreementId') || notesStr.includes('Vinculado ao Acordo')) {
+          return false;
+        }
+        return true;
+      });
+      setAllTimePendingOrders(unagreedOrders);
 
       // Buscar histórico completo de todas as entradas/recebimentos (pedidos pagos ou com sinal)
       const { data: paidOrders } = await supabase
