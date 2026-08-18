@@ -124,8 +124,8 @@ export const WhatsAppBillingModal: React.FC<WhatsAppBillingModalProps> = ({ isOp
               grandPending: cData.totalAmount,
               companyName: settings.systemName,
               companyColor: settings.primaryColor,
-              pixKey: settings.pixKey,
-              workingHours: settings.workingHours
+              pixKey: settings.pixKey ?? undefined,
+              workingHours: settings.workingHours ?? undefined
             });
           } else {
             const latestOrder = cData.orders?.[0];

@@ -8,6 +8,8 @@ import { format, addDays, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
+import { newAgreementId } from '@/services/installmentService';
+import { parsePaymentMetadata, serializePaymentMetadata } from '@/utils/paymentHelper';
 import { useCompanySettings } from '@/contexts/CompanySettingsContext';
 import { formatCurrency } from '@/utils/currencyFormatter';
 import { sendEvolutionText } from '@/services/whatsappService';
@@ -149,6 +151,11 @@ export const CreateInstallmentAgreementModal: React.FC<CreateInstallmentAgreemen
       const selectedOrders = clientData.orders.filter(o => selectedOrderIds.includes(o.id));
       const orderNumbersStr = selectedOrders.map(o => `#${o.order_number || o.id.slice(0, 4)}`).join(', ');
 
+      // Identidade do acordo: amarra parcelas e pedidos, e é o que permite
+      // editar, agrupar e evitar a contagem em dobro no "A Receber".
+      const agreementId = newAgreementId();
+      const selectedOrderIdList = selectedOrders.map(o => o.id);
+
       // 1. Se houve sinal / entrada paga hoje, registra como receita quitada em caixa
       if (downPayment > 0) {
         await supabase.from('financial_transactions').insert({
@@ -160,7 +167,7 @@ export const CreateInstallmentAgreementModal: React.FC<CreateInstallmentAgreemen
           payment_method: paymentMethod,
           date: new Date().toISOString(),
           status: 'paid',
-          notes: JSON.stringify({ clientName: clientData.name, isDownPayment: true })
+          notes: JSON.stringify({ agreementId, clientName: clientData.name, isDownPayment: true })
         });
       }
 
@@ -179,11 +186,14 @@ export const CreateInstallmentAgreementModal: React.FC<CreateInstallmentAgreemen
           due_date: inst.dueDate,
           status: 'pending',
           notes: JSON.stringify({
+            agreementId,
+            clientId: clientData.id,
             clientName: clientData.name,
             clientPhone: clientData.phone,
             installmentIndex: inst.index,
             totalInstallments: installmentCount,
             associatedOrders: orderNumbersStr,
+            associatedOrderIds: selectedOrderIdList,
             notifyGabi: true,
             autoRemindDue: autoRemindDue,
             reminderTiming: reminderTiming,
@@ -192,6 +202,23 @@ export const CreateInstallmentAgreementModal: React.FC<CreateInstallmentAgreemen
             reminded_dates: []
           })
         });
+      }
+
+      // 2b. Marca os pedidos como cobertos pelo acordo.
+      // Sem isso o pedido continua "pendente" e o sistema cobra duas vezes:
+      // uma pelo pedido original e outra pela parcela gerada dele.
+      for (const ord of selectedOrders) {
+        const { cleanNotes, metadata } = parsePaymentMetadata((ord as any).notes);
+        await supabase
+          .from('orders')
+          .update({
+            notes: serializePaymentMetadata(cleanNotes, {
+              ...metadata,
+              agreementId,
+              agreementCreatedAt: new Date().toISOString(),
+            } as any),
+          })
+          .eq('id', ord.id);
       }
 
       // 3. Notificação da Gabi Secretária via WhatsApp para o Cliente

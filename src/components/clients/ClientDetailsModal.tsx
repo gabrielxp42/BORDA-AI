@@ -181,7 +181,7 @@ export const ClientDetailsModal: React.FC<ClientDetailsModalProps> = ({
       grandPending,
       companyName: settings.systemName,
       companyColor: settings.primaryColor,
-      pixKey: settings.pixKey
+      pixKey: settings.pixKey ?? undefined
     });
 
     toast.success('🖨️ Extrato consolidado enviado para impressão!');

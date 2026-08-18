@@ -375,8 +375,8 @@ export const WebGLDustTransition: React.FC<WebGLDustTransitionProps> = ({
         if (e < 1) {
           raf = requestAnimationFrame(frame);
         } else {
-          gl.clearColor(0, 0, 0, 0);
-          gl.clear(gl.COLOR_BUFFER_BIT);
+          gl?.clearColor(0, 0, 0, 0);
+          if (gl) gl.clear(gl.COLOR_BUFFER_BIT);
           finish();
         }
       };

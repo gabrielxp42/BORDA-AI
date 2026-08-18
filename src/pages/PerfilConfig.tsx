@@ -23,7 +23,8 @@ import {
   Users,
   Plus,
   Trash2,
-  Smartphone
+  Smartphone,
+  Crown,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { CloudSyncMigrationBanner } from '../components/ui/CloudSyncMigrationBanner';

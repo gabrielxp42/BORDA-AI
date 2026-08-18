@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { parseLocalDate, toLocalDateInput } from '@/utils/dateHelper';
 import ReactDOM from 'react-dom';
 import { X, FileText, Printer, Send, Trash2, Calendar, User, Package, DollarSign, Layers, CheckCircle2, AlertCircle, Download, Plus, Edit2 } from 'lucide-react';
 import { printOrderReceipt } from '@/services/pdfGenerator';
@@ -284,7 +285,7 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
 
   const handleStartQuickEdit = () => {
     setTempNotes(cleanNotes || '');
-    setTempDueDate(order.due_date ? format(new Date(order.due_date), 'yyyy-MM-dd') : '');
+    setTempDueDate(toLocalDateInput(order.due_date));
     setTempItems(JSON.parse(JSON.stringify(order.order_items || order.items || [])));
     setIsQuickEditing(true);
   };
@@ -441,7 +442,7 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                   ) : (
                     <p className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1 justify-end">
                       <Calendar className="h-3.5 w-3.5 text-purple-400" />
-                      {format(new Date(order.due_date), 'dd/MM/yyyy')}
+                      {format(parseLocalDate(order.due_date)!, 'dd/MM/yyyy')}
                     </p>
                   )}
                 </div>

@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { parseLocalDate, toLocalDateInput } from '@/utils/dateHelper';
 import { X, Clock, Send, CheckCircle2, Search, Filter, AlertCircle, Building, User, Plus } from 'lucide-react';
 import { format, subMonths } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -80,7 +81,7 @@ export const ReceberDetailsModal: React.FC<ReceberDetailsModalProps> = ({
     pendingTransactions
       .filter(t => t.status !== 'paid')
       .forEach(t => {
-        const created = new Date(t.due_date || t.date || Date.now());
+        const created = parseLocalDate(t.due_date) || parseLocalDate(t.date) || new Date();
         const monthStr = format(created, 'MM/yyyy');
         const val = Number(t.amount || 0);
 
@@ -383,7 +384,7 @@ export const ReceberDetailsModal: React.FC<ReceberDetailsModalProps> = ({
                             <span>Vencimento Combinado:</span>
                             <input 
                               type="date"
-                              value={o.due_date ? format(new Date(o.due_date), 'yyyy-MM-dd') : ''}
+                              value={toLocalDateInput(o.due_date)}
                               onChange={async (e) => {
                                 const newDate = e.target.value;
                                 try {

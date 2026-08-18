@@ -59,6 +59,37 @@ export function getWhatsAppWebLink(phone: string, message: string): string {
   return `https://wa.me/${cleanPhone}?text=${encodedText}`;
 }
 
+/**
+ * Resolve a instância do WhatsApp do USUÁRIO LOGADO — e só dele.
+ *
+ * Regra de ouro: cobranças, faturas e avisos saem sempre do WhatsApp de quem
+ * está usando o sistema. Nunca da instância de outro usuário, mesmo que o
+ * servidor Evolution e a API key sejam compartilhados pela empresa. Misturar
+ * isso faz o cliente receber mensagem do número errado.
+ */
+export async function resolveUserInstance(): Promise<string> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user?.id) {
+    throw new Error('Sessão expirada. Entre novamente para enviar mensagens.');
+  }
+
+  const { data: prof } = await supabase
+    .from('profiles')
+    .select('whatsapp_instance_id')
+    .eq('id', user.id)
+    .maybeSingle();
+
+  const instancia = prof?.whatsapp_instance_id
+    || `borda_${user.id.replace(/-/g, '').substring(0, 10)}`;
+
+  if (!instancia) {
+    throw new Error('Seu WhatsApp não está conectado. Leia o QR Code em Configurações.');
+  }
+
+  console.log(`[WhatsApp] Instância do usuário logado: ${instancia}`);
+  return instancia;
+}
+
 export interface WhatsAppCredentials {
   apiUrl: string;
   apiKey: string;
@@ -400,28 +431,9 @@ export async function sendEvolutionText(phone: string, message: string): Promise
   const typingDelayMs = calculateHumanTypingDelay(safeMessage);
   await waitAntiBanJitterDelay(safeMessage.length);
 
-  let userInstanceId: string | undefined = undefined;
-  try {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user?.id) {
-      const { data: prof } = await supabase
-        .from('profiles')
-        .select('whatsapp_instance_id')
-        .eq('id', user.id)
-        .maybeSingle();
-      if (prof?.whatsapp_instance_id) {
-        userInstanceId = prof.whatsapp_instance_id;
-      }
-    }
-  } catch (e) {
-    console.warn('[WhatsApp] Falha ao obter whatsapp_instance_id do perfil:', e);
-  }
-
+  // A instância vem SEMPRE do usuário logado — nunca de outro perfil.
+  const targetInstance = await resolveUserInstance();
   const creds = await getEvolutionCredentials();
-  const targetInstance = userInstanceId || creds?.instanceId;
-  if (!targetInstance) {
-    throw new Error('Instância do WhatsApp não encontrada para este usuário. Por favor, conecte seu WhatsApp nas configurações.');
-  }
 
   // 1. Tenta envio REST direto com parâmetro de presença/delay oficial da Evolution API v2
   if (creds && creds.apiUrl && creds.apiKey) {
@@ -585,28 +597,9 @@ export async function sendEvolutionMedia(
 
   const formattedPhone = formatWhatsAppNumber(options.phone);
 
-  let userInstanceId: string | undefined = undefined;
-  try {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user?.id) {
-      const { data: prof } = await supabase
-        .from('profiles')
-        .select('whatsapp_instance_id')
-        .eq('id', user.id)
-        .maybeSingle();
-      if (prof?.whatsapp_instance_id) {
-        userInstanceId = prof.whatsapp_instance_id;
-      }
-    }
-  } catch (e) {
-    console.warn('[WhatsApp] Falha ao obter whatsapp_instance_id do perfil:', e);
-  }
-
+  // A instância vem SEMPRE do usuário logado — nunca de outro perfil.
+  const targetInstance = await resolveUserInstance();
   const creds = await getEvolutionCredentials();
-  const targetInstance = userInstanceId || creds?.instanceId;
-  if (!targetInstance) {
-    throw new Error('Instância do WhatsApp não encontrada. Conecte seu WhatsApp nas configurações.');
-  }
 
   const isImage = options.mediaType === 'image';
   const fileName = options.mediaName || (isImage ? 'imagem.jpg' : 'Orcamento.pdf');

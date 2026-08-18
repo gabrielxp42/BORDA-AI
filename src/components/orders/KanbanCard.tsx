@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
+import { parseLocalDate, toLocalDateInput } from '@/utils/dateHelper';
 import ReactDOM from 'react-dom';
-import { 
-  Building, Package, FileText, Printer, Send, Play, GripVertical, Calendar 
+import {
+  Building, Package, FileText, Printer, Send, Play, GripVertical, Calendar, Check
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { Draggable } from '@hello-pangea/dnd';
@@ -341,18 +342,28 @@ export const KanbanCard: React.FC<KanbanCardProps> = ({
                 </button>
               </div>
 
-              {/* Advance Status button */}
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onAdvanceStatus(order);
-                }}
-                className="text-[11px] font-black px-2.5 py-1.5 rounded-lg bg-purple-500/15 hover:bg-purple-500/25 text-purple-700 dark:text-purple-300 border border-purple-500/30 flex items-center gap-1 transition-all active:scale-[0.97] whitespace-nowrap cursor-pointer"
-              >
-                <Play className="h-3 w-3 fill-current text-purple-700 dark:text-purple-300" />
-                <span>{order.status === 'completed' ? 'Reiniciar' : 'Avançar'}</span>
-              </button>
+              {/* Avançar etapa. Na última fila o pedido some do quadro em vez de
+                  voltar ao início — "Reiniciar" fazia o pedido pronto renascer
+                  como pendente, que nunca é o que o operador quer. */}
+              {order.status !== 'delivered' && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onAdvanceStatus(order);
+                  }}
+                  className={`text-[11px] font-black px-2.5 py-1.5 rounded-lg border flex items-center gap-1 transition-all active:scale-[0.97] whitespace-nowrap cursor-pointer ${
+                    order.status === 'completed'
+                      ? 'bg-teal-500/15 hover:bg-teal-500/25 text-teal-700 dark:text-teal-300 border-teal-500/30'
+                      : 'bg-purple-500/15 hover:bg-purple-500/25 text-purple-700 dark:text-purple-300 border-purple-500/30'
+                  }`}
+                >
+                  {order.status === 'completed'
+                    ? <Check className="h-3 w-3" />
+                    : <Play className="h-3 w-3 fill-current text-purple-700 dark:text-purple-300" />}
+                  <span>{order.status === 'completed' ? 'Concluir' : 'Avançar'}</span>
+                </button>
+              )}
             </div>
           </div>
 
@@ -371,7 +382,7 @@ export const KanbanCard: React.FC<KanbanCardProps> = ({
               {order.due_date && (
                 <span className="text-amber-600 dark:text-amber-400 font-extrabold flex items-center gap-0.5" title="Data limite / Prazo">
                   <Calendar className="h-2.5 w-2.5" />
-                  Entrega: {format(new Date(order.due_date), 'dd/MM')}
+                  Entrega: {format(parseLocalDate(order.due_date)!, 'dd/MM')}
                 </span>
               )}
             </div>

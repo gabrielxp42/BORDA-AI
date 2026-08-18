@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { parseLocalDate, toLocalDateInput } from '@/utils/dateHelper';
 import { 
   CreditCard, Search, Calendar, AlertTriangle, CheckCircle2, Clock, 
   Send, FileText, User, Building, Phone, DollarSign, Plus, ChevronRight, ChevronDown,
@@ -11,6 +12,10 @@ import { useProfile } from '@/contexts/ProfileContext';
 import { useCompanySettings } from '@/contexts/CompanySettingsContext';
 import { printClientStatementPDF } from '@/services/pdfGenerator';
 import { sendEvolutionText } from '@/services/whatsappService';
+import { groupIntoAgreements, Agreement } from '@/services/installmentService';
+import { AgreementsPanel } from '@/components/billing/AgreementsPanel';
+import { AgreementDetailsModal } from '@/components/billing/AgreementDetailsModal';
+import { parsePaymentMetadata } from '@/utils/paymentHelper';
 import { formatCurrency } from '@/utils/currencyFormatter';
 import { format, differenceInDays, parseISO, addDays } from 'date-fns';
 import { toast } from 'sonner';
@@ -65,15 +70,23 @@ interface RecentPaidOrder {
 }
 
 interface CobrancasHubProps {
-  isOpen: boolean;
-  onClose: () => void;
+  /** Omitido quando o hub é usado como PÁGINA (rota /cobrancas): fica sempre aberto. */
+  isOpen?: boolean;
+  onClose?: () => void;
 }
 
 export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) => {
+  // Como página não existe prop isOpen; nesse caso o hub está sempre visível.
+  const modoPagina = isOpen === undefined;
+  const aberto = modoPagina ? true : !!isOpen;
+  const fechar = onClose ?? (() => {});
   const { isUnlocked } = useProfile();
   const { settings } = useCompanySettings();
   const [loading, setLoading] = useState(true);
   const [pendingOrders, setPendingOrders] = useState<PendingOrder[]>([]);
+  const [agreements, setAgreements] = useState<Agreement[]>([]);
+  const [vista, setVista] = useState<'faturas' | 'parcelas'>('faturas');
+  const [acordoAberto, setAcordoAberto] = useState<Agreement | null>(null);
   const [recentPaidOrders, setRecentPaidOrders] = useState<RecentPaidOrder[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterTopic, setFilterTopic] = useState<'all' | 'critical' | 'recent_overdue' | 'upcoming' | 'vip'>('all');
@@ -98,19 +111,20 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
   const [selectedClientForInstallments, setSelectedClientForInstallments] = useState<ClientDebts | null>(null);
 
   useEffect(() => {
-    if (isOpen) {
+    if (aberto) {
       fetchPendingOrders();
+      fetchAgreements();
       fetchRecentPaidOrders();
     }
-  }, [isOpen]);
+  }, [aberto]);
 
   const handleCloseHub = () => {
-    onClose();
+    fechar();
   };
 
   // Suporte a Tecla ESC inteligente para fechar o modo de cobrança
   useEffect(() => {
-    if (!isOpen) return;
+    if (!aberto) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -144,8 +158,8 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [
-    isOpen,
-    onClose,
+    aberto,
+    fechar,
     selectedOrderForDetails,
     selectedClientForWhatsAppModal,
     selectedOrderForCollectionModal,
@@ -173,12 +187,41 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setPendingOrders((data as any) || []);
+
+      // Pedido já coberto por acordo de parcelamento não entra aqui: quem
+      // representa a dívida passa a ser a parcela. Sem isso o mesmo valor
+      // aparece duas vezes — como pedido e como parcela.
+      const semDuplicidade = ((data as any) || []).filter((o: any) => {
+        const { metadata } = parsePaymentMetadata(o.notes);
+        return !metadata.agreementId;
+      });
+
+      setPendingOrders(semDuplicidade);
     } catch (err) {
       console.error('Erro ao carregar débitos:', err);
       toast.error('Erro ao carregar faturas a receber.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  /** Carrega os acordos de parcelamento e os agrupa por identidade. */
+  const fetchAgreements = async () => {
+    try {
+      const { data: authData } = await supabase.auth.getUser();
+      const userId = authData?.user?.id;
+      if (!userId) return;
+
+      const { data, error } = await supabase
+        .from('financial_transactions')
+        .select('id, type, amount, description, category, payment_method, date, due_date, status, notes')
+        .eq('user_id', userId)
+        .eq('type', 'income');
+
+      if (error) throw error;
+      setAgreements(groupIntoAgreements(data || []));
+    } catch (err) {
+      console.error('Erro ao carregar acordos de parcelamento:', err);
     }
   };
 
@@ -234,7 +277,7 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
       map[cId].orders.push(o);
       map[cId].totalPending += pendingVal;
 
-      const dueDate = o.due_date ? new Date(o.due_date) : new Date(o.created_at);
+      const dueDate = parseLocalDate(o.due_date) || new Date(o.created_at);
       if (dueDate < now) {
         map[cId].hasOverdue = true;
         const days = differenceInDays(now, dueDate);
@@ -243,7 +286,7 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
         }
       }
 
-      if (!map[cId].oldestDueDate || new Date(dueDate) < new Date(map[cId].oldestDueDate!)) {
+      if (!map[cId].oldestDueDate || dueDate < (parseLocalDate(map[cId].oldestDueDate) || new Date(8640000000000000))) {
         map[cId].oldestDueDate = dueDate.toISOString();
       }
     });
@@ -291,7 +334,7 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
       }
       clientMap[cId].totalPending += pendingVal;
 
-      const dueDate = o.due_date ? new Date(o.due_date) : new Date(o.created_at);
+      const dueDate = parseLocalDate(o.due_date) || new Date(o.created_at);
       if (dueDate < now) {
         clientMap[cId].hasOverdue = true;
         const days = differenceInDays(now, dueDate);
@@ -406,7 +449,7 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
     setSelectedClientForInstallments(debt);
   };
 
-  if (!isOpen) return null;
+  if (!aberto) return null;
 
   return (
     <div className="fixed inset-0 z-[999999] flex items-center justify-center p-3 sm:p-6 bg-black/95 backdrop-blur-md overflow-y-auto">
@@ -635,8 +678,37 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
           </div>
         </div>
 
+        {/* Alternador: Faturas avulsas x Acordos parcelados */}
+        <div className="px-4 pt-4 flex gap-2">
+          <button
+            onClick={() => setVista('faturas')}
+            className={`flex-1 px-4 py-2.5 rounded-2xl text-xs font-black uppercase tracking-wide border transition-all ${
+              vista === 'faturas'
+                ? 'bg-purple-600 border-purple-400 text-white shadow-lg shadow-purple-600/30'
+                : 'bg-white/5 border-white/10 text-zinc-400 hover:text-white hover:bg-white/10'
+            }`}
+          >
+            Faturas a receber
+          </button>
+          <button
+            onClick={() => setVista('parcelas')}
+            className={`flex-1 px-4 py-2.5 rounded-2xl text-xs font-black uppercase tracking-wide border transition-all flex items-center justify-center gap-2 ${
+              vista === 'parcelas'
+                ? 'bg-indigo-600 border-indigo-400 text-white shadow-lg shadow-indigo-600/30'
+                : 'bg-white/5 border-white/10 text-zinc-400 hover:text-white hover:bg-white/10'
+            }`}
+          >
+            Parcelas e acordos
+            {agreements.filter(a => !a.isSettled).length > 0 && (
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-black/30 text-white">
+                {agreements.filter(a => !a.isSettled).length}
+              </span>
+            )}
+          </button>
+        </div>
+
         {/* Botões Filtros em Cards Maiores */}
-        <div className="p-4 border-b border-white/10 bg-white/[0.01] space-y-3">
+        <div className={`p-4 border-b border-white/10 bg-white/[0.01] space-y-3 ${vista === 'parcelas' ? 'hidden' : ''}`}>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
             
             <button
@@ -775,7 +847,13 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
 
         {/* Lista de Clientes */}
         <div className="flex-1 overflow-y-auto p-4 space-y-3 scrollbar-thin scrollbar-thumb-white/10">
-          {loading ? (
+          {vista === 'parcelas' ? (
+            <AgreementsPanel
+              agreements={agreements}
+              canSeeFinancials={isUnlocked}
+              onOpenAgreement={setAcordoAberto}
+            />
+          ) : loading ? (
             <div className="h-64 flex items-center justify-center text-zinc-500 text-xs font-bold gap-2">
               <Loader2 className="h-5 w-5 animate-spin text-purple-400" />
               Carregando faturas pendentes...
@@ -1108,6 +1186,14 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
           defaultStatus="paid"
         />
       )}
+
+      <AgreementDetailsModal
+        isOpen={!!acordoAberto}
+        onClose={() => setAcordoAberto(null)}
+        agreement={acordoAberto}
+        canSeeFinancials={isUnlocked}
+        onChanged={() => { fetchAgreements(); fetchPendingOrders(); }}
+      />
 
       {selectedClientForInstallments && (
         <CreateInstallmentAgreementModal

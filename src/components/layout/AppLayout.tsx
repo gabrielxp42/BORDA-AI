@@ -232,7 +232,7 @@ const DesktopSidebar: React.FC<{
 export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { settings } = useCompanySettings();
   const { activeProfile, isUnlocked, permissions } = useProfile();
-  const isChefe = activeProfile?.role === 'chefe' || isUnlocked || (permissions?.canSeeFinancials === true);
+  const isChefe = (activeProfile as any)?.role === 'chefe' || isUnlocked || (permissions?.canSeeFinancials === true);
   const { user, profile: authProfile, signOut } = useAuth();
   const navigate = useNavigate();
 

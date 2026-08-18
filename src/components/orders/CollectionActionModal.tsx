@@ -331,8 +331,8 @@ export const CollectionActionModal: React.FC<CollectionActionModalProps> = ({
               grandPending: calculatedTotalPending,
               companyName: settings.systemName || 'GUAÇU BORDADOS',
               companyColor: settings.primaryColor || '#8B5CF6',
-              pixKey: settings.pixKey,
-              workingHours: settings.workingHours
+              pixKey: settings.pixKey ?? undefined,
+              workingHours: settings.workingHours ?? undefined
             });
           } else if (singleOrder) {
             pdfBase64 = await generateOrderPDFBase64({
@@ -346,12 +346,12 @@ export const CollectionActionModal: React.FC<CollectionActionModalProps> = ({
               companyName: settings.systemName || 'GUAÇU BORDADOS',
               companySubtitle: settings.systemSubtitle || 'GESTÃO INTELIGENTE DE BORDADOS',
               companyColor: settings.primaryColor || '#8B5CF6',
-              pixKey: settings.pixKey,
-              items: (singleOrder.order_items || singleOrder.items || []).map(i => ({
+              pixKey: settings.pixKey ?? undefined,
+              items: (singleOrder.order_items || singleOrder.items || []).map((i: any) => ({
                 description: i.description,
-                quantity: i.quantity,
-                unit_price: i.unit_price,
-                total_price: i.total_price
+                quantity: Number(i.quantity || 1),
+                unitPrice: Number(i.unitPrice ?? i.unit_price ?? 0),
+                totalPrice: Number(i.totalPrice ?? i.total_price ?? (Number(i.unitPrice ?? i.unit_price ?? 0) * Number(i.quantity || 1)))
               }))
             });
           }

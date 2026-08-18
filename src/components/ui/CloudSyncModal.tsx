@@ -168,13 +168,15 @@ export const CloudSyncModal: React.FC = () => {
   if (!visible) return null;
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/80 backdrop-blur-xl animate-in fade-in duration-500">
-      <div className="relative w-full max-w-sm rounded-3xl border border-white/10 bg-gradient-to-b from-[#0f0f1a] to-[#0a0a12] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-500">
+    // Sincronização é tarefa de fundo: aparece como cartão discreto no canto,
+    // sem escurecer a tela nem bloquear o que o usuário está fazendo.
+    <div className="fixed bottom-4 right-4 z-[200] w-[min(20rem,calc(100vw-2rem))] pointer-events-none animate-in slide-in-from-bottom-4 fade-in duration-300">
+      <div className="pointer-events-auto relative rounded-2xl border border-white/10 bg-[#0f0f1a]/95 backdrop-blur-xl shadow-2xl overflow-hidden">
         
         {/* Animated background glow */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
           <div 
-            className="absolute -top-20 -left-20 w-60 h-60 rounded-full opacity-20 blur-3xl"
+            className="absolute -top-20 -left-20 w-24 h-24 rounded-full opacity-20 blur-3xl"
             style={{
               background: phase === 'success' 
                 ? 'radial-gradient(circle, #10b981, transparent)' 
@@ -185,7 +187,7 @@ export const CloudSyncModal: React.FC = () => {
             }}
           />
           <div 
-            className="absolute -bottom-20 -right-20 w-60 h-60 rounded-full opacity-15 blur-3xl"
+            className="absolute -bottom-20 -right-20 w-24 h-24 rounded-full opacity-15 blur-3xl"
             style={{
               background: phase === 'success' 
                 ? 'radial-gradient(circle, #06b6d4, transparent)' 
@@ -197,12 +199,12 @@ export const CloudSyncModal: React.FC = () => {
           />
         </div>
 
-        <div className="relative p-8 space-y-6">
+        <div className="relative p-4 space-y-3">
           
           {/* Icon */}
           <div className="flex justify-center">
             <div className={`
-              h-20 w-20 rounded-3xl flex items-center justify-center
+              h-11 w-11 rounded-2xl flex items-center justify-center
               transition-all duration-700 ease-out
               ${phase === 'detecting' ? 'bg-purple-500/20 border-2 border-purple-500/30' : ''}
               ${phase === 'uploading' ? 'bg-blue-500/20 border-2 border-blue-500/30' : ''}
@@ -210,16 +212,16 @@ export const CloudSyncModal: React.FC = () => {
               ${phase === 'error' ? 'bg-red-500/20 border-2 border-red-500/30' : ''}
             `}>
               {phase === 'detecting' && (
-                <Cloud className="h-10 w-10 text-purple-400 animate-bounce" />
+                <Cloud className="h-5 w-5 text-purple-400 animate-bounce" />
               )}
               {phase === 'uploading' && (
-                <CloudUpload className="h-10 w-10 text-blue-400" style={{ animation: 'bounce 1s ease-in-out infinite' }} />
+                <CloudUpload className="h-5 w-5 text-blue-400" style={{ animation: 'bounce 1s ease-in-out infinite' }} />
               )}
               {phase === 'success' && (
-                <Check className="h-10 w-10 text-emerald-400" style={{ animation: 'ping 0.5s ease-out' }} />
+                <Check className="h-5 w-5 text-emerald-400" style={{ animation: 'ping 0.5s ease-out' }} />
               )}
               {phase === 'error' && (
-                <AlertTriangle className="h-10 w-10 text-red-400" />
+                <AlertTriangle className="h-5 w-5 text-red-400" />
               )}
             </div>
           </div>

@@ -23,6 +23,10 @@ export interface PaymentMetadata {
   history?: PaymentHistoryEntry[];
   /** Momento em que o pedido entrou na fila "Entregue" — base do arquivamento automático. */
   deliveredAt?: string;
+  /** Acordo de parcelamento que cobre este pedido. Enquanto existir, o pedido
+   *  não deve ser cobrado separadamente — quem representa a dívida é a parcela. */
+  agreementId?: string;
+  agreementCreatedAt?: string;
 }
 
 const METADATA_REGEX = /<!--PAYMENT_METADATA:([\s\S]*?)-->/;

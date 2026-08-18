@@ -6,6 +6,7 @@ import { useCompanySettings } from '@/contexts/CompanySettingsContext';
 import { CreateClientModal } from '@/components/clients/CreateClientModal';
 import { ClientDetailsModal } from '@/components/clients/ClientDetailsModal';
 import { toast } from 'sonner';
+import { parsePaymentMetadata } from '@/utils/paymentHelper';
 import { useProfile } from '@/contexts/ProfileContext';
 import { formatCurrency } from '@/utils/currencyFormatter';
 import { printClientStatementPDF } from '@/services/pdfGenerator';
@@ -138,12 +139,15 @@ export const Clientes: React.FC = () => {
       // Busca ordens para calcular saldo pendente por cliente
       const { data: ordersData } = await supabase
         .from('orders')
-        .select('client_id, total_amount, payment_status')
+        .select('client_id, total_amount, payment_status, notes')
         .eq('user_id', userId);
 
       const pendingMap: Record<string, number> = {};
       (ordersData || []).forEach((o: any) => {
         if (!o.client_id) return;
+        // Pedido já dentro de um acordo de parcelamento não conta como dívida
+        // solta: quem representa esse saldo agora é a parcela.
+        if (parsePaymentMetadata(o.notes).metadata.agreementId) return;
         const amt = Number(o.total_amount || 0);
         if (o.payment_status === 'pending') {
           pendingMap[o.client_id] = (pendingMap[o.client_id] || 0) + amt;
@@ -179,12 +183,21 @@ export const Clientes: React.FC = () => {
     }
   };
 
-  const filteredClients = clients.filter(
-    (c) =>
-      c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      c.company_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      c.phone?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredClients = clients.filter((c) => {
+    const termo = searchTerm.toLowerCase();
+    const bateBusca =
+      c.name.toLowerCase().includes(termo) ||
+      !!c.company_name?.toLowerCase().includes(termo) ||
+      !!c.phone?.toLowerCase().includes(termo);
+
+    if (!bateBusca) return false;
+
+    // O botão "Filtrar Inadimplentes" existia mas nunca era aplicado à lista.
+    // Agora ele realmente esconde quem está com as contas em dia.
+    if (filterPendingOnly && (clientPendingMap[c.id] || 0) <= 0) return false;
+
+    return true;
+  });
 
   return (
     <div className="space-y-6 pb-20 md:pb-6">

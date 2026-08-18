@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { parseLocalDate, toLocalDateInput } from '@/utils/dateHelper';
 import { supabase } from '@/integrations/supabase/client';
 import { useProfile } from '@/contexts/ProfileContext';
 import { useCompanySettings } from '@/contexts/CompanySettingsContext';
@@ -60,6 +61,7 @@ import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
 import { formatCurrency } from '@/utils/currencyFormatter';
 import { parsePaymentMetadata, formatPaymentMethodName } from '@/utils/paymentHelper';
+import { isInstallment, parseInstallmentMeta } from '@/services/installmentService';
 import { syncLocalToCloud } from '@/utils/cloudSync';
 
 interface ClientBillingData {
@@ -130,19 +132,38 @@ export const Faturamento: React.FC = () => {
 
     // Só entra no histórico de caixa o que já foi efetivamente recebido.
     // Receita com status 'pending' é entrada futura e vive em "A Receber" até a data marcada.
+    //
+    // DEDUPLICAÇÃO: uma transação amarrada a um pedido (order_id) representa o
+    // MESMO dinheiro que a linha do pedido acima. Contar as duas era a origem
+    // do "entrada repetindo" — o caixa mostrava o valor dobrado.
+    const idsDePedidosJaListados = new Set(allTimePaidOrders.map(o => o.id));
+
     const manualEntries = financialTransactions
-      .filter(t => t.type === 'income' && (!t.status || t.status === 'paid'))
-      .map(t => ({
-        id: `tx-${t.id}`,
-        date: new Date(t.date || t.created_at),
-        title: t.description || 'Receita Direta de Caixa',
-        isOrder: false,
-        orderStatus: 'paid',
-        paymentMethod: formatPaymentMethodName(t.payment_method || 'Outros'),
-        profileName: t.created_by_profile || 'Caixa',
-        amount: Number(t.amount || 0),
-        originalTx: t
-      }));
+      .filter(t => {
+        if (t.type !== 'income') return false;
+        if (t.status && t.status !== 'paid') return false;
+        if (t.order_id && idsDePedidosJaListados.has(t.order_id)) return false;
+        return true;
+      })
+      .map(t => {
+        const ehParcela = isInstallment(t);
+        const meta = ehParcela ? parseInstallmentMeta(t.notes) : {};
+        return {
+          id: `tx-${t.id}`,
+          date: new Date(t.date || t.created_at),
+          title: t.description || 'Receita Direta de Caixa',
+          isOrder: false,
+          isInstallment: ehParcela,
+          installmentLabel: ehParcela && meta.installmentIndex
+            ? `Parcela ${meta.installmentIndex}/${meta.totalInstallments}`
+            : undefined,
+          orderStatus: 'paid',
+          paymentMethod: formatPaymentMethodName(t.payment_method || 'Outros'),
+          profileName: t.created_by_profile || 'Caixa',
+          amount: Number(t.amount || 0),
+          originalTx: t
+        };
+      });
 
     return [...orderEntries, ...manualEntries].sort((a, b) => b.date.getTime() - a.date.getTime());
   }, [allTimePaidOrders, financialTransactions]);
@@ -1357,7 +1378,7 @@ export const Faturamento: React.FC = () => {
                           <td className="px-6 py-4">
                             <input 
                               type="date"
-                              value={o.due_date ? format(new Date(o.due_date), 'yyyy-MM-dd') : ''}
+                              value={toLocalDateInput(o.due_date)}
                               onChange={async (e) => {
                                 const newDate = e.target.value;
                                 try {
@@ -1487,7 +1508,7 @@ export const Faturamento: React.FC = () => {
                       .map((tx) => (
                         <tr key={tx.id} className="hover:bg-white/5 transition-colors">
                           <td className="px-6 py-3.5 font-bold text-amber-400">
-                            {tx.due_date ? format(new Date(tx.due_date), 'dd/MM/yyyy') : 'Dia 10 (Mensal)'}
+                            {tx.due_date ? format(parseLocalDate(tx.due_date)!, 'dd/MM/yyyy') : 'Dia 10 (Mensal)'}
                           </td>
                           <td className="px-6 py-3.5 font-bold text-white">{tx.description}</td>
                           <td className="px-6 py-3.5 text-zinc-400">{tx.category || 'Gasto Fixo'}</td>

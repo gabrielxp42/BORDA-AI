@@ -98,7 +98,13 @@ export const ReceitaDetailsModal: React.FC<ReceitaDetailsModalProps> = ({
             <p className="text-center text-zinc-500 text-xs py-8">Nenhuma entrada encontrada neste filtro.</p>
           ) : (
             filteredIncomes.map(entry => (
-              <div key={entry.id} className="p-3.5 rounded-2xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 flex items-center justify-between text-xs transition-all">
+              <div key={entry.id} className={`p-3.5 rounded-2xl border flex items-center justify-between text-xs transition-all ${
+                (entry as any).isInstallment
+                  ? 'bg-indigo-500/[0.07] hover:bg-indigo-500/[0.12] border-indigo-500/25'
+                  : entry.isOrder
+                    ? 'bg-white/[0.03] hover:bg-white/[0.06] border-white/10'
+                    : 'bg-sky-500/[0.05] hover:bg-sky-500/[0.09] border-sky-500/20'
+              }`}>
                 <div className="space-y-1">
                   <p className="font-bold text-white text-xs flex items-center gap-2">
                     {entry.title}
@@ -109,6 +115,18 @@ export const ReceitaDetailsModal: React.FC<ReceitaDetailsModalProps> = ({
                           : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
                       }`}>
                         {entry.orderStatus === 'half_paid' ? '⚡ Sinal 50%' : '✅ Quitação'}
+                      </span>
+                    )}
+                    {/* Parcela não é pedido: recebe rótulo e cor próprios para
+                        o usuário não confundir uma coisa com a outra. */}
+                    {(entry as any).isInstallment && (
+                      <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                        📆 {(entry as any).installmentLabel || 'Parcela de acordo'}
+                      </span>
+                    )}
+                    {!entry.isOrder && !(entry as any).isInstallment && (
+                      <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-sky-500/20 text-sky-300 border border-sky-500/30">
+                        ✍️ Lançamento manual
                       </span>
                     )}
                   </p>

@@ -33,7 +33,7 @@ export const App: React.FC = () => {
       <CompanySettingsProvider>
         <ProfileProvider>
           <PricingProvider>
-            <Toaster theme="dark" position="top-right" richColors containerStyle={{ zIndex: 999999999 }} toastOptions={{ style: { zIndex: 999999999 } }} />
+            <Toaster theme="dark" position="top-right" richColors toastOptions={{ style: { zIndex: 999999999 } }} />
             <PricingRulesModal />
             <BrowserRouter>
               <Routes>

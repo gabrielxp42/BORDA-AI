@@ -1,3 +1,4 @@
+import { supabase } from '@/integrations/supabase/client';
 import React, { useMemo, useState } from 'react';
 import { 
   User, Calendar, CheckCircle2, AlertCircle, HandCoins, DollarSign, Package, 

@@ -882,7 +882,7 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
 
           const descText = isQuick 
             ? `Entrada: ${matrixName.replace(/^(bordado:\s*|entrada:\s*)+/gi, '').trim()}`
-            : buildItemDesc(matrixName, stitchCount, colorCount);
+            : buildItemDesc(matrixName, Number(stitchCount) || 0, Number(colorCount) || 0);
 
           const { error: itemError } = await supabase
             .from('order_items')

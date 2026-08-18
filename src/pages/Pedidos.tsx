@@ -208,9 +208,24 @@ export const Pedidos: React.FC = () => {
     if (!confirm("Tem certeza que deseja excluir este pedido?")) return;
 
     try {
+      // Antes de apagar o pedido, remove os lançamentos financeiros gerados por
+      // ele. Sem isso o valor continuava somando no faturamento mesmo depois de
+      // o pedido deixar de existir — o total nunca fechava com a realidade.
+      const { error: erroFin } = await supabase
+        .from('financial_transactions')
+        .delete()
+        .eq('order_id', orderId);
+
+      if (erroFin) {
+        console.warn('Falha ao limpar lançamentos do pedido:', erroFin.message);
+      }
+
+      // Itens do pedido (caso não haja ON DELETE CASCADE no banco)
+      await supabase.from('order_items').delete().eq('order_id', orderId);
+
       const { error } = await supabase.from('orders').delete().eq('id', orderId);
       if (error) throw error;
-      toast.success("Pedido excluído com sucesso!");
+      toast.success("Pedido e lançamentos vinculados excluídos com sucesso!");
       fetchOrders();
       if (selectedOrderForDetails?.id === orderId) {
         setSelectedOrderForDetails(null);

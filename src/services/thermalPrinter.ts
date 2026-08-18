@@ -1,3 +1,4 @@
+import { parseLocalDate } from '@/utils/dateHelper';
 import { OrderPDFData } from './pdfGenerator';
 import { parsePaymentMetadata } from '../utils/paymentHelper';
 import { format } from 'date-fns';
@@ -188,7 +189,7 @@ export const printThermalReceipt = (order: OrderPDFData, canSeeFinancials: boole
       <div style="margin-top: 8px; border-top: 1px dashed #ccc; padding-top: 5px; font-size: 10.5px;">
         ${order.dueDate ? `
         <div class="line" style="text-align: right;">
-          PREVISÃO ENTREGA: <strong>${format(new Date(order.dueDate), 'dd/MM/yyyy')}</strong>
+          PREVISÃO ENTREGA: <strong>${format(parseLocalDate(order.dueDate)!, 'dd/MM/yyyy')}</strong>
         </div>` : ''}
         
         <div class="line" style="text-align: right;">

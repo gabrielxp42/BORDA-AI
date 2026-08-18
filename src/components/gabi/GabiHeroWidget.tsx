@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { parseLocalDate, toLocalDateInput } from '@/utils/dateHelper';
 import { useNavigate } from 'react-router-dom';
 import {
   Sparkles, Brain, AlertTriangle, Clock, Users, Send,
@@ -232,7 +233,7 @@ export const GabiHeroWidget: React.FC = () => {
           items: overdueDueDate.map((o: any) => ({
             id: `overdue_${o.id}`,
             title: `Pedido #${o.order_number || o.id.slice(0,4)}`,
-            subtitle: `${o.clients?.name || 'Cliente'} - Venceu em ${format(new Date(o.due_date), 'dd/MM/yyyy')}`,
+            subtitle: `${o.clients?.name || 'Cliente'} - Venceu em ${format(parseLocalDate(o.due_date)!, 'dd/MM/yyyy')}`,
             actionPhone: o.clients?.phone,
             actionMessage: `Olá ${o.clients?.name || ''}! Atualização sobre o seu pedido #${o.order_number || o.id.slice(0,4)} na ${settings.systemName}. Estamos finalizando com prioridade total! 🧵`,
             orderUuid: o.id,

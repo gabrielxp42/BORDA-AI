@@ -1,3 +1,4 @@
+import { parseLocalDate } from '@/utils/dateHelper';
 import { parsePaymentMetadata } from '@/utils/paymentHelper';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
@@ -85,7 +86,7 @@ const getOrderHTML = (order: OrderPDFData) => {
   });
 
   const formattedDueDate = order.dueDate
-    ? new Date(order.dueDate).toLocaleDateString('pt-BR')
+    ? parseLocalDate(order.dueDate)!.toLocaleDateString('pt-BR')
     : 'A combinar';
 
   const formattedTotal = canSee
@@ -383,7 +384,7 @@ const getClientStatementHTML = (data: ClientStatementPDFData) => {
       ${data.orders.map(o => {
         const orderNumStr = o.orderNumber ? `#${o.orderNumber}` : `#${o.id.slice(0, 6)}`;
         const dateStr = new Date(o.createdAt).toLocaleDateString('pt-BR');
-        const dueStr = o.dueDate ? new Date(o.dueDate).toLocaleDateString('pt-BR') : 'A combinar';
+        const dueStr = o.dueDate ? parseLocalDate(o.dueDate)!.toLocaleDateString('pt-BR') : 'A combinar';
         const hasItems = o.items && o.items.length > 0;
 
         return `
