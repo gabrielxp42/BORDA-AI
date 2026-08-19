@@ -220,6 +220,7 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
       // representa a dívida passa a ser a parcela. Sem isso o mesmo valor
       // aparece duas vezes — como pedido e como parcela.
       const semDuplicidade = ((ordersRes.data as any) || []).filter((o: any) => {
+        if (o.payment_status === 'paid') return false;
         if (o.payment_status === 'in_agreement') return false;
         return !parsePaymentMetadata(o.notes).metadata.agreementId;
       });
@@ -304,13 +305,17 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
 
     // 1. Processa Encomendas (Orders)
     pendingOrders.forEach(o => {
+      if (o.payment_status === 'paid') return;
+      const isInAgreement = o.payment_status === 'in_agreement' || (o.notes && o.notes.includes('[ACORDO_ATIVO')) || Boolean(parsePaymentMetadata(o.notes).metadata.agreementId);
+      if (isInAgreement) return; // Débito coberto por acordo é gerenciado pelas parcelas
+
+      const pendingVal = calculateOrderPendingVal(o as any);
+      if (pendingVal <= 0) return;
+
       const cId = o.client?.id || (o.notes && o.notes.includes('client_') ? o.notes : `order_client_${o.id}`);
       const cName = o.client?.name || 'Cliente Geral';
       const cPhone = o.client?.phone || '';
       const cCompany = o.client?.company_name || '';
-
-      const isInAgreement = o.payment_status === 'in_agreement' || (o.notes && o.notes.includes('[ACORDO_ATIVO'));
-      const pendingVal = isInAgreement ? 0 : calculateOrderPendingVal(o as any);
 
       if (!map[cId]) {
         map[cId] = {
@@ -333,7 +338,7 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
       map[cId].totalPending += pendingVal;
 
       const dueDate = parseLocalDate(o.due_date) || new Date(o.created_at);
-      if (!isInAgreement && dueDate < now) {
+      if (dueDate < now) {
         map[cId].hasOverdue = true;
         const days = differenceInDays(now, dueDate);
         if (days > map[cId].overdueDays) {
@@ -348,6 +353,10 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
 
     // 2. Processa Lançamentos Manuais / Parcelas de Acordo (financial_transactions)
     pendingTransactions.forEach(t => {
+      if (t.status && t.status !== 'pending') return;
+      const amountVal = Number(t.amount || 0);
+      if (amountVal <= 0) return;
+
       let metadata: any = {};
       try {
         if (t.notes && t.notes.startsWith('{')) {
@@ -358,7 +367,6 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
       const clientName = metadata.clientName || t.description || 'Entrada Futura';
       const clientPhone = metadata.clientPhone || '';
       const isAgreement = t.category === 'Parcela de Acordo' || Boolean(metadata.associatedOrders);
-      const amountVal = Number(t.amount || 0);
 
       // Vincula ao cliente correspondente por Telefone ou Nome
       let targetKey: string | null = null;
@@ -417,7 +425,7 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
       }
     });
 
-    let list = Object.values(map);
+    let list = Object.values(map).filter(c => c.totalPending > 0);
 
     if (searchTerm.trim()) {
       const term = searchTerm.toLowerCase();
