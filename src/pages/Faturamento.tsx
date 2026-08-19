@@ -60,7 +60,7 @@ import { format, startOfMonth, endOfMonth, subMonths, eachMonthOfInterval, eachD
 import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
 import { formatCurrency } from '@/utils/currencyFormatter';
-import { parsePaymentMetadata, formatPaymentMethodName } from '@/utils/paymentHelper';
+import { parsePaymentMetadata, formatPaymentMethodName, isOrderLinkedTx } from '@/utils/paymentHelper';
 import { isInstallment, parseInstallmentMeta } from '@/services/installmentService';
 import { syncLocalToCloud } from '@/utils/cloudSync';
 
@@ -145,6 +145,7 @@ export const Faturamento: React.FC = () => {
         if (t.type !== 'income') return false;
         if (t.status && t.status !== 'paid') return false;
         if (t.order_id && idsDePedidosJaListados.has(t.order_id)) return false;
+        if (isOrderLinkedTx(t, idsDePedidosJaListados)) return false;
         return true;
       })
       .map(t => {
@@ -300,6 +301,11 @@ export const Faturamento: React.FC = () => {
     };
 
     loadTransactions();
+
+    window.addEventListener('borda_orders_changed', loadTransactions);
+    return () => {
+      window.removeEventListener('borda_orders_changed', loadTransactions);
+    };
   }, [isUnlocked]);
 
   // Persiste no localStorage como cache local (backup)
@@ -524,12 +530,16 @@ export const Faturamento: React.FC = () => {
     let incSum = 0;
     let incPaidSum = 0;
 
+    const idsDePedidosJaListados = new Set(allTimePaidOrders.map(o => o.id));
+
     financialTransactions.forEach(t => {
       const txDate = t.date ? new Date(t.date) : new Date(t.created_at);
       if (txDate >= targetMonthStart && txDate <= targetMonthEnd) {
         if (t.type === 'expense') {
           expSum += Number(t.amount || 0);
         } else if (t.type === 'income') {
+          if (isOrderLinkedTx(t, idsDePedidosJaListados)) return;
+
           const amt = Number(t.amount || 0);
           incSum += amt;
           if (!t.status || t.status === 'paid') {
@@ -540,7 +550,7 @@ export const Faturamento: React.FC = () => {
     });
 
     return { manualExpenses: expSum, manualIncomes: incSum, manualIncomesPaid: incPaidSum };
-  }, [financialTransactions, selectedMonthOffset]);
+  }, [financialTransactions, selectedMonthOffset, allTimePaidOrders]);
 
   // Total de Pedidos Pagos no Mês Selecionado pela Data do Pagamento (Regime de Caixa Efetivo)
   const paidTotalInMonth = useMemo(() => {

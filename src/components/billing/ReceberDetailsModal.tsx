@@ -472,11 +472,7 @@ export const ReceberDetailsModal: React.FC<ReceberDetailsModalProps> = ({
 
                         <button
                           onClick={() => {
-                            if (isManual) {
-                              handleMarkTransactionPaid(o.id);
-                            } else {
-                              setSelectedOrderForStatusModal(o);
-                            }
+                            setSelectedOrderForStatusModal(o);
                           }}
                           className="px-3 py-2 rounded-xl bg-purple-600/10 hover:bg-purple-600/20 text-purple-700 dark:text-purple-300 border border-purple-500/30 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
                           title="Atualizar Pagamento & Forma de Pagamento"

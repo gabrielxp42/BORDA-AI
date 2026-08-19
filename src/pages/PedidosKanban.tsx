@@ -134,6 +134,12 @@ export const PedidosKanban: React.FC<PedidosKanbanProps> = ({
   useEffect(() => {
     fetchOrders();
     
+    const handleOrdersChanged = () => {
+      fetchOrders();
+    };
+
+    window.addEventListener('borda_orders_changed', handleOrdersChanged);
+
     const channel = supabase
       .channel('schema-db-changes-kanban')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
@@ -142,6 +148,7 @@ export const PedidosKanban: React.FC<PedidosKanbanProps> = ({
       .subscribe();
 
     return () => {
+      window.removeEventListener('borda_orders_changed', handleOrdersChanged);
       supabase.removeChannel(channel);
     };
   }, []);

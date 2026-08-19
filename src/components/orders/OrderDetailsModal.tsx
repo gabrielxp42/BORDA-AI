@@ -271,6 +271,7 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
       order.total_amount = newTotal;
 
       toast.success(`Matriz "${newItemDesc}" adicionada ao pedido!`);
+      window.dispatchEvent(new CustomEvent('borda_orders_changed'));
       setNewItemDesc('');
       setNewItemQty(1);
       setNewItemPrice(0);
@@ -344,6 +345,7 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
         onOrderUpdated({ ...order, ...updates });
       }
 
+      window.dispatchEvent(new CustomEvent('borda_orders_changed'));
       setIsQuickEditing(false);
       toast.success('Alterações rápidas salvas com sucesso!');
     } catch (e: any) {

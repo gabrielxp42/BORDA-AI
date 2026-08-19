@@ -297,3 +297,31 @@ export function getDueDateAlertInfo(dueDate?: string, status?: string): DueDateA
   }
 }
 
+/**
+ * Verifica se uma transação financeira veio/representa um pedido já existente.
+ */
+export function isOrderLinkedTx(t: any, orderIdsSet?: Set<string>): boolean {
+  if (!t) return false;
+  if (t.order_id) {
+    if (!orderIdsSet || orderIdsSet.has(t.order_id)) return true;
+  }
+  if (t.notes) {
+    if (typeof t.notes === 'string') {
+      if (t.notes.includes('orderIds') || t.notes.includes('orderId') || t.notes.includes('"orderIds"')) {
+        return true;
+      }
+    } else if (typeof t.notes === 'object' && (t.notes.orderIds || t.notes.orderId)) {
+      return true;
+    }
+  }
+  const desc = (t.description || '').toLowerCase();
+  const cat = (t.category || '').toLowerCase();
+  if (
+    (cat.includes('bordado') || cat.includes('sinal') || cat.includes('venda')) &&
+    (desc.includes('pedido #') || desc.includes('recebimento pedido') || desc.includes('quitação'))
+  ) {
+    return true;
+  }
+  return false;
+}
+

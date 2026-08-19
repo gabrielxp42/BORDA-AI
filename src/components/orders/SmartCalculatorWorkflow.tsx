@@ -910,6 +910,9 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
       toast.success(initialData?.orderId ? "Pedido atualizado com sucesso!" : "Pedido criado com sucesso!");
       localStorage.removeItem('borda_order_draft'); // Limpa o rascunho após salvar com sucesso
 
+      // Notifica todas as telas do sistema (Kanban, Lista, Cobranças, Faturamento) para atualizar em tempo real
+      window.dispatchEvent(new CustomEvent('borda_orders_changed'));
+
       // 4. Fecha a modal e atualiza a interface INSTANTANEAMENTE (sem travar no botão de registrando)
       if (onOrderCreated) {
         onOrderCreated();

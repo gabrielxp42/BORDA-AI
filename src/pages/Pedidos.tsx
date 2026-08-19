@@ -146,6 +146,12 @@ export const Pedidos: React.FC = () => {
   useEffect(() => {
     fetchOrders(true);
 
+    const handleOrdersChanged = () => {
+      fetchOrders(false);
+    };
+
+    window.addEventListener('borda_orders_changed', handleOrdersChanged);
+
     const channel = supabase
       .channel('realtime-orders-list')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
@@ -154,6 +160,7 @@ export const Pedidos: React.FC = () => {
       .subscribe();
 
     return () => {
+      window.removeEventListener('borda_orders_changed', handleOrdersChanged);
       supabase.removeChannel(channel);
     };
   }, []);

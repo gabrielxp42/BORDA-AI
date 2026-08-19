@@ -72,12 +72,22 @@ export const PaymentStatusModal: React.FC<PaymentStatusModalProps> = ({
     return [];
   }, [order, orders]);
 
+  // Verifica se é uma transação manual/avulsa ou parcela de acordo
+  const isTxMode = useMemo(() => {
+    const first = targetOrders[0];
+    return Boolean(first && (first.isManualTx || first.type === 'income' || first.rawTx || first.isAgreementParcel));
+  }, [targetOrders]);
+
   const isMultiple = targetOrders.length > 1;
   const targetClient = targetOrders[0]?.client;
 
   const totalSumToPay = useMemo(() => {
+    if (isTxMode) {
+      const first = targetOrders[0];
+      return Number(first.total_amount || first.amount || 0);
+    }
     return targetOrders.reduce((acc, o) => acc + calculateOrderPendingVal(o), 0);
-  }, [targetOrders]);
+  }, [targetOrders, isTxMode]);
 
   const [status, setStatus] = useState<'pending' | 'paid' | 'half_paid'>('paid');
   const [method, setMethod] = useState<string>('pix');
@@ -147,6 +157,57 @@ export const PaymentStatusModal: React.FC<PaymentStatusModalProps> = ({
       const exactPaidAt = customPaidAt ? new Date(customPaidAt).toISOString() : new Date().toISOString();
       const operatorName = activeProfile?.name || 'Operador';
 
+      // FLUXO A: Se for Lançamento Manual / Parcela de Acordo (tabela financial_transactions)
+      if (isTxMode) {
+        const txTarget = targetOrders[0];
+        const txId = txTarget.id || txTarget.rawTx?.id;
+
+        const { error: txErr } = await supabase
+          .from('financial_transactions')
+          .update({
+            status: 'paid',
+            payment_method: selectedMethod || 'pix',
+            amount: paidVal > 0 ? paidVal : Number(txTarget.total_amount || txTarget.amount || 0),
+            date: exactPaidAt,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', txId);
+
+        if (txErr) throw txErr;
+
+        toast.success('🎉 Lançamento/Parcela quitada e registrada no caixa!');
+
+        // Notificação WhatsApp para parcela/lançamento manual
+        if (notifyWhatsApp && targetClient?.phone) {
+          const toastId = toast.loading("📲 Enviando recibo de quitação via WhatsApp...");
+          try {
+            const methodText = formatPaymentMethodName(selectedMethod) || 'N/A';
+            const desc = txTarget.description || 'Lançamento A Receber';
+            const msg = `*${settings.systemName || 'BORDA AI'}* — Comprovante de Recebimento 📋\n\n` +
+              `👤 *Cliente:* ${targetClient.name}\n` +
+              `📝 *Item:* ${desc}\n` +
+              `💰 *Valor Recebido:* R$ ${paidVal.toFixed(2)}\n` +
+              `💳 *Forma de Pagamento:* ${methodText}\n` +
+              `⏰ *Data:* ${format(new Date(exactPaidAt), "dd/MM/yyyy 'às' HH:mm")}\n\n` +
+              `Agradecemos a preferência!`;
+
+            const res = await sendEvolutionText(targetClient.phone, msg);
+            if (res) {
+              toast.success("✅ Recibo entregue no WhatsApp!", { id: toastId });
+            }
+          } catch (e) {
+            console.warn('Erro ao notificar WhatsApp:', e);
+            toast.info("WhatsApp indisponível para este envio.", { id: toastId });
+          }
+        }
+
+        window.dispatchEvent(new CustomEvent('borda_orders_changed'));
+        if (onStatusUpdated) onStatusUpdated();
+        onClose();
+        return;
+      }
+
+      // FLUXO B: Encomendas de Produção (tabela orders)
       // 1. Atualiza todos os pedidos envolvidos no banco de dados
       for (const ord of targetOrders) {
         const { cleanNotes, metadata: existingMetadata } = parsePaymentMetadata(ord.notes);
@@ -185,16 +246,21 @@ export const PaymentStatusModal: React.FC<PaymentStatusModalProps> = ({
         const { data: authUser } = await supabase.auth.getUser();
         if (authUser?.user?.id) {
           const clientNameText = targetClient?.name || 'Cliente';
+          const isHalf = status === 'half_paid';
+          const categoryText = isHalf ? 'Sinal de Pedido' : 'Venda de Bordado';
+          
           const descriptionText = isMultiple
             ? `Quitação de ${targetOrders.length} Encomendas (#${targetOrders.map(o => o.order_number || o.id.slice(0, 4)).join(', ')}) de ${clientNameText}`
-            : `Recebimento Pedido #${targetOrders[0].order_number || targetOrders[0].id.slice(0, 4)} (${clientNameText})`;
+            : isHalf
+            ? `Sinal (50%) do Pedido #${targetOrders[0].order_number || targetOrders[0].id.slice(0, 4)} de ${clientNameText}`
+            : `Recebimento Pedido #${targetOrders[0].order_number || targetOrders[0].id.slice(0, 4)} de ${clientNameText}`;
 
           await supabase.from('financial_transactions').insert({
             user_id: authUser.user.id,
             type: 'income',
             amount: paidVal,
             description: descriptionText,
-            category: 'Venda de Bordado',
+            category: categoryText,
             payment_method: selectedMethod || 'pix',
             date: exactPaidAt,
             due_date: exactPaidAt,
@@ -230,9 +296,9 @@ export const PaymentStatusModal: React.FC<PaymentStatusModalProps> = ({
             ? targetOrders.map(o => `• Pedido #${o.order_number || o.id.slice(0, 4)}: R$ ${calculateOrderExactValue(o).toFixed(2)}`).join('\n')
             : `• Pedido #${targetOrders[0].order_number || targetOrders[0].id.slice(0, 4)}: R$ ${calculateOrderExactValue(targetOrders[0]).toFixed(2)}`;
 
-          const msg = `*${settings.systemName || 'BORDA AI'}* — Confirmamos a quitação do seu pagamento! 📋\n\n` +
+          const msg = `*${settings.systemName || 'BORDA AI'}* — Confirmamos o recebimento do seu pagamento! 📋\n\n` +
             `👤 *Cliente:* ${targetClient.name}\n` +
-            `📋 *Encomendas Quitadas:*\n${ordersSummary}\n\n` +
+            `📋 *Encomendas:*\n${ordersSummary}\n\n` +
             `💰 *Status:* ${statusText}\n` +
             `💳 *Forma de Pagamento:* ${methodText}${noteText}\n` +
             `⏰ *Data do Pagamento:* ${format(new Date(exactPaidAt), "dd/MM/yyyy 'às' HH:mm")}\n\n` +
@@ -248,6 +314,7 @@ export const PaymentStatusModal: React.FC<PaymentStatusModalProps> = ({
         }
       }
 
+      window.dispatchEvent(new CustomEvent('borda_orders_changed'));
       if (onStatusUpdated) onStatusUpdated();
       onClose();
     } catch (err: any) {

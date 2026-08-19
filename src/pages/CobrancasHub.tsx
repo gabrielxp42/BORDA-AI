@@ -124,6 +124,17 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
       fetchAgreements();
       fetchRecentPaidOrders();
     }
+
+    const handleOrdersChanged = () => {
+      fetchPendingData();
+      fetchAgreements();
+      fetchRecentPaidOrders();
+    };
+
+    window.addEventListener('borda_orders_changed', handleOrdersChanged);
+    return () => {
+      window.removeEventListener('borda_orders_changed', handleOrdersChanged);
+    };
   }, [aberto]);
 
   const handleCloseHub = () => {
@@ -1155,9 +1166,9 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
                                 <div className="pt-1 grid grid-cols-2 gap-1.5">
                                   <button
                                     type="button"
-                                    onClick={() => handleMarkManualTxPaid(tx.id)}
+                                    onClick={() => setSelectedOrderForPaymentModal(tx)}
                                     className="py-1.5 px-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-600 text-emerald-800 dark:text-emerald-200 hover:text-white border border-emerald-300 dark:border-emerald-500/30 text-[10px] font-black transition-all flex items-center justify-center gap-1 cursor-pointer active:scale-95"
-                                    title="Dar baixa e marcar como recebido no caixa"
+                                    title="Abrir modal para dar baixa, selecionar forma de pagamento e enviar recibo no WhatsApp"
                                   >
                                     <DollarSign className="h-3 w-3 text-emerald-600 dark:text-emerald-400" /> Quitar
                                   </button>
