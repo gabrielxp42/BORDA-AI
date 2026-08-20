@@ -216,17 +216,28 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
 
       if (ordersRes.error) throw ordersRes.error;
 
-      // Pedido já coberto por acordo de parcelamento não entra aqui: quem
-      // representa a dívida passa a ser a parcela. Sem isso o mesmo valor
-      // aparece duas vezes — como pedido e como parcela.
+      // Pedido já coberto por acordo de parcelamento não entra avulso aqui: quem
+      // representa a dívida passa a ser a parcela do acordo.
       const semDuplicidade = ((ordersRes.data as any) || []).filter((o: any) => {
         if (o.payment_status === 'paid') return false;
         if (o.payment_status === 'in_agreement') return false;
         return !parsePaymentMetadata(o.notes).metadata.agreementId;
       });
 
+      // Filtra transações pendentes excluindo qualquer uma que já tenha sido quitada
+      const txs = ((txsRes.data as any) || []).filter((t: any) => {
+        if (t.status && t.status !== 'pending') return false;
+        if (t.notes && typeof t.notes === 'string') {
+          try {
+            const meta = JSON.parse(t.notes);
+            if (meta.paidAt) return false;
+          } catch (e) {}
+        }
+        return true;
+      });
+
       setPendingOrders(semDuplicidade);
-      setPendingTransactions((txsRes.data as any) || []);
+      setPendingTransactions(txs);
     } catch (err) {
       console.error('Erro ao carregar débitos e faturas:', err);
       toast.error('Erro ao carregar faturas a receber.');
@@ -242,16 +253,20 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
       const userId = authData?.user?.id;
       if (!userId) return;
 
-      const { data, error } = await supabase
+      const { data: txs, error } = await supabase
         .from('financial_transactions')
-        .select('id, type, amount, description, category, payment_method, date, due_date, status, notes')
+        .select('*')
         .eq('user_id', userId)
-        .eq('type', 'income');
+        .eq('type', 'income')
+        .order('due_date', { ascending: true });
 
       if (error) throw error;
-      setAgreements(groupIntoAgreements(data || []));
+
+      // Agrupa todas as transações de parcelas em acordos legíveis
+      const agrupados = groupIntoAgreements(txs || []);
+      setAgreements(agrupados);
     } catch (err) {
-      console.error('Erro ao carregar acordos de parcelamento:', err);
+      console.error('Erro ao carregar acordos:', err);
     }
   };
 
@@ -298,7 +313,7 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
     }
   };
 
-  // Agrupa os débitos por cliente (Encomendas + Entradas Manuais + Acordos) sem duplicar valores
+  // Agrupa os débitos por cliente (Encomendas + Entradas Manuais + Acordos)
   const { clientDebtsList, rawMap } = useMemo(() => {
     const map: Record<string, ClientDebts> = {};
     const now = new Date();
@@ -310,7 +325,6 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
       if (isInAgreement) return; // Débito coberto por acordo é gerenciado pelas parcelas
 
       const pendingVal = calculateOrderPendingVal(o as any);
-      if (pendingVal <= 0) return;
 
       const cId = o.client?.id || (o.notes && o.notes.includes('client_') ? o.notes : `order_client_${o.id}`);
       const cName = o.client?.name || 'Cliente Geral';
@@ -425,7 +439,7 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
       }
     });
 
-    let list = Object.values(map).filter(c => c.totalPending > 0);
+    let list = Object.values(map).filter(c => c.orders.length > 0 || c.manualTxs.length > 0);
 
     if (searchTerm.trim()) {
       const term = searchTerm.toLowerCase();
@@ -1091,10 +1105,10 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
                                     isInAgreement
                                       ? 'bg-purple-500/20 text-purple-700 dark:text-purple-300 border border-purple-400/40'
                                       : ord.payment_status === 'half_paid'
-                                      ? 'bg-blue-500/15 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-500/30'
+                                      ? 'bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-400/40'
                                       : 'bg-rose-500/15 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-500/30'
                                   }`}>
-                                    {isInAgreement ? '🤝 Em Acordo' : ord.payment_status === 'half_paid' ? 'Sinal 50%' : 'Pendente'}
+                                    {isInAgreement ? '🤝 Em Acordo' : ord.payment_status === 'half_paid' ? '🟡 Sinal Pago' : 'Pendente'}
                                   </span>
                                 </div>
 
