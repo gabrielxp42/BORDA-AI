@@ -57,8 +57,9 @@ export const PWAManager: React.FC = () => {
         registration = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
         console.log('[PWA] Service Worker registrado com sucesso!');
 
-        // Verifica se já há uma atualização aguardando
+        // Se houver uma atualização aguardando, ativa-a imediatamente
         if (registration.waiting) {
+          registration.waiting.postMessage({ type: 'SKIP_WAITING' });
           setWaitingWorker(registration.waiting);
           setSwUpdateAvailable(true);
         }
@@ -69,6 +70,7 @@ export const PWAManager: React.FC = () => {
           if (newWorker) {
             newWorker.addEventListener('statechange', () => {
               if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                newWorker.postMessage({ type: 'SKIP_WAITING' });
                 setWaitingWorker(newWorker);
                 setSwUpdateAvailable(true);
               }

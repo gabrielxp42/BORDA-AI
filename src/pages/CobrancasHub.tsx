@@ -1087,36 +1087,73 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
                           {debt.orders.map(ord => {
                             const isInAgreement = ord.payment_status === 'in_agreement' || (ord.notes && ord.notes.includes('[ACORDO_ATIVO'));
                             const pendingVal = isInAgreement ? 0 : calculateOrderPendingVal(ord as any);
+                            const totalVal = calculateOrderExactValue(ord as any);
+                            const { metadata } = parsePaymentMetadata(ord.notes);
+                            const depositVal = metadata.depositAmount || (ord.payment_status === 'half_paid' ? totalVal * 0.5 : 0);
+                            const isHalf = ord.payment_status === 'half_paid';
+
+                            const dueStr = ord.due_date || ord.created_at;
+                            const dueTs = dueStr ? parseLocalDate(dueStr)?.getTime() || new Date(dueStr).getTime() : Date.now();
+                            const todayTs = new Date().setHours(0, 0, 0, 0);
+                            const isOverdue = dueTs < todayTs;
+                            const isDueToday = dueTs >= todayTs && dueTs < todayTs + 86400000;
+                            const overdueDays = isOverdue ? differenceInDays(new Date(), new Date(dueTs)) : 0;
 
                             return (
                               <div
                                 key={ord.id}
                                 onClick={() => setSelectedOrderForDetails(ord)}
-                                className="p-4 rounded-2xl bg-white dark:bg-zinc-950 border border-slate-200 dark:border-white/10 hover:border-purple-400 dark:hover:border-purple-500/60 hover:bg-slate-50 dark:hover:bg-zinc-900/60 active:scale-[0.98] transition-all space-y-3 group shadow-sm cursor-pointer select-none"
+                                className="p-4 rounded-2xl bg-white dark:bg-zinc-950 border border-slate-200 dark:border-white/10 hover:border-purple-400 dark:hover:border-purple-500/60 hover:bg-slate-50 dark:hover:bg-zinc-900/60 active:scale-[0.98] transition-all space-y-2.5 group shadow-sm cursor-pointer select-none"
                               >
-                                <div className="flex items-center justify-between">
-                                  <div className="flex items-center gap-1.5">
-                                    <span className="font-black text-slate-900 dark:text-white text-xs group-hover:text-purple-700 dark:group-hover:text-purple-300 transition-colors flex items-center gap-1">
-                                      Pedido #{ord.order_number || ord.id.slice(0, 4)}
+                                <div className="flex items-center justify-between gap-1">
+                                  <div className="flex items-center gap-1.5 min-w-0">
+                                    <span className="font-black text-slate-900 dark:text-white text-xs group-hover:text-purple-700 dark:group-hover:text-purple-300 transition-colors flex items-center gap-1 truncate">
+                                      🧵 Pedido #{ord.order_number || ord.id.slice(0, 4)}
                                     </span>
-                                    <ExternalLink className="h-3 w-3 text-purple-600 dark:text-purple-400 opacity-60 group-hover:opacity-100 transition-opacity" />
+                                    <ExternalLink className="h-3 w-3 text-purple-600 dark:text-purple-400 opacity-60 group-hover:opacity-100 transition-opacity shrink-0" />
                                   </div>
-                                  <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-md ${
+                                  <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-md shrink-0 ${
                                     isInAgreement
                                       ? 'bg-purple-500/20 text-purple-700 dark:text-purple-300 border border-purple-400/40'
-                                      : ord.payment_status === 'half_paid'
+                                      : isHalf
                                       ? 'bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-400/40'
                                       : 'bg-rose-500/15 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-500/30'
                                   }`}>
-                                    {isInAgreement ? '🤝 Em Acordo' : ord.payment_status === 'half_paid' ? '🟡 Sinal Pago' : 'Pendente'}
+                                    {isInAgreement ? '🤝 Em Acordo' : isHalf ? '🟡 Sinal Pago' : '⏳ Pendente'}
                                   </span>
                                 </div>
 
-                                <div className="flex items-center justify-between text-[11px] pt-1">
-                                  <span className="text-slate-500 dark:text-zinc-400">
-                                    Data: {format(new Date(ord.created_at), 'dd/MM/yyyy')}
+                                {/* Barra de Progresso visual se pagou sinal */}
+                                {isHalf && totalVal > 0 && (
+                                  <div className="space-y-1 bg-amber-500/10 dark:bg-amber-500/15 p-2 rounded-xl border border-amber-500/20">
+                                    <div className="flex items-center justify-between text-[10px] text-amber-800 dark:text-amber-300 font-semibold">
+                                      <span>Entrada: {formatCurrency(depositVal, true)}</span>
+                                      <span className="font-black">Resta: {formatCurrency(pendingVal, true)}</span>
+                                    </div>
+                                    <div className="w-full bg-slate-200 dark:bg-white/10 h-1.5 rounded-full overflow-hidden">
+                                      <div 
+                                        className="bg-amber-500 h-full rounded-full transition-all"
+                                        style={{ width: `${Math.min(100, Math.max(15, (depositVal / totalVal) * 100))}%` }}
+                                      />
+                                    </div>
+                                  </div>
+                                )}
+
+                                <div className="flex items-center justify-between text-[11px] pt-0.5">
+                                  <span className={`text-[10px] font-semibold ${
+                                    isOverdue 
+                                      ? 'text-rose-600 dark:text-rose-400 font-black' 
+                                      : isDueToday 
+                                      ? 'text-amber-600 dark:text-amber-400 font-black' 
+                                      : 'text-slate-500 dark:text-zinc-400'
+                                  }`}>
+                                    {isOverdue 
+                                      ? `⚠️ Vencido há ${overdueDays}d` 
+                                      : isDueToday 
+                                      ? '⏰ Vence Hoje' 
+                                      : `📅 Venc: ${format(new Date(dueTs), 'dd/MM/yy')}`}
                                   </span>
-                                  <span className="font-black text-purple-800 dark:text-purple-200">
+                                  <span className="font-black text-purple-800 dark:text-purple-200 text-xs">
                                     {isInAgreement ? 'Parcelado' : formatCurrency(pendingVal, true)}
                                   </span>
                                 </div>
@@ -1129,8 +1166,8 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
                                         e.stopPropagation();
                                         setSelectedOrderForPaymentModal(ord);
                                       }}
-                                      className="py-1.5 px-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-600 text-emerald-800 dark:text-emerald-200 hover:text-white border border-emerald-300 dark:border-emerald-500/30 text-[10px] font-black transition-all flex items-center justify-center gap-1 cursor-pointer active:scale-95"
-                                      title="Registrar pagamento deste pedido (Alimenta a DRE do Faturamento)"
+                                      className="py-1.5 px-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-600 text-emerald-800 dark:text-emerald-200 hover:text-white border border-emerald-300 dark:border-emerald-500/30 text-[10px] font-black transition-all flex items-center justify-center gap-1 cursor-pointer active:scale-95 shadow-sm"
+                                      title="Dar baixa e selecionar forma de pagamento"
                                     >
                                       <DollarSign className="h-3 w-3 text-emerald-600 dark:text-emerald-400" /> Quitar
                                     </button>
@@ -1141,7 +1178,7 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
                                         e.stopPropagation();
                                         setSelectedOrderForCollectionModal(ord);
                                       }}
-                                      className="py-1.5 px-2 rounded-xl bg-purple-500/15 hover:bg-purple-600 text-purple-800 dark:text-purple-200 hover:text-white border border-purple-300 dark:border-purple-500/30 text-[10px] font-black transition-all flex items-center justify-center gap-1 cursor-pointer active:scale-95"
+                                      className="py-1.5 px-2 rounded-xl bg-purple-500/15 hover:bg-purple-600 text-purple-800 dark:text-purple-200 hover:text-white border border-purple-300 dark:border-purple-500/30 text-[10px] font-black transition-all flex items-center justify-center gap-1 cursor-pointer active:scale-95 shadow-sm"
                                       title="Cobrar via WhatsApp com Evolution API"
                                     >
                                       <Send className="h-3 w-3 text-purple-600 dark:text-purple-400" /> Cobrar
@@ -1155,16 +1192,19 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
                           {/* Lançamentos Manuais / Parcelas de Acordo */}
                           {debt.manualTxs.map(tx => {
                             const dueStr = tx.due_date || tx.created_at;
-                            const dueTs = dueStr ? new Date(dueStr).getTime() : Date.now();
-                            const isOverdue = dueTs < new Date().setHours(0, 0, 0, 0);
+                            const dueTs = dueStr ? parseLocalDate(dueStr)?.getTime() || new Date(dueStr).getTime() : Date.now();
+                            const todayTs = new Date().setHours(0, 0, 0, 0);
+                            const isOverdue = dueTs < todayTs;
+                            const isDueToday = dueTs >= todayTs && dueTs < todayTs + 86400000;
+                            const overdueDays = isOverdue ? differenceInDays(new Date(), new Date(dueTs)) : 0;
 
                             return (
                               <div
                                 key={tx.id}
-                                className="p-4 rounded-2xl bg-white dark:bg-zinc-950 border border-slate-200 dark:border-white/10 hover:border-purple-400 dark:hover:border-purple-500/60 hover:bg-slate-50 dark:hover:bg-zinc-900/60 transition-all space-y-3 group shadow-sm"
+                                className="p-4 rounded-2xl bg-white dark:bg-zinc-950 border border-slate-200 dark:border-white/10 hover:border-purple-400 dark:hover:border-purple-500/60 hover:bg-slate-50 dark:hover:bg-zinc-900/60 transition-all space-y-2.5 group shadow-sm"
                               >
                                 <div className="flex items-center justify-between gap-1">
-                                  <span className="font-black text-slate-900 dark:text-white text-xs truncate">
+                                  <span className="font-black text-slate-900 dark:text-white text-xs truncate" title={tx.description}>
                                     {tx.isAgreementParcel ? `🤝 ${tx.description}` : `📝 ${tx.description || 'Entrada Futura'}`}
                                   </span>
                                   <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-md shrink-0 ${
@@ -1177,10 +1217,20 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
                                 </div>
 
                                 <div className="flex items-center justify-between text-[11px] pt-1">
-                                  <span className={`font-semibold ${isOverdue ? 'text-rose-600 dark:text-rose-400' : 'text-slate-500 dark:text-zinc-400'}`}>
-                                    Venc: {format(new Date(dueStr), 'dd/MM/yyyy')} {isOverdue && '⚠️'}
+                                  <span className={`text-[10px] font-semibold ${
+                                    isOverdue 
+                                      ? 'text-rose-600 dark:text-rose-400 font-black' 
+                                      : isDueToday 
+                                      ? 'text-amber-600 dark:text-amber-400 font-black' 
+                                      : 'text-slate-500 dark:text-zinc-400'
+                                  }`}>
+                                    {isOverdue 
+                                      ? `⚠️ Vencido há ${overdueDays}d` 
+                                      : isDueToday 
+                                      ? '⏰ Vence Hoje' 
+                                      : `📅 Venc: ${format(new Date(dueTs), 'dd/MM/yy')}`}
                                   </span>
-                                  <span className="font-black text-purple-800 dark:text-purple-200">
+                                  <span className="font-black text-purple-800 dark:text-purple-200 text-xs">
                                     {formatCurrency(tx.total_amount, true)}
                                   </span>
                                 </div>
@@ -1189,8 +1239,8 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
                                   <button
                                     type="button"
                                     onClick={() => setSelectedOrderForPaymentModal(tx)}
-                                    className="py-1.5 px-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-600 text-emerald-800 dark:text-emerald-200 hover:text-white border border-emerald-300 dark:border-emerald-500/30 text-[10px] font-black transition-all flex items-center justify-center gap-1 cursor-pointer active:scale-95"
-                                    title="Abrir modal para dar baixa, selecionar forma de pagamento e enviar recibo no WhatsApp"
+                                    className="py-1.5 px-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-600 text-emerald-800 dark:text-emerald-200 hover:text-white border border-emerald-300 dark:border-emerald-500/30 text-[10px] font-black transition-all flex items-center justify-center gap-1 cursor-pointer active:scale-95 shadow-sm"
+                                    title="Abrir modal para dar baixa e selecionar forma de pagamento"
                                   >
                                     <DollarSign className="h-3 w-3 text-emerald-600 dark:text-emerald-400" /> Quitar
                                   </button>
@@ -1207,7 +1257,7 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
                                         orders: [tx]
                                       });
                                     }}
-                                    className="py-1.5 px-2 rounded-xl bg-purple-500/15 hover:bg-purple-600 text-purple-800 dark:text-purple-200 hover:text-white border border-purple-300 dark:border-purple-500/30 text-[10px] font-black transition-all flex items-center justify-center gap-1 cursor-pointer active:scale-95"
+                                    className="py-1.5 px-2 rounded-xl bg-purple-500/15 hover:bg-purple-600 text-purple-800 dark:text-purple-200 hover:text-white border border-purple-300 dark:border-purple-500/30 text-[10px] font-black transition-all flex items-center justify-center gap-1 cursor-pointer active:scale-95 shadow-sm"
                                     title="Cobrar este lançamento via WhatsApp"
                                   >
                                     <Send className="h-3 w-3 text-purple-600 dark:text-purple-400" /> Cobrar

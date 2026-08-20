@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Send, MessageCircle, ExternalLink, CheckCircle2, FileText } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -32,33 +32,39 @@ export const WhatsAppBillingModal: React.FC<WhatsAppBillingModalProps> = ({ isOp
   const addTask = useBackgroundTasks(state => state.addTask);
   const updateTask = useBackgroundTasks(state => state.updateTask);
   const updateStep = useBackgroundTasks(state => state.updateStep);
-  const [phoneNumber, setPhoneNumber] = useState(clientData?.phone || '');
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [message, setMessage] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [sendSuccess, setSendSuccess] = useState(false);
   const [attachPDF, setAttachPDF] = useState(true);
 
+  useEffect(() => {
+    if (clientData) {
+      setPhoneNumber(clientData.phone || '');
+      const currentMonth = format(new Date(), 'MMMM', { locale: ptBR });
+      const formattedTotal = formatCurrency(clientData.totalAmount, permissions?.canSeeFinancials ?? true);
+
+      const gabiTemplates = getStoredTemplates();
+      const billingTpl = gabiTemplates.find(t => t.id === 'tpl_cobranca_pix');
+      const gabiContext = {
+        nome_cliente: clientData.name,
+        numero_pedido: `${clientData.orderCount} pedido(s)`,
+        nome_matriz: `Fechamento ${currentMonth}`,
+        valor_total: formattedTotal,
+        valor_entrada: formattedTotal,
+        chave_pix: settings.pixKey || 'Consulte a chave na oficina',
+        nome_oficina: settings.systemName,
+      };
+
+      const defaultMsg = billingTpl
+        ? formatEmbroideryTemplate(billingTpl.templateText, gabiContext)
+        : `Olá ${clientData.name}!\n\nAqui é da *${settings.systemName}*.\nSegue o seu fechamento de bordados referente a *${currentMonth}*:\n\n👕 Total de Pedidos: ${clientData.orderCount}\n💰 *Valor Total: ${formattedTotal}*\n\n🔑 PIX: *${settings.pixKey || 'Consulte a chave na oficina'}*\n\nQualquer dúvida, estamos à disposição!`;
+
+      setMessage(defaultMsg);
+    }
+  }, [clientData, isOpen, permissions, settings]);
+
   if (!isOpen || !clientData) return null;
-
-  const currentMonth = format(new Date(), 'MMMM', { locale: ptBR });
-  const formattedTotal = formatCurrency(clientData.totalAmount, permissions?.canSeeFinancials ?? true);
-
-  const gabiTemplates = getStoredTemplates();
-  const billingTpl = gabiTemplates.find(t => t.id === 'tpl_cobranca_pix');
-  const gabiContext = {
-    nome_cliente: clientData.name,
-    numero_pedido: `${clientData.orderCount} pedido(s)`,
-    nome_matriz: `Fechamento ${currentMonth}`,
-    valor_total: formattedTotal,
-    valor_entrada: formattedTotal,
-    chave_pix: settings.pixKey || 'Consulte a chave na oficina',
-    nome_oficina: settings.systemName,
-  };
-
-  const defaultMessage = billingTpl
-    ? formatEmbroideryTemplate(billingTpl.templateText, gabiContext)
-    : `Olá ${clientData.name}!\n\nAqui é da *${settings.systemName}*.\nSegue o seu fechamento de bordados referente a *${currentMonth}*:\n\n👕 Total de Pedidos: ${clientData.orderCount}\n💰 *Valor Total: ${formattedTotal}*\n\n🔑 PIX: *${settings.pixKey || 'Consulte a chave na oficina'}*\n\nQualquer dúvida, estamos à disposição!`;
-
-  const [message, setMessage] = useState(defaultMessage);
 
   const isEvolutionConnected = profile?.whatsapp_status === 'connected';
 
