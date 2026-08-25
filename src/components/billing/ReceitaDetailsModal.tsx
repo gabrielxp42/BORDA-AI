@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { X, Receipt, Trash2, Search, RotateCcw, ArrowDownLeft } from 'lucide-react';
+import { X, Receipt, Trash2, Search, RotateCcw, ArrowDownLeft, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { classifyIncome } from '@/utils/incomeKind';
 import { formatCurrency } from '@/utils/currencyFormatter';
@@ -29,13 +29,18 @@ export const ReceitaDetailsModal: React.FC<ReceitaDetailsModalProps> = ({
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isProcessing, setIsProcessing] = useState<string | null>(null);
+  const [optimisticDeletedIds, setOptimisticDeletedIds] = useState<Set<string>>(new Set());
 
   // Excluir lançamento de receita manual (financial_transactions)
   const handleDeleteTx = async (id: string, entry?: any) => {
     if (!id) return;
     if (!window.confirm('Deseja realmente remover esta entrada manual do caixa? O valor será debitado do faturamento total.')) return;
     
+    // 0ms Latência Otimista: remove o item da lista visual instantaneamente!
+    setOptimisticDeletedIds(prev => new Set(prev).add(id));
     setIsProcessing(id);
+    const toastId = toast.loading('Debitando e removendo receita do caixa...');
+
     try {
       // Se houver pedidos vinculados ao lançamento manual, desfaz a tag de acordo nos pedidos
       const txObj = entry?.originalTx;
@@ -66,12 +71,18 @@ export const ReceitaDetailsModal: React.FC<ReceitaDetailsModalProps> = ({
       const { error } = await supabase.from('financial_transactions').delete().eq('id', id);
       if (error) throw error;
       
-      toast.success('Receita manual removida do caixa com sucesso.');
+      toast.success('Receita manual removida e debitada do faturamento com sucesso.', { id: toastId });
       window.dispatchEvent(new CustomEvent('borda_orders_changed'));
       onRefreshData();
     } catch (err: any) {
       console.error('Erro ao remover receita:', err);
-      toast.error('Erro ao remover receita: ' + (err.message || ''));
+      // Em caso de falha, restaura o item na lista visual
+      setOptimisticDeletedIds(prev => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+      toast.error('Erro ao remover receita: ' + (err.message || ''), { id: toastId });
     } finally {
       setIsProcessing(null);
     }
@@ -83,7 +94,12 @@ export const ReceitaDetailsModal: React.FC<ReceitaDetailsModalProps> = ({
     const orderNum = order.order_number || order.id.slice(0, 4);
     if (!window.confirm(`Deseja estornar a baixa do Pedido #${orderNum}? O valor será debitado das receitas e o pedido retornará para "A Receber".`)) return;
 
-    setIsProcessing(order.id);
+    // 0ms Latência Otimista: esconde visualmente a baixa da lista de receitas
+    const targetKey = order.id;
+    setOptimisticDeletedIds(prev => new Set(prev).add(targetKey));
+    setIsProcessing(targetKey);
+    const toastId = toast.loading(`Estornando baixa do Pedido #${orderNum}...`);
+
     try {
       const { error } = await supabase
         .from('orders')
@@ -96,22 +112,44 @@ export const ReceitaDetailsModal: React.FC<ReceitaDetailsModalProps> = ({
 
       if (error) throw error;
 
-      toast.success(`Baixa do Pedido #${orderNum} estornada! Ele voltou para a lista de A Receber.`);
+      toast.success(`Baixa do Pedido #${orderNum} estornada! Ele voltou para a lista de A Receber.`, { id: toastId });
       window.dispatchEvent(new CustomEvent('borda_orders_changed'));
       onRefreshData();
     } catch (err: any) {
       console.error('Erro ao estornar baixa do pedido:', err);
-      toast.error('Erro ao estornar baixa: ' + (err.message || ''));
+      setOptimisticDeletedIds(prev => {
+        const next = new Set(prev);
+        next.delete(targetKey);
+        return next;
+      });
+      toast.error('Erro ao estornar baixa: ' + (err.message || ''), { id: toastId });
     } finally {
       setIsProcessing(null);
     }
   };
 
-  const filteredIncomes = useMemo(() => incomeEntries.filter(entry => 
+  // Itens visíveis filtrando os removidos otimisticamente (0ms)
+  const visibleIncomes = useMemo(() => {
+    return incomeEntries.filter(entry => {
+      const key = entry.isOrder ? entry.originalOrder?.id : entry.originalTx?.id;
+      if (key && optimisticDeletedIds.has(key)) return false;
+      if (entry.id && optimisticDeletedIds.has(entry.id)) return false;
+      return true;
+    });
+  }, [incomeEntries, optimisticDeletedIds]);
+
+  // Recalculo dos totais em tempo real com base nos itens visíveis
+  const displayPaidTotal = useMemo(() => {
+    return visibleIncomes.reduce((acc, item) => acc + Number(item.amount || 0), 0);
+  }, [visibleIncomes]);
+
+  const displayTotalRevenue = displayPaidTotal;
+
+  const filteredIncomes = useMemo(() => visibleIncomes.filter(entry => 
     (entry.title || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
     (entry.paymentMethod || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
     (entry.profileName || '').toLowerCase().includes(searchTerm.toLowerCase())
-  ), [incomeEntries, searchTerm]);
+  ), [visibleIncomes, searchTerm]);
 
   if (!isOpen) return null;
 
@@ -141,7 +179,7 @@ export const ReceitaDetailsModal: React.FC<ReceitaDetailsModalProps> = ({
         <div className="grid grid-cols-2 gap-3 sm:gap-4">
           <div className="p-4 rounded-2xl bg-emerald-50/70 dark:bg-white/5 border border-emerald-200 dark:border-white/10">
             <span className="text-[10px] text-slate-500 dark:text-zinc-400 font-bold block uppercase tracking-wider">Total Líquido Recebido</span>
-            <p className="text-xl font-black text-emerald-700 dark:text-emerald-400 mt-1">{formatCurrency(paidTotal)}</p>
+            <p className="text-xl font-black text-emerald-700 dark:text-emerald-400 mt-1">{formatCurrency(displayPaidTotal)}</p>
           </div>
           <div className="p-4 rounded-2xl bg-amber-50/70 dark:bg-white/5 border border-amber-200 dark:border-white/10">
             <span className="text-[10px] text-slate-500 dark:text-zinc-400 font-bold block uppercase tracking-wider">Faturas Pendentes</span>
@@ -180,8 +218,7 @@ export const ReceitaDetailsModal: React.FC<ReceitaDetailsModalProps> = ({
                   <div className="space-y-1 min-w-0 flex-1">
                     <p className="font-bold text-slate-900 dark:text-white text-xs flex items-center gap-2 flex-wrap">
                       <span className="truncate">{entry.title}</span>
-                      {/* Cada tipo de entrada tem rótulo e cor próprios: um sinal
-                          não pode ter a mesma cara de uma quitação total. */}
+                      {/* Cada tipo de entrada tem rótulo e cor próprios */}
                       <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase shrink-0 ${tipo.badgeClass}`}>
                         {tipo.emoji} {tipo.label}
                       </span>
@@ -212,8 +249,8 @@ export const ReceitaDetailsModal: React.FC<ReceitaDetailsModalProps> = ({
                         className="px-2.5 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-600 text-amber-800 dark:text-amber-300 hover:text-white border border-amber-300 dark:border-amber-500/40 text-[10px] font-black flex items-center gap-1 transition-all cursor-pointer active:scale-95 disabled:opacity-50"
                         title="Estornar baixa deste pedido (Reverter para 'A Receber')"
                       >
-                        <RotateCcw className="h-3 w-3" />
-                        <span>Estornar</span>
+                        {isEntryBusy ? <Loader2 className="h-3 w-3 animate-spin text-amber-500" /> : <RotateCcw className="h-3 w-3" />}
+                        <span>{isEntryBusy ? 'Estornando...' : 'Estornar'}</span>
                       </button>
                     ) : (
                       <button 
@@ -223,7 +260,7 @@ export const ReceitaDetailsModal: React.FC<ReceitaDetailsModalProps> = ({
                         className="p-1.5 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-500/20 transition-colors cursor-pointer disabled:opacity-50"
                         title="Excluir lançamento manual de receita"
                       >
-                        <Trash2 className="h-4 w-4" />
+                        {isEntryBusy ? <Loader2 className="h-4 w-4 animate-spin text-rose-500" /> : <Trash2 className="h-4 w-4" />}
                       </button>
                     )}
                   </div>
@@ -235,7 +272,7 @@ export const ReceitaDetailsModal: React.FC<ReceitaDetailsModalProps> = ({
 
         <div className="pt-3 border-t border-slate-200 dark:border-white/10 flex items-center justify-between text-xs">
           <span className="text-slate-500 dark:text-zinc-400 font-bold uppercase tracking-wider">Total Acumulado de Receitas</span>
-          <span className="text-2xl font-black text-emerald-700 dark:text-emerald-400">{formatCurrency(totalRevenue)}</span>
+          <span className="text-2xl font-black text-emerald-700 dark:text-emerald-400">{formatCurrency(displayTotalRevenue)}</span>
         </div>
       </div>
     </div>
