@@ -31,15 +31,43 @@ export const ReceitaDetailsModal: React.FC<ReceitaDetailsModalProps> = ({
   const [isProcessing, setIsProcessing] = useState<string | null>(null);
 
   // Excluir lançamento de receita manual (financial_transactions)
-  const handleDeleteTx = async (id: string) => {
+  const handleDeleteTx = async (id: string, entry?: any) => {
     if (!id) return;
-    if (!window.confirm('Deseja realmente remover esta entrada manual do caixa?')) return;
+    if (!window.confirm('Deseja realmente remover esta entrada manual do caixa? O valor será debitado do faturamento total.')) return;
     
     setIsProcessing(id);
     try {
+      // Se houver pedidos vinculados ao lançamento manual, desfaz a tag de acordo nos pedidos
+      const txObj = entry?.originalTx;
+      let assocIds: string[] = [];
+      if (txObj) {
+        if (txObj.order_id) assocIds.push(txObj.order_id);
+        try {
+          if (txObj.notes && typeof txObj.notes === 'string' && txObj.notes.includes('{')) {
+            const meta = JSON.parse(txObj.notes);
+            if (Array.isArray(meta.associatedOrderIds)) assocIds.push(...meta.associatedOrderIds);
+          }
+        } catch (e) {}
+      }
+
+      if (assocIds.length > 0) {
+        for (const ordId of assocIds) {
+          const { data: ord } = await supabase.from('orders').select('notes').eq('id', ordId).maybeSingle();
+          if (ord?.notes) {
+            const cleanedNotes = ord.notes
+              .replace(/\[ACORDO COMERCIAL[^\]]*\]/gi, '')
+              .replace(/\[ACORDO_ATIVO[^\]]*\]/gi, '')
+              .trim();
+            await supabase.from('orders').update({ notes: cleanedNotes }).eq('id', ordId);
+          }
+        }
+      }
+
       const { error } = await supabase.from('financial_transactions').delete().eq('id', id);
       if (error) throw error;
+      
       toast.success('Receita manual removida do caixa com sucesso.');
+      window.dispatchEvent(new CustomEvent('borda_orders_changed'));
       onRefreshData();
     } catch (err: any) {
       console.error('Erro ao remover receita:', err);
@@ -53,7 +81,7 @@ export const ReceitaDetailsModal: React.FC<ReceitaDetailsModalProps> = ({
   const handleEstornarOrder = async (order: any) => {
     if (!order?.id) return;
     const orderNum = order.order_number || order.id.slice(0, 4);
-    if (!window.confirm(`Deseja estornar a baixa do Pedido #${orderNum} e retornar para "A Receber"?`)) return;
+    if (!window.confirm(`Deseja estornar a baixa do Pedido #${orderNum}? O valor será debitado das receitas e o pedido retornará para "A Receber".`)) return;
 
     setIsProcessing(order.id);
     try {
@@ -69,6 +97,7 @@ export const ReceitaDetailsModal: React.FC<ReceitaDetailsModalProps> = ({
       if (error) throw error;
 
       toast.success(`Baixa do Pedido #${orderNum} estornada! Ele voltou para a lista de A Receber.`);
+      window.dispatchEvent(new CustomEvent('borda_orders_changed'));
       onRefreshData();
     } catch (err: any) {
       console.error('Erro ao estornar baixa do pedido:', err);
@@ -190,7 +219,7 @@ export const ReceitaDetailsModal: React.FC<ReceitaDetailsModalProps> = ({
                       <button 
                         type="button"
                         disabled={isEntryBusy}
-                        onClick={() => handleDeleteTx(entry.originalTx?.id)} 
+                        onClick={() => handleDeleteTx(entry.originalTx?.id, entry)} 
                         className="p-1.5 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-500/20 transition-colors cursor-pointer disabled:opacity-50"
                         title="Excluir lançamento manual de receita"
                       >
