@@ -302,15 +302,41 @@ export function getDueDateAlertInfo(dueDate?: string, status?: string): DueDateA
  */
 export function isOrderLinkedTx(t: any, orderIdsSet?: Set<string>): boolean {
   if (!t) return false;
-  if (t.order_id) {
-    if (!orderIdsSet || orderIdsSet.has(t.order_id)) return true;
+
+  // Se orderIdsSet for fornecido, verifica rigorosamente se algum orderId vinculado JÁ está no Set
+  if (orderIdsSet) {
+    if (t.order_id && orderIdsSet.has(t.order_id)) {
+      return true;
+    }
+
+    if (t.notes) {
+      try {
+        let meta: any = null;
+        if (typeof t.notes === 'string' && t.notes.includes('{')) {
+          meta = JSON.parse(t.notes);
+        } else if (typeof t.notes === 'object') {
+          meta = t.notes;
+        }
+
+        if (meta && Array.isArray(meta.orderIds)) {
+          return meta.orderIds.some((id: string) => orderIdsSet.has(id));
+        } else if (meta && meta.orderId) {
+          return orderIdsSet.has(meta.orderId);
+        }
+      } catch (e) {}
+    }
+
+    // Se possui orderIdsSet e NENHUM dos pedidos vinculados está no Set, NATIVE = false (deve aparecer na listagem de receitas/entradas)
+    return false;
   }
+
+  // Fallback se orderIdsSet não for fornecido:
+  if (t.order_id) return true;
   if (t.notes) {
-    if (typeof t.notes === 'string') {
-      if (t.notes.includes('orderIds') || t.notes.includes('orderId') || t.notes.includes('"orderIds"')) {
-        return true;
-      }
-    } else if (typeof t.notes === 'object' && (t.notes.orderIds || t.notes.orderId)) {
+    if (typeof t.notes === 'string' && (t.notes.includes('orderIds') || t.notes.includes('orderId'))) {
+      return true;
+    }
+    if (typeof t.notes === 'object' && (t.notes.orderIds || t.notes.orderId)) {
       return true;
     }
   }

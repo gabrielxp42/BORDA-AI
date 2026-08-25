@@ -37,28 +37,41 @@ export const WhatsAppBillingModal: React.FC<WhatsAppBillingModalProps> = ({ isOp
   const [sendSuccess, setSendSuccess] = useState(false);
   const [attachPDF, setAttachPDF] = useState(true);
 
+  const [message, setMessage] = useState('');
+
+  useEffect(() => {
+    if (isOpen && clientData) {
+      setPhoneNumber(clientData.phone || '');
+      setIsSending(false);
+      setSendSuccess(false);
+      setAttachPDF(true);
+
+      const currentMonth = format(new Date(), 'MMMM', { locale: ptBR });
+      const formattedTotal = formatCurrency(clientData.totalAmount, permissions?.canSeeFinancials ?? true);
+      const gabiTemplates = getStoredTemplates();
+      const billingTpl = gabiTemplates.find(t => t.id === 'tpl_cobranca_pix');
+      const gabiContext = {
+        nome_cliente: clientData.name,
+        numero_pedido: `${clientData.orderCount} pedido(s)`,
+        nome_matriz: `Fechamento ${currentMonth}`,
+        valor_total: formattedTotal,
+        valor_entrada: formattedTotal,
+        chave_pix: settings.pixKey || 'Consulte a chave na oficina',
+        nome_oficina: settings.systemName,
+      };
+
+      const defaultMessage = billingTpl
+        ? formatEmbroideryTemplate(billingTpl.templateText, gabiContext)
+        : `Olá ${clientData.name}!\n\nAqui é da *${settings.systemName}*.\nSegue o seu fechamento de bordados referente a *${currentMonth}*:\n\n👕 Total de Pedidos: ${clientData.orderCount}\n💰 *Valor Total: ${formattedTotal}*\n\n🔑 PIX: *${settings.pixKey || 'Consulte a chave na oficina'}*\n\nQualquer dúvida, estamos à disposição!`;
+
+      setMessage(defaultMessage);
+    }
+  }, [isOpen, clientData, settings, permissions]);
+
   if (!isOpen || !clientData) return null;
 
   const currentMonth = format(new Date(), 'MMMM', { locale: ptBR });
   const formattedTotal = formatCurrency(clientData.totalAmount, permissions?.canSeeFinancials ?? true);
-
-  const gabiTemplates = getStoredTemplates();
-  const billingTpl = gabiTemplates.find(t => t.id === 'tpl_cobranca_pix');
-  const gabiContext = {
-    nome_cliente: clientData.name,
-    numero_pedido: `${clientData.orderCount} pedido(s)`,
-    nome_matriz: `Fechamento ${currentMonth}`,
-    valor_total: formattedTotal,
-    valor_entrada: formattedTotal,
-    chave_pix: settings.pixKey || 'Consulte a chave na oficina',
-    nome_oficina: settings.systemName,
-  };
-
-  const defaultMessage = billingTpl
-    ? formatEmbroideryTemplate(billingTpl.templateText, gabiContext)
-    : `Olá ${clientData.name}!\n\nAqui é da *${settings.systemName}*.\nSegue o seu fechamento de bordados referente a *${currentMonth}*:\n\n👕 Total de Pedidos: ${clientData.orderCount}\n💰 *Valor Total: ${formattedTotal}*\n\n🔑 PIX: *${settings.pixKey || 'Consulte a chave na oficina'}*\n\nQualquer dúvida, estamos à disposição!`;
-
-  const [message, setMessage] = useState(defaultMessage);
 
   const isEvolutionConnected = profile?.whatsapp_status === 'connected';
 
@@ -192,8 +205,8 @@ export const WhatsAppBillingModal: React.FC<WhatsAppBillingModalProps> = ({ isOp
   };
 
   return (
-    <div className="fixed inset-0 z-[99999999] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-200">
-      <div className="bg-[#0f0f13] border border-white/10 w-full max-w-md rounded-3xl overflow-hidden shadow-2xl shadow-black relative">
+    <div className="fixed inset-0 z-[99999999] flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-md p-0 sm:p-4 animate-in fade-in duration-200">
+      <div className="bg-[#0f0f13] border border-white/10 w-full max-w-md max-h-[90dvh] overflow-y-auto custom-scrollbar rounded-t-3xl sm:rounded-3xl shadow-2xl shadow-black relative">
         
         {/* Header */}
         <div className="p-5 border-b border-white/10 flex items-center justify-between bg-gradient-to-r from-emerald-900/20 via-teal-900/20 to-purple-900/20">

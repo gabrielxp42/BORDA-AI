@@ -300,20 +300,18 @@ export const Faturamento: React.FC = () => {
       }
     };
 
+    const handleOrdersAndTransactionsChanged = () => {
+      loadTransactions();
+      fetchBillingData();
+    };
+
     loadTransactions();
 
-    window.addEventListener('borda_orders_changed', loadTransactions);
+    window.addEventListener('borda_orders_changed', handleOrdersAndTransactionsChanged);
     return () => {
-      window.removeEventListener('borda_orders_changed', loadTransactions);
+      window.removeEventListener('borda_orders_changed', handleOrdersAndTransactionsChanged);
     };
   }, [isUnlocked]);
-
-  // Persiste no localStorage como cache local (backup)
-  useEffect(() => {
-    if (finSynced && financialTransactions.length > 0) {
-      localStorage.setItem('borda_financial_transactions', JSON.stringify(financialTransactions));
-    }
-  }, [financialTransactions, finSynced]);
 
   const handleAddFinancialTransaction = async (newTx: Omit<FinancialTransaction, 'id' | 'created_at'>) => {
     const profileName = activeProfile ? (activeProfile.name || activeProfile.id) : 'Desconhecido';

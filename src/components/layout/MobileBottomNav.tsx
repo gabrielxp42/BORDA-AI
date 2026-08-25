@@ -17,19 +17,23 @@ import {
   Sun, 
   Moon, 
   Sparkles,
-  Zap
+  Zap,
+  CreditCard
 } from 'lucide-react';
 import { useProfile } from '@/contexts/ProfileContext';
 import { useCompanySettings } from '@/contexts/CompanySettingsContext';
 
 interface MobileBottomNavProps {
   onOpenNewOrder: () => void;
+  /** Abre o Hub de Cobranças. No desktop isso vive na sidebar, que some no mobile. */
+  onOpenCobrancasHub?: () => void;
   isDark: boolean;
   onToggleTheme: () => void;
 }
 
 export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
   onOpenNewOrder,
+  onOpenCobrancasHub,
   isDark,
   onToggleTheme,
 }) => {
@@ -191,6 +195,21 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
               <ShoppingBag className="h-6 w-6" />
               <span>⚡ Novo Pedido de Produção</span>
             </button>
+
+            {/* Hub de Cobranças — só o chefe cobra, e no mobile não existe sidebar */}
+            {isUnlocked && onOpenCobrancasHub && (
+              <button
+                type="button"
+                onClick={() => {
+                  setIsSheetOpen(false);
+                  onOpenCobrancasHub();
+                }}
+                className="w-full py-3.5 px-5 rounded-2xl bg-purple-500/10 border border-purple-500/30 text-purple-700 dark:text-purple-300 font-black text-sm flex items-center justify-center gap-2.5 active:scale-98 transition-all"
+              >
+                <CreditCard className="h-5 w-5" />
+                <span>Hub de Cobranças & Faturas</span>
+              </button>
+            )}
 
             {/* Ações Rápidas de Produção */}
             <div className="space-y-2">

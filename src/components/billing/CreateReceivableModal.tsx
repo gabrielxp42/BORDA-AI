@@ -254,6 +254,7 @@ export const CreateReceivableModal: React.FC<CreateReceivableModalProps> = ({
 
       toast.success(`✨ Acordo / Entrada a receber registrado com sucesso!`);
       
+      window.dispatchEvent(new CustomEvent('borda_orders_changed'));
       if (onSuccess) onSuccess();
       onClose();
     } catch (err: any) {

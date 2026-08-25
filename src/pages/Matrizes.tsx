@@ -85,7 +85,7 @@ export const Matrizes: React.FC = () => {
       });
 
       const sorted = formatted.sort((a: any, b: any) =>
-        (a.name || '').localeCompare(b.name || '')
+        (a.name || '').localeCompare(b.name || '', 'pt-BR', { sensitivity: 'base' })
       );
 
       setMatrices(sorted);

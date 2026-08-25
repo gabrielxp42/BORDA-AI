@@ -98,6 +98,7 @@ export const FinancialTransactionModal: React.FC<FinancialTransactionModalProps>
       });
 
       toast.success(isIncome ? 'Receita lançada no caixa!' : 'Despesa lançada no caixa!');
+      window.dispatchEvent(new CustomEvent('borda_orders_changed'));
       onClose();
     } catch (err) {
       console.error('Erro ao submeter transação:', err);
@@ -137,8 +138,8 @@ export const FinancialTransactionModal: React.FC<FinancialTransactionModalProps>
   ];
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-in fade-in duration-200">
-      <div className="relative w-full max-w-md rounded-3xl border border-slate-200 dark:border-white/10 bg-white dark:bg-[#0d0d14] text-slate-900 dark:text-zinc-100 shadow-2xl overflow-hidden p-6 space-y-5 animate-in zoom-in-95 duration-200">
+    <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/75 backdrop-blur-md animate-in fade-in duration-200">
+      <div className="relative w-full max-w-md max-h-[90dvh] overflow-y-auto custom-scrollbar rounded-t-3xl sm:rounded-3xl border border-slate-200 dark:border-white/10 bg-white dark:bg-[#0d0d14] text-slate-900 dark:text-zinc-100 shadow-2xl p-5 sm:p-6 space-y-5 animate-in zoom-in-95 duration-200">
         
         {/* Header */}
         <div className="flex items-center justify-between pb-4 border-b border-slate-200 dark:border-white/10">

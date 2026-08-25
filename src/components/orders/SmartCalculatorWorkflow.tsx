@@ -460,7 +460,7 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
         .select('*')
         .is('client_id', null)
         .eq('category', 'Global')
-        .order('created_at', { ascending: false });
+        .order('name', { ascending: true });
 
       if (mError) throw mError;
       
@@ -485,6 +485,9 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
           current_version: versions.find((v: any) => v.id === m.current_version_id) || versions[0],
         };
       });
+
+      // Ordenação alfabética garantida em português
+      formatted.sort((a: any, b: any) => (a.name || '').localeCompare(b.name || '', 'pt-BR', { sensitivity: 'base' }));
 
       setGlobalMatrices(formatted);
     } catch (err: any) {
@@ -513,7 +516,7 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
         .from('matrices')
         .select('*')
         .eq('client_id', clientId)
-        .order('created_at', { ascending: false });
+        .order('name', { ascending: true });
 
       if (mError) throw mError;
 
@@ -532,6 +535,9 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
         const ver = versionsData?.find(v => v.id === m.current_version_id || v.matrix_id === m.id);
         return { ...m, current_version: ver };
       });
+
+      // Ordenação alfabética garantida em português
+      combined.sort((a: any, b: any) => (a.name || '').localeCompare(b.name || '', 'pt-BR', { sensitivity: 'base' }));
 
       setClientMatrices(combined);
       if (combined.length > 0) {
@@ -1582,8 +1588,8 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
                           </div>
                         </div>
 
-                        <div className="rounded-xl border border-slate-200 dark:border-white/10 overflow-hidden bg-white dark:bg-black/40">
-                          <table className="w-full text-left text-xs">
+                        <div className="rounded-xl border border-slate-200 dark:border-white/10 overflow-x-auto bg-white dark:bg-black/40">
+                          <table className="w-full min-w-[420px] text-left text-xs">
                             <thead className="bg-slate-100 dark:bg-white/5 text-slate-700 dark:text-zinc-300 font-bold uppercase text-[9px] tracking-wider">
                               <tr>
                                 <th className="p-2.5">Matriz / Descrição</th>

@@ -619,6 +619,7 @@ export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children })
 
       {/* Mobile Bottom Navigation Bar */}
       <MobileBottomNav 
+        onOpenCobrancasHub={() => handleToggleCobrancasHub(true)}
         onOpenNewOrder={() => setIsOrderModalOpen(true)}
         isDark={isDark}
         onToggleTheme={() => setIsDark(!isDark)}

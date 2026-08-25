@@ -160,14 +160,17 @@ export const CollectionActionModal: React.FC<CollectionActionModalProps> = ({
 
   // Atualização dinâmica da mensagem
   useEffect(() => {
-    if (clientDebts) {
-      setEditablePhone(clientDebts.clientPhone || '');
-    } else if (order) {
-      const phone = order.clients?.phone || order.client?.phone || '';
-      setEditablePhone(phone);
+    if (isOpen) {
+      setIsSending(false);
+      if (clientDebts) {
+        setEditablePhone(clientDebts.clientPhone || '');
+      } else if (order) {
+        const phone = order.clients?.phone || order.client?.phone || '';
+        setEditablePhone(phone);
+      }
+      generateDynamicDraftMessage(tone, includePix, includeItems);
     }
-    generateDynamicDraftMessage(tone, includePix, includeItems);
-  }, [order, clientDebts, tone, includePix, includeItems, settings]);
+  }, [isOpen, order, clientDebts, tone, includePix, includeItems, settings]);
 
   if (!isOpen || targetOrders.length === 0) return null;
 
@@ -397,6 +400,8 @@ export const CollectionActionModal: React.FC<CollectionActionModalProps> = ({
         });
 
         handleWhatsAppDispatchError(evoErr, targetPhone, draftText, toastId);
+      } finally {
+        setIsSending(false);
       }
     }, 100);
   };

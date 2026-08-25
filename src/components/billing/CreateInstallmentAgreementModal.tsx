@@ -257,6 +257,7 @@ export const CreateInstallmentAgreementModal: React.FC<CreateInstallmentAgreemen
       }
 
       toast.success(`🎉 Acordo de ${installmentCount}x salvo com sucesso!`, { id: toastId });
+      window.dispatchEvent(new CustomEvent('borda_orders_changed'));
       if (onAgreementCreated) onAgreementCreated();
       onClose();
     } catch (err: any) {

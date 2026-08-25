@@ -14,6 +14,7 @@ import { toast } from 'sonner';
 import { formatCurrency } from '@/utils/currencyFormatter';
 import { parsePaymentMetadata, serializePaymentMetadata } from '@/utils/paymentHelper';
 import { printThermalReceipt } from '@/services/thermalPrinter';
+import { PaymentStatusModal } from './PaymentStatusModal';
 
 interface OrderDetailsModalProps {
   isOpen: boolean;
@@ -41,6 +42,7 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
   const [matrixUrls, setMatrixUrls] = useState<Record<string, string>>({});
   const [matrixPreviews, setMatrixPreviews] = useState<Record<string, string>>({});
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
 
   // States para adicionar novo bordado ao pedido existente
   const [showAddItemForm, setShowAddItemForm] = useState(false);
@@ -389,6 +391,16 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                   }`}>
                     {order.payment_status === 'paid' ? 'PAGO (100%)' : order.payment_status === 'half_paid' ? 'SINAL (50%)' : 'PENDENTE'}
                   </span>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsPaymentModalOpen(true)}
+                    className="px-2.5 py-1 rounded-xl text-[11px] font-black bg-emerald-600 hover:bg-emerald-500 text-white shadow-md transition-all flex items-center gap-1 cursor-pointer active:scale-95 ml-1"
+                    title="Registrar baixa de pagamento"
+                  >
+                    <DollarSign className="h-3.5 w-3.5" />
+                    <span>Dar Baixa</span>
+                  </button>
                 </div>
                 <p className="text-[11px] text-slate-500 dark:text-zinc-400">
                   Criado em {format(new Date(order.created_at), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}
@@ -457,8 +469,8 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                 <Layers className="h-4 w-4" style={{ color: settings.primaryColor }} /> Itens e Matrizes do Pedido
               </h4>
 
-              <div className="rounded-2xl border border-slate-200 dark:border-white/10 overflow-hidden bg-slate-50 dark:bg-white/5">
-                <table className="w-full text-left text-xs">
+              <div className="rounded-2xl border border-slate-200 dark:border-white/10 overflow-x-auto bg-slate-50 dark:bg-white/5">
+                <table className="w-full min-w-[420px] text-left text-xs">
                   <thead className="bg-slate-200/50 dark:bg-white/10 text-slate-700 dark:text-zinc-300 font-bold uppercase text-[10px]">
                     <tr>
                       <th className="p-3">Descrição / Matriz</th>
@@ -999,6 +1011,19 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
           </div>
         </div>
       )}
+
+      {/* Modal de Dar Baixa e Forma de Pagamento */}
+      <PaymentStatusModal
+        isOpen={isPaymentModalOpen}
+        onClose={() => setIsPaymentModalOpen(false)}
+        order={order}
+        isBaixaMode={true}
+        defaultStatus="paid"
+        onStatusUpdated={() => {
+          setIsPaymentModalOpen(false);
+          if (onOrderUpdated) onOrderUpdated();
+        }}
+      />
     </>
   );
 
