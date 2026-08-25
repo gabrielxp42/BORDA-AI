@@ -217,16 +217,28 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
 
       if (ordersRes.error) throw ordersRes.error;
 
-      // Pedido já coberto por acordo de parcelamento não entra aqui: quem
-      // representa a dívida passa a ser a parcela. Sem isso o mesmo valor
-      // aparece duas vezes — como pedido e como parcela.
+      // Pedido já coberto por acordo de parcelamento não entra avulso aqui: quem
+      // representa a dívida passa a ser a parcela do acordo.
       const semDuplicidade = ((ordersRes.data as any) || []).filter((o: any) => {
+        if (o.payment_status === 'paid') return false;
         if (o.payment_status === 'in_agreement') return false;
         return !parsePaymentMetadata(o.notes).metadata.agreementId;
       });
 
+      // Filtra transações pendentes excluindo qualquer uma que já tenha sido quitada
+      const txs = ((txsRes.data as any) || []).filter((t: any) => {
+        if (t.status && t.status !== 'pending') return false;
+        if (t.notes && typeof t.notes === 'string') {
+          try {
+            const meta = JSON.parse(t.notes);
+            if (meta.paidAt) return false;
+          } catch (e) {}
+        }
+        return true;
+      });
+
       setPendingOrders(semDuplicidade);
-      setPendingTransactions((txsRes.data as any) || []);
+      setPendingTransactions(txs);
     } catch (err) {
       console.error('Erro ao carregar débitos e faturas:', err);
       toast.error('Erro ao carregar faturas a receber.');
@@ -242,16 +254,20 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
       const userId = authData?.user?.id;
       if (!userId) return;
 
-      const { data, error } = await supabase
+      const { data: txs, error } = await supabase
         .from('financial_transactions')
-        .select('id, type, amount, description, category, payment_method, date, due_date, status, notes')
+        .select('*')
         .eq('user_id', userId)
-        .eq('type', 'income');
+        .eq('type', 'income')
+        .order('due_date', { ascending: true });
 
       if (error) throw error;
-      setAgreements(groupIntoAgreements(data || []));
+
+      // Agrupa todas as transações de parcelas em acordos legíveis
+      const agrupados = groupIntoAgreements(txs || []);
+      setAgreements(agrupados);
     } catch (err) {
-      console.error('Erro ao carregar acordos de parcelamento:', err);
+      console.error('Erro ao carregar acordos:', err);
     }
   };
 
@@ -298,20 +314,23 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
     }
   };
 
-  // Agrupa os débitos por cliente (Encomendas + Entradas Manuais + Acordos) sem duplicar valores
+  // Agrupa os débitos por cliente (Encomendas + Entradas Manuais + Acordos)
   const { clientDebtsList, rawMap } = useMemo(() => {
     const map: Record<string, ClientDebts> = {};
     const now = new Date();
 
     // 1. Processa Encomendas (Orders)
     pendingOrders.forEach(o => {
+      if (o.payment_status === 'paid') return;
+      const isInAgreement = o.payment_status === 'in_agreement' || (o.notes && o.notes.includes('[ACORDO_ATIVO')) || Boolean(parsePaymentMetadata(o.notes).metadata.agreementId);
+      if (isInAgreement) return; // Débito coberto por acordo é gerenciado pelas parcelas
+
+      const pendingVal = calculateOrderPendingVal(o as any);
+
       const cId = o.client?.id || (o.notes && o.notes.includes('client_') ? o.notes : `order_client_${o.id}`);
       const cName = o.client?.name || 'Cliente Geral';
       const cPhone = o.client?.phone || '';
       const cCompany = o.client?.company_name || '';
-
-      const isInAgreement = o.payment_status === 'in_agreement' || (o.notes && o.notes.includes('[ACORDO_ATIVO'));
-      const pendingVal = isInAgreement ? 0 : calculateOrderPendingVal(o as any);
 
       if (!map[cId]) {
         map[cId] = {
@@ -334,7 +353,7 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
       map[cId].totalPending += pendingVal;
 
       const dueDate = parseLocalDate(o.due_date) || new Date(o.created_at);
-      if (!isInAgreement && dueDate < now) {
+      if (dueDate < now) {
         map[cId].hasOverdue = true;
         const days = differenceInDays(now, dueDate);
         if (days > map[cId].overdueDays) {
@@ -349,6 +368,10 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
 
     // 2. Processa Lançamentos Manuais / Parcelas de Acordo (financial_transactions)
     pendingTransactions.forEach(t => {
+      if (t.status && t.status !== 'pending') return;
+      const amountVal = Number(t.amount || 0);
+      if (amountVal <= 0) return;
+
       let metadata: any = {};
       try {
         if (t.notes && t.notes.startsWith('{')) {
@@ -359,7 +382,6 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
       const clientName = metadata.clientName || t.description || 'Entrada Futura';
       const clientPhone = metadata.clientPhone || '';
       const isAgreement = t.category === 'Parcela de Acordo' || Boolean(metadata.associatedOrders);
-      const amountVal = Number(t.amount || 0);
 
       // Vincula ao cliente correspondente por Telefone ou Nome
       let targetKey: string | null = null;
@@ -418,7 +440,7 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
       }
     });
 
-    let list = Object.values(map);
+    let list = Object.values(map).filter(c => c.orders.length > 0 || c.manualTxs.length > 0);
 
     if (searchTerm.trim()) {
       const term = searchTerm.toLowerCase();
@@ -1066,36 +1088,73 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
                           {debt.orders.map(ord => {
                             const isInAgreement = ord.payment_status === 'in_agreement' || (ord.notes && ord.notes.includes('[ACORDO_ATIVO'));
                             const pendingVal = isInAgreement ? 0 : calculateOrderPendingVal(ord as any);
+                            const totalVal = calculateOrderExactValue(ord as any);
+                            const { metadata } = parsePaymentMetadata(ord.notes);
+                            const depositVal = metadata.depositAmount || (ord.payment_status === 'half_paid' ? totalVal * 0.5 : 0);
+                            const isHalf = ord.payment_status === 'half_paid';
+
+                            const dueStr = ord.due_date || ord.created_at;
+                            const dueTs = dueStr ? parseLocalDate(dueStr)?.getTime() || new Date(dueStr).getTime() : Date.now();
+                            const todayTs = new Date().setHours(0, 0, 0, 0);
+                            const isOverdue = dueTs < todayTs;
+                            const isDueToday = dueTs >= todayTs && dueTs < todayTs + 86400000;
+                            const overdueDays = isOverdue ? differenceInDays(new Date(), new Date(dueTs)) : 0;
 
                             return (
                               <div
                                 key={ord.id}
                                 onClick={() => setSelectedOrderForDetails(ord)}
-                                className="p-4 rounded-2xl bg-white dark:bg-zinc-950 border border-slate-200 dark:border-white/10 hover:border-purple-400 dark:hover:border-purple-500/60 hover:bg-slate-50 dark:hover:bg-zinc-900/60 active:scale-[0.98] transition-all space-y-3 group shadow-sm cursor-pointer select-none"
+                                className="p-4 rounded-2xl bg-white dark:bg-zinc-950 border border-slate-200 dark:border-white/10 hover:border-purple-400 dark:hover:border-purple-500/60 hover:bg-slate-50 dark:hover:bg-zinc-900/60 active:scale-[0.98] transition-all space-y-2.5 group shadow-sm cursor-pointer select-none"
                               >
-                                <div className="flex items-center justify-between">
-                                  <div className="flex items-center gap-1.5">
-                                    <span className="font-black text-slate-900 dark:text-white text-xs group-hover:text-purple-700 dark:group-hover:text-purple-300 transition-colors flex items-center gap-1">
-                                      Pedido #{ord.order_number || ord.id.slice(0, 4)}
+                                <div className="flex items-center justify-between gap-1">
+                                  <div className="flex items-center gap-1.5 min-w-0">
+                                    <span className="font-black text-slate-900 dark:text-white text-xs group-hover:text-purple-700 dark:group-hover:text-purple-300 transition-colors flex items-center gap-1 truncate">
+                                      🧵 Pedido #{ord.order_number || ord.id.slice(0, 4)}
                                     </span>
-                                    <ExternalLink className="h-3 w-3 text-purple-600 dark:text-purple-400 opacity-60 group-hover:opacity-100 transition-opacity" />
+                                    <ExternalLink className="h-3 w-3 text-purple-600 dark:text-purple-400 opacity-60 group-hover:opacity-100 transition-opacity shrink-0" />
                                   </div>
-                                  <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-md ${
+                                  <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-md shrink-0 ${
                                     isInAgreement
                                       ? 'bg-purple-500/20 text-purple-700 dark:text-purple-300 border border-purple-400/40'
-                                      : ord.payment_status === 'half_paid'
-                                      ? 'bg-blue-500/15 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-500/30'
+                                      : isHalf
+                                      ? 'bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-400/40'
                                       : 'bg-rose-500/15 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-500/30'
                                   }`}>
-                                    {isInAgreement ? '🤝 Em Acordo' : ord.payment_status === 'half_paid' ? 'Sinal 50%' : 'Pendente'}
+                                    {isInAgreement ? '🤝 Em Acordo' : isHalf ? '🟡 Sinal Pago' : '⏳ Pendente'}
                                   </span>
                                 </div>
 
-                                <div className="flex items-center justify-between text-[11px] pt-1">
-                                  <span className="text-slate-500 dark:text-zinc-400">
-                                    Data: {format(new Date(ord.created_at), 'dd/MM/yyyy')}
+                                {/* Barra de Progresso visual se pagou sinal */}
+                                {isHalf && totalVal > 0 && (
+                                  <div className="space-y-1 bg-amber-500/10 dark:bg-amber-500/15 p-2 rounded-xl border border-amber-500/20">
+                                    <div className="flex items-center justify-between text-[10px] text-amber-800 dark:text-amber-300 font-semibold">
+                                      <span>Entrada: {formatCurrency(depositVal, true)}</span>
+                                      <span className="font-black">Resta: {formatCurrency(pendingVal, true)}</span>
+                                    </div>
+                                    <div className="w-full bg-slate-200 dark:bg-white/10 h-1.5 rounded-full overflow-hidden">
+                                      <div 
+                                        className="bg-amber-500 h-full rounded-full transition-all"
+                                        style={{ width: `${Math.min(100, Math.max(15, (depositVal / totalVal) * 100))}%` }}
+                                      />
+                                    </div>
+                                  </div>
+                                )}
+
+                                <div className="flex items-center justify-between text-[11px] pt-0.5">
+                                  <span className={`text-[10px] font-semibold ${
+                                    isOverdue 
+                                      ? 'text-rose-600 dark:text-rose-400 font-black' 
+                                      : isDueToday 
+                                      ? 'text-amber-600 dark:text-amber-400 font-black' 
+                                      : 'text-slate-500 dark:text-zinc-400'
+                                  }`}>
+                                    {isOverdue 
+                                      ? `⚠️ Vencido há ${overdueDays}d` 
+                                      : isDueToday 
+                                      ? '⏰ Vence Hoje' 
+                                      : `📅 Venc: ${format(new Date(dueTs), 'dd/MM/yy')}`}
                                   </span>
-                                  <span className="font-black text-purple-800 dark:text-purple-200">
+                                  <span className="font-black text-purple-800 dark:text-purple-200 text-xs">
                                     {isInAgreement ? 'Parcelado' : formatCurrency(pendingVal, true)}
                                   </span>
                                 </div>
@@ -1108,8 +1167,8 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
                                         e.stopPropagation();
                                         setSelectedOrderForPaymentModal(ord);
                                       }}
-                                      className="py-1.5 px-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-600 text-emerald-800 dark:text-emerald-200 hover:text-white border border-emerald-300 dark:border-emerald-500/30 text-[10px] font-black transition-all flex items-center justify-center gap-1 cursor-pointer active:scale-95"
-                                      title="Registrar pagamento deste pedido (Alimenta a DRE do Faturamento)"
+                                      className="py-1.5 px-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-600 text-emerald-800 dark:text-emerald-200 hover:text-white border border-emerald-300 dark:border-emerald-500/30 text-[10px] font-black transition-all flex items-center justify-center gap-1 cursor-pointer active:scale-95 shadow-sm"
+                                      title="Dar baixa e selecionar forma de pagamento"
                                     >
                                       <DollarSign className="h-3 w-3 text-emerald-600 dark:text-emerald-400" /> Quitar
                                     </button>
@@ -1120,7 +1179,7 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
                                         e.stopPropagation();
                                         setSelectedOrderForCollectionModal(ord);
                                       }}
-                                      className="py-1.5 px-2 rounded-xl bg-purple-500/15 hover:bg-purple-600 text-purple-800 dark:text-purple-200 hover:text-white border border-purple-300 dark:border-purple-500/30 text-[10px] font-black transition-all flex items-center justify-center gap-1 cursor-pointer active:scale-95"
+                                      className="py-1.5 px-2 rounded-xl bg-purple-500/15 hover:bg-purple-600 text-purple-800 dark:text-purple-200 hover:text-white border border-purple-300 dark:border-purple-500/30 text-[10px] font-black transition-all flex items-center justify-center gap-1 cursor-pointer active:scale-95 shadow-sm"
                                       title="Cobrar via WhatsApp com Evolution API"
                                     >
                                       <Send className="h-3 w-3 text-purple-600 dark:text-purple-400" /> Cobrar
@@ -1134,8 +1193,11 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
                           {/* Lançamentos Manuais / Parcelas de Acordo */}
                           {debt.manualTxs.map(tx => {
                             const dueStr = tx.due_date || tx.created_at;
-                            const dueTs = dueStr ? new Date(dueStr).getTime() : Date.now();
-                            const isOverdue = dueTs < new Date().setHours(0, 0, 0, 0);
+                            const dueTs = dueStr ? parseLocalDate(dueStr)?.getTime() || new Date(dueStr).getTime() : Date.now();
+                            const todayTs = new Date().setHours(0, 0, 0, 0);
+                            const isOverdue = dueTs < todayTs;
+                            const isDueToday = dueTs >= todayTs && dueTs < todayTs + 86400000;
+                            const overdueDays = isOverdue ? differenceInDays(new Date(), new Date(dueTs)) : 0;
                             const isAgreement = tx.isAgreementParcel;
 
                             const handleOpenAgreementDetails = () => {
@@ -1159,7 +1221,7 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
                                 }`}
                               >
                                 <div className="flex items-center justify-between gap-1">
-                                  <span className="font-black text-slate-900 dark:text-white text-xs truncate">
+                                  <span className="font-black text-slate-900 dark:text-white text-xs truncate" title={tx.description}>
                                     {isAgreement ? `🤝 ${tx.description}` : `📝 ${tx.description || 'Entrada Futura'}`}
                                   </span>
                                   <div className="flex items-center gap-1.5 shrink-0">
@@ -1182,10 +1244,20 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
                                 </div>
 
                                 <div className="flex items-center justify-between text-[11px] pt-1">
-                                  <span className={`font-semibold ${isOverdue ? 'text-rose-600 dark:text-rose-400' : 'text-slate-500 dark:text-zinc-400'}`}>
-                                    Venc: {format(new Date(dueStr), 'dd/MM/yyyy')} {isOverdue && '⚠️'}
+                                  <span className={`text-[10px] font-semibold ${
+                                    isOverdue 
+                                      ? 'text-rose-600 dark:text-rose-400 font-black' 
+                                      : isDueToday 
+                                      ? 'text-amber-600 dark:text-amber-400 font-black' 
+                                      : 'text-slate-500 dark:text-zinc-400'
+                                  }`}>
+                                    {isOverdue 
+                                      ? `⚠️ Vencido há ${overdueDays}d` 
+                                      : isDueToday 
+                                      ? '⏰ Vence Hoje' 
+                                      : `📅 Venc: ${format(new Date(dueTs), 'dd/MM/yy')}`}
                                   </span>
-                                  <span className="font-black text-purple-800 dark:text-purple-200">
+                                  <span className="font-black text-purple-800 dark:text-purple-200 text-xs">
                                     {formatCurrency(tx.total_amount, true)}
                                   </span>
                                 </div>
@@ -1205,8 +1277,8 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
                                   <button
                                     type="button"
                                     onClick={() => setSelectedOrderForPaymentModal(tx)}
-                                    className="py-1.5 px-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-600 text-emerald-800 dark:text-emerald-200 hover:text-white border border-emerald-300 dark:border-emerald-500/30 text-[10px] font-black transition-all flex items-center justify-center gap-1 cursor-pointer active:scale-95"
-                                    title="Abrir modal para dar baixa, selecionar forma de pagamento e enviar recibo no WhatsApp"
+                                    className="py-1.5 px-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-600 text-emerald-800 dark:text-emerald-200 hover:text-white border border-emerald-300 dark:border-emerald-500/30 text-[10px] font-black transition-all flex items-center justify-center gap-1 cursor-pointer active:scale-95 shadow-sm"
+                                    title="Abrir modal para dar baixa e selecionar forma de pagamento"
                                   >
                                     <DollarSign className="h-3 w-3 text-emerald-600 dark:text-emerald-400" /> Quitar
                                   </button>
@@ -1223,7 +1295,7 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
                                         orders: [tx]
                                       });
                                     }}
-                                    className="py-1.5 px-2 rounded-xl bg-purple-500/15 hover:bg-purple-600 text-purple-800 dark:text-purple-200 hover:text-white border border-purple-300 dark:border-purple-500/30 text-[10px] font-black transition-all flex items-center justify-center gap-1 cursor-pointer active:scale-95"
+                                    className="py-1.5 px-2 rounded-xl bg-purple-500/15 hover:bg-purple-600 text-purple-800 dark:text-purple-200 hover:text-white border border-purple-300 dark:border-purple-500/30 text-[10px] font-black transition-all flex items-center justify-center gap-1 cursor-pointer active:scale-95 shadow-sm"
                                     title="Cobrar este lançamento via WhatsApp"
                                   >
                                     <Send className="h-3 w-3 text-purple-600 dark:text-purple-400" /> Cobrar

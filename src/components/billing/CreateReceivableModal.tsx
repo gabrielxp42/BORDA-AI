@@ -48,6 +48,10 @@ export const CreateReceivableModal: React.FC<CreateReceivableModalProps> = ({
   const [description, setDescription] = useState<string>('');
   const [notes, setNotes] = useState<string>('');
   const [saving, setSaving] = useState<boolean>(false);
+  const [installments, setInstallments] = useState<{ dueDate: string; amount: string }[]>([
+    { dueDate: new Date().toISOString().split('T')[0], amount: '' }
+  ]);
+  const [isMultiInstallment, setIsMultiInstallment] = useState<boolean>(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -124,12 +128,6 @@ export const CreateReceivableModal: React.FC<CreateReceivableModalProps> = ({
   };
 
   if (!isOpen) return null;
-
-  // Estado para Parcelamento Customizado (Cheques / Parcelas com datas e valores editáveis)
-  const [installments, setInstallments] = useState<{ dueDate: string; amount: string }[]>([
-    { dueDate: new Date().toISOString().split('T')[0], amount: '' }
-  ]);
-  const [isMultiInstallment, setIsMultiInstallment] = useState<boolean>(false);
 
   const handleAddInstallment = () => {
     const today = new Date();

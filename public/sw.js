@@ -1,4 +1,4 @@
-const CACHE_NAME = 'borda-ai-cache-v1.0.2';
+const CACHE_NAME = 'borda-ai-cache-v2.0.0';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -20,7 +20,7 @@ self.addEventListener('install', (event) => {
   );
 });
 
-// 2. Activate Event: Clean up old caches & claim clients immediately
+// 2. Activate Event: Clean up all old caches & claim clients immediately
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((cacheNames) => {
@@ -40,8 +40,11 @@ self.addEventListener('activate', (event) => {
 
 // 3. Listen for message from app UI (e.g. forced update button)
 self.addEventListener('message', (event) => {
-  if (event.data && event.data.type === 'SKIP_WAITING') {
+  if (event.data && (event.data.type === 'SKIP_WAITING' || event.data.type === 'CLEAR_CACHE')) {
     self.skipWaiting();
+    if (event.data.type === 'CLEAR_CACHE') {
+      caches.keys().then(keys => Promise.all(keys.map(k => caches.delete(k))));
+    }
   }
 });
 
@@ -93,20 +96,20 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Static Assets (CSS, JS, Images) -> Stale While Revalidate with guaranteed Response fallback
+  // Static Assets (CSS, JS, Images) -> Network First with Cache fallback to guarantee latest release
   event.respondWith(
-    caches.match(req).then((cachedResponse) => {
-      const fetchPromise = fetch(req)
-        .then((networkResponse) => {
-          if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
-            const responseToCache = networkResponse.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(req, responseToCache));
-          }
-          return networkResponse;
-        })
-        .catch(() => cachedResponse);
-
-      return cachedResponse || fetchPromise.catch(() => new Response('', { status: 404 }));
-    })
+    fetch(req)
+      .then((networkResponse) => {
+        if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
+          const responseToCache = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(req, responseToCache));
+        }
+        return networkResponse;
+      })
+      .catch(async () => {
+        const cached = await caches.match(req);
+        if (cached) return cached;
+        return new Response('', { status: 404 });
+      })
   );
 });

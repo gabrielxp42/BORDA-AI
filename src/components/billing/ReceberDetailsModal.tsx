@@ -4,7 +4,7 @@ import { X, Clock, Send, CheckCircle2, Search, Filter, AlertCircle, Building, Us
 import { format, subMonths } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { formatCurrency } from '@/utils/currencyFormatter';
-import { PaymentStatusModal } from '@/components/orders/PaymentStatusModal';
+import { PaymentStatusModal, calculateOrderPendingVal } from '@/components/orders/PaymentStatusModal';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
@@ -61,8 +61,7 @@ export const ReceberDetailsModal: React.FC<ReceberDetailsModalProps> = ({
       .forEach(o => {
         const created = new Date(o.created_at || Date.now());
         const monthStr = format(created, 'MM/yyyy');
-        const total = Number(o.total_amount || 0);
-        const pendingVal = o.payment_status === 'half_paid' ? total * 0.5 : total;
+        const pendingVal = calculateOrderPendingVal(o);
 
         grandPending += pendingVal;
 

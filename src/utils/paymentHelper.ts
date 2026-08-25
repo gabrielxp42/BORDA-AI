@@ -181,11 +181,14 @@ export function formatOrderPaymentBadgeDetails(
     const depositFormatted = canViewPrices ? `R$ ${depositVal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'R$ ***';
     const remainingFormatted = canViewPrices ? `R$ ${remainingVal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'R$ ***';
 
+    const isExactFifty = Math.abs(depositVal - totalAmount / 2) < 0.05;
+    const labelTitle = isExactFifty ? '🟡 Sinal (50%)' : `🟡 Sinal (${depositFormatted})`;
+
     return {
       status: 'half_paid',
-      shortLabel: '⚡ Sinal 50%',
-      badgeSubtext: `Sinal ${depositFormatted}${noteSuffix}`,
-      fullLabel: `⚡ Sinal 50%${methodSuffix} (Restam ${remainingFormatted})${noteSuffix}`,
+      shortLabel: labelTitle,
+      badgeSubtext: `Entrada ${depositFormatted} (Falta ${remainingFormatted})${noteSuffix}`,
+      fullLabel: `${labelTitle}${methodSuffix} • Resta ${remainingFormatted}${noteSuffix}`,
       methodLabel,
       paymentNote,
       depositVal: canViewPrices ? depositVal : 0,

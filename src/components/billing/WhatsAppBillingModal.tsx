@@ -32,12 +32,11 @@ export const WhatsAppBillingModal: React.FC<WhatsAppBillingModalProps> = ({ isOp
   const addTask = useBackgroundTasks(state => state.addTask);
   const updateTask = useBackgroundTasks(state => state.updateTask);
   const updateStep = useBackgroundTasks(state => state.updateStep);
-  const [phoneNumber, setPhoneNumber] = useState(clientData?.phone || '');
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [message, setMessage] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [sendSuccess, setSendSuccess] = useState(false);
   const [attachPDF, setAttachPDF] = useState(true);
-
-  const [message, setMessage] = useState('');
 
   useEffect(() => {
     if (isOpen && clientData) {
@@ -48,6 +47,7 @@ export const WhatsAppBillingModal: React.FC<WhatsAppBillingModalProps> = ({ isOp
 
       const currentMonth = format(new Date(), 'MMMM', { locale: ptBR });
       const formattedTotal = formatCurrency(clientData.totalAmount, permissions?.canSeeFinancials ?? true);
+
       const gabiTemplates = getStoredTemplates();
       const billingTpl = gabiTemplates.find(t => t.id === 'tpl_cobranca_pix');
       const gabiContext = {
@@ -72,7 +72,6 @@ export const WhatsAppBillingModal: React.FC<WhatsAppBillingModalProps> = ({ isOp
 
   const currentMonth = format(new Date(), 'MMMM', { locale: ptBR });
   const formattedTotal = formatCurrency(clientData.totalAmount, permissions?.canSeeFinancials ?? true);
-
   const isEvolutionConnected = profile?.whatsapp_status === 'connected';
 
   const handleSendEvolution = () => {
