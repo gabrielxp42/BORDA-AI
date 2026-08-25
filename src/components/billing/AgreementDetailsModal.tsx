@@ -74,6 +74,7 @@ export const AgreementDetailsModal: React.FC<AgreementDetailsModalProps> = ({
     try {
       await settleInstallment(parcela.id, { method: parcela.payment_method });
       toast.success(`Parcela ${parcela.meta.installmentIndex}/${parcela.meta.totalInstallments} quitada!`);
+      window.dispatchEvent(new CustomEvent('borda_orders_changed'));
       onChanged?.();
     } catch (err: any) {
       toast.error('Não foi possível dar baixa: ' + (err?.message || 'erro desconhecido'));

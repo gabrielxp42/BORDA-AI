@@ -5,7 +5,7 @@ import {
   Send, FileText, User, Building, Phone, DollarSign, Plus, ChevronRight, ChevronDown,
   Layers, ArrowUpRight, Filter, Sparkles, RefreshCw, X, ShieldAlert, Check,
   CheckSquare, Square, ShieldCheck, Loader2, Target, Eye, ExternalLink,
-  Package, Trophy, History, TrendingUp, Zap, Flame, Award, Activity
+  Package, Trophy, History, TrendingUp, Zap, Flame, Award, Activity, Trash2
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useProfile } from '@/contexts/ProfileContext';
@@ -108,6 +108,7 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
   const [selectedOrderForCollectionModal, setSelectedOrderForCollectionModal] = useState<any | null>(null);
   const [selectedOrderForPaymentModal, setSelectedOrderForPaymentModal] = useState<any | null>(null);
   const [selectedClientOrdersForPaymentModal, setSelectedClientOrdersForPaymentModal] = useState<any[] | null>(null);
+  const [txToDelete, setTxToDelete] = useState<any | null>(null);
 
   // Multi-seleção de Clientes para Disparo em Massa
   const [selectedClientIds, setSelectedClientIds] = useState<string[]>([]);
@@ -1135,23 +1136,49 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
                             const dueStr = tx.due_date || tx.created_at;
                             const dueTs = dueStr ? new Date(dueStr).getTime() : Date.now();
                             const isOverdue = dueTs < new Date().setHours(0, 0, 0, 0);
+                            const isAgreement = tx.isAgreementParcel;
+
+                            const handleOpenAgreementDetails = () => {
+                              const agreementId = tx.metadata?.agreementId;
+                              const matching = agreements.find(a => a.agreementId === agreementId || a.clientName.toLowerCase() === debt.clientName.toLowerCase());
+                              if (matching) {
+                                setAcordoAberto(matching);
+                              } else {
+                                toast.info('Abrindo detalhes da parcela...');
+                                setSelectedOrderForPaymentModal(tx);
+                              }
+                            };
 
                             return (
                               <div
                                 key={tx.id}
-                                className="p-4 rounded-2xl bg-white dark:bg-zinc-950 border border-slate-200 dark:border-white/10 hover:border-purple-400 dark:hover:border-purple-500/60 hover:bg-slate-50 dark:hover:bg-zinc-900/60 transition-all space-y-3 group shadow-sm"
+                                className={`p-4 rounded-2xl transition-all space-y-3 group shadow-sm ${
+                                  isAgreement
+                                    ? 'bg-gradient-to-br from-indigo-950/50 via-purple-950/40 to-zinc-950 border-2 border-indigo-500/50 hover:border-indigo-400 shadow-md shadow-indigo-950/30'
+                                    : 'bg-white dark:bg-zinc-950 border border-slate-200 dark:border-white/10 hover:border-purple-400 dark:hover:border-purple-500/60 hover:bg-slate-50 dark:hover:bg-zinc-900/60'
+                                }`}
                               >
                                 <div className="flex items-center justify-between gap-1">
                                   <span className="font-black text-slate-900 dark:text-white text-xs truncate">
-                                    {tx.isAgreementParcel ? `🤝 ${tx.description}` : `📝 ${tx.description || 'Entrada Futura'}`}
+                                    {isAgreement ? `🤝 ${tx.description}` : `📝 ${tx.description || 'Entrada Futura'}`}
                                   </span>
-                                  <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-md shrink-0 ${
-                                    tx.isAgreementParcel
-                                      ? 'bg-purple-500/20 text-purple-700 dark:text-purple-300 border border-purple-400/40'
-                                      : 'bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-400/40'
-                                  }`}>
-                                    {tx.isAgreementParcel ? 'Acordo' : 'Avulso'}
-                                  </span>
+                                  <div className="flex items-center gap-1.5 shrink-0">
+                                    <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-md ${
+                                      isAgreement
+                                        ? 'bg-indigo-500/30 text-indigo-300 border border-indigo-400/50 shadow-sm animate-pulse'
+                                        : 'bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-400/40'
+                                    }`}>
+                                      {isAgreement ? `🤝 ACORDO (${tx.metadata?.installmentIndex || '1'}/${tx.metadata?.totalInstallments || '1'})` : 'Avulso'}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => setTxToDelete(tx)}
+                                      className="p-1 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-500/10 transition-colors"
+                                      title="Excluir este lançamento a receber"
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </button>
+                                  </div>
                                 </div>
 
                                 <div className="flex items-center justify-between text-[11px] pt-1">
@@ -1163,7 +1190,18 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
                                   </span>
                                 </div>
 
-                                <div className="pt-1 grid grid-cols-2 gap-1.5">
+                                <div className={`pt-1 grid ${isAgreement ? 'grid-cols-3' : 'grid-cols-2'} gap-1.5`}>
+                                  {isAgreement && (
+                                    <button
+                                      type="button"
+                                      onClick={handleOpenAgreementDetails}
+                                      className="py-1.5 px-1.5 rounded-xl bg-indigo-500/20 hover:bg-indigo-600 text-indigo-200 hover:text-white border border-indigo-500/40 text-[9px] font-black transition-all flex items-center justify-center gap-1 cursor-pointer active:scale-95 col-span-1"
+                                      title="Ver o acordo completo com todas as parcelas e pedidos vinculados"
+                                    >
+                                      <CalendarClock className="h-3 w-3 text-indigo-300" /> Acordo
+                                    </button>
+                                  )}
+
                                   <button
                                     type="button"
                                     onClick={() => setSelectedOrderForPaymentModal(tx)}
@@ -1393,6 +1431,97 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
                 className="px-5 py-2.5 rounded-xl text-xs font-black bg-purple-600 hover:bg-purple-500 text-white transition-colors cursor-pointer active:scale-95"
               >
                 Entendido
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Segurança & Atenção para Excluir Entrada Futura */}
+      {txToDelete && (
+        <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="relative w-full max-w-md bg-white dark:bg-[#12121e] border border-rose-500/40 rounded-3xl p-6 shadow-2xl space-y-4 animate-in zoom-in-95 duration-200 text-slate-900 dark:text-zinc-100">
+            
+            {/* Header com Ícone de Alerta */}
+            <div className="flex items-center gap-3">
+              <div className="h-12 w-12 rounded-2xl bg-rose-500/20 text-rose-500 border border-rose-500/30 flex items-center justify-center shrink-0">
+                <AlertTriangle className="h-6 w-6 text-rose-500 animate-pulse" />
+              </div>
+              <div>
+                <h3 className="text-base font-black text-slate-900 dark:text-white uppercase tracking-wider">
+                  Excluir Entrada Futura
+                </h3>
+                <p className="text-xs text-rose-500 font-bold">
+                  Ação irreversível no lançamento financeiro
+                </p>
+              </div>
+            </div>
+
+            {/* Detalhes do Lançamento */}
+            <div className="p-4 rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 space-y-2 text-xs">
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500 dark:text-zinc-400 font-bold">Descrição:</span>
+                <strong className="text-slate-900 dark:text-white font-black truncate max-w-[200px]">{txToDelete.description || 'Entrada Futura'}</strong>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500 dark:text-zinc-400 font-bold">Valor:</span>
+                <strong className="text-amber-600 dark:text-amber-400 font-black">{formatCurrency(txToDelete.total_amount, true)}</strong>
+              </div>
+              {(txToDelete.metadata?.associatedOrderIds?.length > 0 || txToDelete.order_id) && (
+                <div className="pt-2 border-t border-slate-200 dark:border-white/10 text-[11px] text-amber-600 dark:text-amber-400 font-medium">
+                  ⚠️ <strong>Atenção ao Vínculo:</strong> Este lançamento possui pedido(s) associado(s). Ao excluir, o acordo será removido e os pedidos voltarão para a lista de pendências normais!
+                </div>
+              )}
+            </div>
+
+            {/* Botões de Confirmação */}
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setTxToDelete(null)}
+                className="px-4 py-2.5 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-white/10 dark:hover:bg-white/20 dark:text-zinc-300 transition-colors cursor-pointer"
+              >
+                Cancelar
+              </button>
+
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    // Desfaz vinculo nos pedidos vinculados para que voltem a ficar disponiveis
+                    const assocIds = txToDelete.metadata?.associatedOrderIds || (txToDelete.order_id ? [txToDelete.order_id] : []);
+                    if (assocIds.length > 0) {
+                      for (const ordId of assocIds) {
+                        const { data: ord } = await supabase.from('orders').select('notes').eq('id', ordId).maybeSingle();
+                        if (ord?.notes) {
+                          const cleanedNotes = ord.notes
+                            .replace(/\[ACORDO COMERCIAL[^\]]*\]/gi, '')
+                            .replace(/\[ACORDO_ATIVO[^\]]*\]/gi, '')
+                            .trim();
+                          await supabase.from('orders').update({ notes: cleanedNotes }).eq('id', ordId);
+                        }
+                      }
+                    }
+
+                    // Exclui o lancamento
+                    const { error } = await supabase.from('financial_transactions').delete().eq('id', txToDelete.id);
+                    if (error) throw error;
+
+                    toast.success('🎉 Entrada futura / lançamento excluído com sucesso!');
+                    window.dispatchEvent(new CustomEvent('borda_orders_changed'));
+                    fetchPendingData();
+                    fetchAgreements();
+                    setTxToDelete(null);
+                  } catch (err: any) {
+                    console.error(err);
+                    toast.error('Erro ao excluir lançamento: ' + (err.message || 'tente novamente'));
+                  }
+                }}
+                className="px-5 py-2.5 rounded-xl text-xs font-black bg-rose-600 hover:bg-rose-500 text-white shadow-lg shadow-rose-600/30 transition-all cursor-pointer active:scale-95 flex items-center gap-1.5"
+              >
+                <Trash2 className="h-4 w-4" />
+                <span>Sim, Excluir Lançamento</span>
               </button>
             </div>
 

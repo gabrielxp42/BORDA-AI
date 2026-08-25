@@ -303,51 +303,35 @@ export function getDueDateAlertInfo(dueDate?: string, status?: string): DueDateA
 export function isOrderLinkedTx(t: any, orderIdsSet?: Set<string>): boolean {
   if (!t) return false;
 
-  // Se orderIdsSet for fornecido, verifica rigorosamente se algum orderId vinculado JÁ está no Set
-  if (orderIdsSet) {
-    if (t.order_id && orderIdsSet.has(t.order_id)) {
-      return true;
-    }
+  // Extrai todos os IDs de pedidos potencialmente vinculados a esta transação
+  const linkedIds: string[] = [];
+  if (t.order_id) linkedIds.push(t.order_id);
 
-    if (t.notes) {
-      try {
-        let meta: any = null;
-        if (typeof t.notes === 'string' && t.notes.includes('{')) {
-          meta = JSON.parse(t.notes);
-        } else if (typeof t.notes === 'object') {
-          meta = t.notes;
-        }
-
-        if (meta && Array.isArray(meta.orderIds)) {
-          return meta.orderIds.some((id: string) => orderIdsSet.has(id));
-        } else if (meta && meta.orderId) {
-          return orderIdsSet.has(meta.orderId);
-        }
-      } catch (e) {}
-    }
-
-    // Se possui orderIdsSet e NENHUM dos pedidos vinculados está no Set, NATIVE = false (deve aparecer na listagem de receitas/entradas)
-    return false;
-  }
-
-  // Fallback se orderIdsSet não for fornecido:
-  if (t.order_id) return true;
   if (t.notes) {
-    if (typeof t.notes === 'string' && (t.notes.includes('orderIds') || t.notes.includes('orderId'))) {
-      return true;
-    }
-    if (typeof t.notes === 'object' && (t.notes.orderIds || t.notes.orderId)) {
-      return true;
-    }
+    try {
+      let meta: any = null;
+      if (typeof t.notes === 'string' && t.notes.includes('{')) {
+        meta = JSON.parse(t.notes);
+      } else if (typeof t.notes === 'object') {
+        meta = t.notes;
+      }
+
+      if (meta) {
+        if (Array.isArray(meta.associatedOrderIds)) linkedIds.push(...meta.associatedOrderIds);
+        if (Array.isArray(meta.orderIds)) linkedIds.push(...meta.orderIds);
+        if (meta.orderId) linkedIds.push(meta.orderId);
+      }
+    } catch (e) {}
   }
-  const desc = (t.description || '').toLowerCase();
-  const cat = (t.category || '').toLowerCase();
-  if (
-    (cat.includes('bordado') || cat.includes('sinal') || cat.includes('venda')) &&
-    (desc.includes('pedido #') || desc.includes('recebimento pedido') || desc.includes('quitação'))
-  ) {
-    return true;
+
+  // Se a transação não está vinculada a nenhum pedido, ela é uma Entrada Futura / Receita Direta avulsa
+  if (linkedIds.length === 0) return false;
+
+  // Se orderIdsSet for fornecido, só considera vinculada se ALGUM dos pedidos vinculados JÁ estiver no conjunto de pedidos pagos exibidos
+  if (orderIdsSet) {
+    return linkedIds.some(id => orderIdsSet.has(id));
   }
-  return false;
+
+  return true;
 }
 

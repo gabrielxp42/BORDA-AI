@@ -325,7 +325,7 @@ const getClientStatementHTML = (data: ClientStatementPDFData) => {
     <html lang="pt-BR">
     <head>
       <meta charset="UTF-8">
-      <title>Extrato Detalhado de Débitos - ${data.clientName}</title>
+      <title>Extrato Detalhado de Débitos — ${data.clientName}</title>
       <style>
         @page { size: A4; margin: 12mm; }
         * { box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; word-spacing: normal; letter-spacing: normal; }
@@ -334,11 +334,11 @@ const getClientStatementHTML = (data: ClientStatementPDFData) => {
         .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #e2e8f0; padding-bottom: 12px; margin-bottom: 16px; }
         .title { font-size: 20px; font-weight: 900; color: ${brandColor}; text-transform: uppercase; letter-spacing: -0.5px; margin: 0; }
         .subtitle { font-size: 10px; color: #64748b; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px; }
-        .client-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px 14px; margin-bottom: 16px; }
+        .client-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 12px 16px; margin-bottom: 16px; }
         .client-title { font-size: 10px; font-weight: 800; text-transform: uppercase; color: #64748b; margin-bottom: 2px; letter-spacing: 0.5px; }
-        .client-name { font-size: 15px; font-weight: 800; color: #0f172a; }
+        .client-name { font-size: 16px; font-weight: 900; color: #0f172a; }
         
-        .order-card { margin-bottom: 16px; border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden; background: #ffffff; page-break-inside: avoid; }
+        .order-card { margin-bottom: 16px; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; background: #ffffff; page-break-inside: avoid; break-inside: avoid; }
         .order-header { background: #f8fafc; padding: 10px 14px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; }
         .order-num { font-size: 13px; font-weight: 900; color: #0f172a; }
         .order-dates { font-size: 11px; color: #64748b; margin-left: 8px; }
@@ -347,7 +347,7 @@ const getClientStatementHTML = (data: ClientStatementPDFData) => {
         .half-tag { background: #eff6ff; color: #2563eb; padding: 3px 8px; border-radius: 16px; font-weight: 800; font-size: 9px; border: 1px solid #93c5fd; display: inline-block; white-space: nowrap; }
         
         table.items-table { width: 100%; border-collapse: collapse; }
-        table.items-table th { background: #f1f5f9; color: #475569; text-align: left; padding: 6px 12px; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid #cbd5e1; }
+        table.items-table th { background: ${brandColor}; color: #ffffff; text-align: left; padding: 8px 12px; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; }
         table.items-table td { padding: 8px 12px; border-bottom: 1px solid #f1f5f9; font-size: 11px; color: #334155; }
         table.items-table tr:nth-child(even) { background-color: #f8fafc; }
         
@@ -355,9 +355,9 @@ const getClientStatementHTML = (data: ClientStatementPDFData) => {
         .text-center { text-align: center; }
         .font-bold { font-weight: 700; }
         
-        .total-container { display: flex; justify-content: space-between; align-items: center; background: #0f172a; color: white; padding: 14px 18px; border-radius: 10px; margin-top: 16px; margin-bottom: 16px; }
-        .total-val { font-size: 22px; font-weight: 900; color: #ffffff; }
-        .pix-box { padding: 12px 14px; background: #fffbeb; border: 1px solid #fde68a; border-radius: 10px; color: #92400e; font-size: 11px; margin-bottom: 16px; }
+        .total-container { display: flex; justify-content: space-between; align-items: center; background: #0f172a; color: white; padding: 16px 20px; border-radius: 12px; margin-top: 20px; margin-bottom: 16px; page-break-inside: avoid; }
+        .total-val { font-size: 24px; font-weight: 900; color: #ffffff; letter-spacing: -0.5px; }
+        .pix-box { padding: 12px 16px; background: #fffbeb; border: 1px solid #fde68a; border-radius: 12px; color: #92400e; font-size: 11px; margin-bottom: 16px; page-break-inside: avoid; }
         .footer { border-top: 1px solid #e2e8f0; padding-top: 12px; text-align: center; font-size: 10px; color: #94a3b8; }
       </style>
     </head>
@@ -370,7 +370,7 @@ const getClientStatementHTML = (data: ClientStatementPDFData) => {
         </div>
         <div style="text-align: right;">
           <div style="font-weight: 800; font-size: 10px; color: #64748b; text-transform: uppercase;">DATA DE EMISSÃO</div>
-          <div style="font-weight: 700; font-size: 12px; color: #0f172a;">${formattedDate}</div>
+          <div style="font-weight: 800; font-size: 12px; color: #0f172a;">${formattedDate}</div>
         </div>
       </div>
 
@@ -386,6 +386,8 @@ const getClientStatementHTML = (data: ClientStatementPDFData) => {
         const dateStr = new Date(o.createdAt).toLocaleDateString('pt-BR');
         const dueStr = o.dueDate ? parseLocalDate(o.dueDate)!.toLocaleDateString('pt-BR') : 'A combinar';
         const hasItems = o.items && o.items.length > 0;
+        const isHalf = o.paymentStatus === 'half_paid';
+        const depositVal = isHalf ? (o.totalAmount - o.pendingAmount) : 0;
 
         return `
           <div class="order-card">
@@ -395,10 +397,12 @@ const getClientStatementHTML = (data: ClientStatementPDFData) => {
                 <span class="order-dates">Entrada: ${dateStr} • Vencimento: ${dueStr}</span>
               </div>
               <div style="display: flex; align-items: center; gap: 12px;">
-                ${o.paymentStatus === 'half_paid' ? '<span class="half-tag">SINAL 50% RECEBIDO</span>' : '<span class="pending-tag">100% PENDENTE</span>'}
+                ${isHalf 
+                  ? `<span class="half-tag">⚡ SINAL 50% PAGO (${fmt(depositVal)})</span>` 
+                  : '<span class="pending-tag">⏳ 100% PENDENTE</span>'}
                 <div style="text-align: right;">
-                  <span style="font-size: 9px; font-weight: 800; color: #64748b; text-transform: uppercase; display: block;">A Receber</span>
-                  <span style="font-size: 13px; font-weight: 900; color: #dc2626;">${fmt(o.pendingAmount)}</span>
+                  <span style="font-size: 9px; font-weight: 800; color: #64748b; text-transform: uppercase; display: block;">Restante a Receber</span>
+                  <span style="font-size: 14px; font-weight: 900; color: #dc2626;">${fmt(o.pendingAmount)}</span>
                 </div>
               </div>
             </div>
@@ -444,14 +448,14 @@ const getClientStatementHTML = (data: ClientStatementPDFData) => {
       <div class="total-container">
         <div>
           <div style="font-size: 10px; font-weight: 800; text-transform: uppercase; color: #94a3b8;">Total Acumulado a Pagar</div>
-          <div style="font-size: 11px; color: #cbd5e1;">Sumatório dos pedidos em aberto deste cliente</div>
+          <div style="font-size: 11px; color: #cbd5e1;">Sumatório dos débitos em aberto deste cliente</div>
         </div>
         <div class="total-val">${formattedGrandPending}</div>
       </div>
 
       ${data.pixKey ? `
         <div class="pix-box">
-          🔑 <strong>Chave PIX para Pagamento:</strong> ${data.pixKey}<br/>
+          🔑 <strong>Chave PIX Oficial para Pagamento:</strong> ${data.pixKey}<br/>
           Por favor, envie o comprovante de pagamento para este mesmo número de WhatsApp.
         </div>
       ` : ''}

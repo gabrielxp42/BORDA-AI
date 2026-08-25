@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { formatCurrency } from '@/utils/currencyFormatter';
 import { useProfile } from '@/contexts/ProfileContext';
 import { ClientSelect } from '@/components/ui/ClientSelect';
+import { parsePaymentMetadata } from '@/utils/paymentHelper';
 
 interface ClientOption {
   id: string;
@@ -105,7 +106,14 @@ export const CreateReceivableModal: React.FC<CreateReceivableModalProps> = ({
       
       const sum = clientOrders
         .filter(o => next.includes(o.id))
-        .reduce((acc, o) => acc + (o.payment_status === 'half_paid' ? o.total_amount * 0.5 : o.total_amount), 0);
+        .reduce((acc, o) => {
+          const { metadata } = parsePaymentMetadata(o.notes);
+          const totalVal = Number(o.total_amount || 0);
+          const isHalf = o.payment_status === 'half_paid';
+          const depositVal = isHalf ? (metadata.depositAmount || totalVal * 0.5) : 0;
+          const pendingVal = Math.max(0, totalVal - depositVal);
+          return acc + pendingVal;
+        }, 0);
       
       if (sum > 0) {
         setAmount(sum.toFixed(2));
@@ -358,7 +366,10 @@ export const CreateReceivableModal: React.FC<CreateReceivableModalProps> = ({
                 {clientOrders.map(order => {
                   const isChecked = selectedOrderIds.includes(order.id);
                   const isHalf = order.payment_status === 'half_paid';
-                  const pendingVal = isHalf ? order.total_amount * 0.5 : order.total_amount;
+                  const { metadata } = parsePaymentMetadata(order.notes);
+                  const totalVal = Number(order.total_amount || 0);
+                  const depositVal = isHalf ? (metadata.depositAmount || totalVal * 0.5) : 0;
+                  const pendingVal = Math.max(0, totalVal - depositVal);
 
                   return (
                     <div
@@ -366,18 +377,39 @@ export const CreateReceivableModal: React.FC<CreateReceivableModalProps> = ({
                       onClick={() => handleToggleOrder(order.id)}
                       className={`p-2.5 rounded-xl border text-xs flex items-center justify-between cursor-pointer transition-all ${
                         isChecked
-                          ? 'border-amber-500/50 bg-amber-500/10 text-slate-900 dark:text-white'
+                          ? 'border-amber-500/50 bg-amber-500/10 text-slate-900 dark:text-white shadow-sm'
                           : 'border-slate-200 dark:border-white/5 bg-white dark:bg-black/30 text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-white/5'
                       }`}
                     >
-                      <div className="flex items-center gap-2">
-                        <div className={`h-4 w-4 rounded flex items-center justify-center border ${isChecked ? 'bg-amber-500 border-amber-500 text-black' : 'border-slate-300 dark:border-white/20'}`}>
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className={`h-4 w-4 rounded flex items-center justify-center border shrink-0 ${isChecked ? 'bg-amber-500 border-amber-500 text-black' : 'border-slate-300 dark:border-white/20'}`}>
                           {isChecked && <Check className="h-3 w-3 stroke-[3]" />}
                         </div>
-                        <span className="font-bold">#{order.order_number || order.id.slice(0, 4)}</span>
-                        <span className="text-[10px] text-slate-500 dark:text-zinc-500">{isHalf ? '(50% Pendente)' : '(100% Pendente)'}</span>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="font-black text-slate-900 dark:text-white">#{order.order_number || order.id.slice(0, 4)}</span>
+                            {isHalf ? (
+                              <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase bg-blue-500/20 text-blue-700 dark:text-blue-300 border border-blue-500/40">
+                                ⚡ Sinal 50% Recebido
+                              </span>
+                            ) : (
+                              <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/40">
+                                ⏳ 100% Pendente
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[10px] text-slate-500 dark:text-zinc-400 mt-0.5 flex flex-wrap items-center gap-x-2">
+                            <span>Total Pedido: <strong className="text-slate-700 dark:text-zinc-300">{formatCurrency(totalVal, permissions?.canSeeFinancials ?? true)}</strong></span>
+                            {isHalf && (
+                              <span>• Sinal Pago: <strong className="text-emerald-600 dark:text-emerald-400">{formatCurrency(depositVal, permissions?.canSeeFinancials ?? true)}</strong></span>
+                            )}
+                          </div>
+                        </div>
                       </div>
-                      <span className="font-extrabold text-amber-600 dark:text-amber-400">{formatCurrency(pendingVal, permissions?.canSeeFinancials ?? true)}</span>
+                      <div className="text-right shrink-0">
+                        <span className="text-[9px] text-slate-400 dark:text-zinc-500 font-bold block uppercase">Restante a Cobrar</span>
+                        <span className="font-black text-amber-600 dark:text-amber-400 text-sm">{formatCurrency(pendingVal, permissions?.canSeeFinancials ?? true)}</span>
+                      </div>
                     </div>
                   );
                 })}
