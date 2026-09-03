@@ -5,6 +5,8 @@ import {
   ShieldAlert, Copy, ExternalLink, QrCode, CheckCircle2, FileText, Package, Check
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { parseLocalDate } from '@/utils/dateHelper';
+import { format } from 'date-fns';
 import { useProfile } from '@/contexts/ProfileContext';
 import { formatCurrency } from '@/utils/currencyFormatter';
 import { sendEvolutionText, sendEvolutionMedia, getWhatsAppWebLink, handleWhatsAppDispatchError } from '@/services/whatsappService';
@@ -194,6 +196,18 @@ export const CollectionActionModal: React.FC<CollectionActionModalProps> = ({
     const pixBlock = withPix ? pix : '';
 
     let text = '';
+
+    // O cliente pediu que a cobrança mostre quando o pedido entrou e quando
+    // foi combinada a entrega — sem isso o destinatário não sabe do que se trata.
+    const datasBlock = (() => {
+      if (!isSingleOrder || !singleOrder) return '';
+      const entrada = parseLocalDate(singleOrder.created_at);
+      const entrega = parseLocalDate(singleOrder.due_date);
+      const linhas: string[] = [];
+      if (entrada) linhas.push(`📥 *Entrada:* ${format(entrada, 'dd/MM/yyyy')}`);
+      linhas.push(`📦 *Entrega:* ${entrega ? format(entrega, 'dd/MM/yyyy') : 'a combinar'}`);
+      return linhas.length ? '\n' + linhas.join('\n') : '';
+    })();
 
     if (isSingleOrder && singleOrder) {
       // 🎯 CASO A: APENAS 1 PEDIDO

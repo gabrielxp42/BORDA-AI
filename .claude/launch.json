@@ -1,7 +1,17 @@
 {
   "version": "0.0.1",
   "configurations": [
-    { "name": "convite", "runtimeExecutable": "python",
-      "runtimeArgs": ["-m","http.server","5603","--directory","../convite-jose-gabriel"], "port": 5603 }
+    {
+      "name": "borda-dev",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "port": 3000
+    },
+    {
+      "name": "convite",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "5603", "--directory", "../convite-jose-gabriel"],
+      "port": 5603
+    }
   ]
 }
