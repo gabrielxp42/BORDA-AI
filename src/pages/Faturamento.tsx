@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { parseLocalDate, toLocalDateInput } from '@/utils/dateHelper';
+import { parseLocalDate, toLocalDateInput, combineDayAndTime } from '@/utils/dateHelper';
 import { supabase } from '@/integrations/supabase/client';
 import { useProfile } from '@/contexts/ProfileContext';
 import { useCompanySettings } from '@/contexts/CompanySettingsContext';
@@ -153,7 +153,10 @@ export const Faturamento: React.FC = () => {
         const meta = ehParcela ? parseInstallmentMeta(t.notes) : {};
         return {
           id: `tx-${t.id}`,
-          date: new Date(t.date || t.created_at),
+          // A coluna `date` é do tipo DATE: só o dia sobrevive. Ancoramos ao
+          // meio-dia local (parseLocalDate) para não cair no dia anterior, e
+          // tiramos a hora do created_at, que é timestamptz de verdade.
+          date: combineDayAndTime(t.date, t.created_at),
           title: t.description || 'Receita Direta de Caixa',
           isOrder: false,
           isInstallment: ehParcela,
@@ -531,7 +534,7 @@ export const Faturamento: React.FC = () => {
     const idsDePedidosJaListados = new Set(allTimePaidOrders.map(o => o.id));
 
     financialTransactions.forEach(t => {
-      const txDate = t.date ? new Date(t.date) : new Date(t.created_at);
+      const txDate = parseLocalDate(t.date) || new Date(t.created_at);
       if (txDate >= targetMonthStart && txDate <= targetMonthEnd) {
         if (t.type === 'expense') {
           expSum += Number(t.amount || 0);

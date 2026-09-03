@@ -83,3 +83,29 @@ export function diffInDays(a: string | Date, b: string | Date): number {
   const d2 = startOfLocalDay(b);
   return Math.round((d1.getTime() - d2.getTime()) / 86400000);
 }
+
+/**
+ * Junta o DIA de uma coluna DATE com a HORA de uma coluna timestamptz.
+ *
+ * A tabela `financial_transactions` guarda `date` como DATE — o Postgres
+ * descarta a hora que o app envia. Lendo de volta vem só "2026-09-02", e
+ * `new Date()` nisso resolve para meia-noite UTC, que no Brasil aparece como
+ * 01/09 às 21:00. Era esse o relato de "vem tudo na data de ontem, 21 horas".
+ *
+ * Enquanto a coluna não virar timestamptz, esta função monta a data correta:
+ * o dia vem de `date` (sem escorregar de fuso) e a hora vem de `created_at`.
+ */
+export function combineDayAndTime(
+  dayValue?: string | Date | null,
+  timeValue?: string | Date | null
+): Date {
+  const dia = parseLocalDate(dayValue);
+  if (!dia) return parseLocalDateOrToday(timeValue);
+
+  const hora = timeValue ? new Date(timeValue as any) : null;
+  if (!hora || isNaN(hora.getTime())) return dia;
+
+  const out = new Date(dia);
+  out.setHours(hora.getHours(), hora.getMinutes(), hora.getSeconds(), 0);
+  return out;
+}

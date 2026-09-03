@@ -4,7 +4,7 @@ import {
   X, UserPlus, Calendar, Plus, Trash2, Package, Save, Lock, Layers, Sparkles, 
   CheckCircle2, DollarSign, ChevronDown, Check, Upload, FileCheck, ChevronUp, 
   Sliders, Send, Clock, CreditCard, Landmark, Coins, ArrowRight, ArrowLeft, Camera, Paperclip,
-  MessageSquare, Image, FileText, QrCode, User, CheckCircle, Settings, Edit2, Star, Printer, Percent
+  MessageSquare, Image, FileText, QrCode, User, CheckCircle, Settings, Edit2, Star, Printer, Percent, Search
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { calculateEmbroideryPrice } from '@/services/pricingEngine';
@@ -104,6 +104,21 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
   const [loadingMatrices, setLoadingMatrices] = useState<boolean>(false);
   const [showMatrixSelector, setShowMatrixSelector] = useState<boolean>(false);
   const [selectedMatrixId, setSelectedMatrixId] = useState<string | null>(null);
+  const [matrixSearchQuery, setMatrixSearchQuery] = useState<string>('');
+
+  // Matrizes filtradas por busca e ordenadas por uso + ordem alfabética
+  const filteredClientMatrices = useMemo(() => {
+    return clientMatrices
+      .filter(m => (m.name || '').toLowerCase().includes(matrixSearchQuery.toLowerCase().trim()))
+      .sort((a, b) => {
+        const popA = Number(a.order_count || a.usage_count || 0);
+        const popB = Number(b.order_count || b.usage_count || 0);
+        if (popA !== popB) return popB - popA;
+        return (a.name || '').localeCompare(b.name || '', 'pt-BR');
+      });
+  }, [clientMatrices, matrixSearchQuery]);
+
+
 
   // Step 2: Fechamento States
   const [dueDate, setDueDate] = useState<Date | null>(new Date());
@@ -116,6 +131,19 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
   const [discountPercent, setDiscountPercent] = useState<number>(0);
   const [activeMatrixTab, setActiveMatrixTab] = useState<'client' | 'global'>('client');
   const [globalMatrices, setGlobalMatrices] = useState<Matrix[]>([]);
+
+  const filteredGlobalMatrices = useMemo(() => {
+    const termo = matrixSearchQuery.toLowerCase().trim();
+    return (globalMatrices || [])
+      .filter((m: any) => (m.name || '').toLowerCase().includes(termo))
+      .sort((a: any, b: any) => {
+        // Mais usadas primeiro; empate resolve em ordem alfabética.
+        const popA = Number(a.order_count || a.usage_count || 0);
+        const popB = Number(b.order_count || b.usage_count || 0);
+        if (popA !== popB) return popB - popA;
+        return (a.name || '').localeCompare(b.name || '', 'pt-BR');
+      });
+  }, [globalMatrices, matrixSearchQuery]);
   const [entryMode, setEntryMode] = useState<'budget' | 'quick'>('quick');
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
   
@@ -1389,7 +1417,7 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
                 {/* 2. BIBLIOTECA DE MATRIZES */}
                 {entryMode === 'budget' && (showMatrixSelector || selectedClientId) && (
                   <div className="glass-panel p-5 rounded-3xl border shadow-sm relative z-40 animate-in fade-in zoom-in-95 duration-200 mb-4" style={{ borderColor: `${settings.primaryColor}20`, backgroundColor: 'rgba(255,255,255,0.02)' }}>
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
                       <h3 className="text-xs font-black uppercase tracking-widest flex items-center gap-2" style={{ color: settings.primaryColor }}>
                         <Layers className="h-4 w-4" /> 2. Matrizes na Biblioteca
                       </h3>
@@ -1418,24 +1446,59 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
                         </button>
                       </div>
                     </div>
+
+                    {/* Barra de Busca na Biblioteca */}
+                    <div className="relative mb-3">
+                      <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 dark:text-zinc-500" />
+                      <input
+                        type="text"
+                        value={matrixSearchQuery}
+                        onChange={(e) => setMatrixSearchQuery(e.target.value)}
+                        placeholder="🔍 Buscar matriz pelo nome..."
+                        className="w-full bg-slate-100 dark:bg-black/40 border border-slate-200 dark:border-white/10 rounded-xl pl-9 pr-8 py-2 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-zinc-500 outline-none focus:border-amber-500/60 focus:ring-1 focus:ring-amber-500/30 transition-all"
+                      />
+                      {matrixSearchQuery && (
+                        <button
+                          type="button"
+                          onClick={() => setMatrixSearchQuery('')}
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 dark:hover:text-white text-xs p-1 cursor-pointer"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
                     
                     {activeMatrixTab === 'client' && (
-                      clientMatrices.length > 0 ? (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 max-h-[220px] overflow-y-auto custom-scrollbar pr-2">
-                          {clientMatrices.map(m => {
+                      filteredClientMatrices.length > 0 ? (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 max-h-[240px] overflow-y-auto custom-scrollbar pr-2">
+                          {filteredClientMatrices.map((m, index) => {
                             const ver = m.current_version;
                             const isSelected = selectedMatrixId === m.id;
+                            const usage = Number((m as any).order_count || (m as any).usage_count || 0);
+                            const isPopular = usage >= 2 || (index === 0 && usage > 0);
+
                             return (
                               <div
                                 key={m.id}
                                 onClick={() => handleSelectSavedMatrix(m)}
-                                className="p-3 rounded-2xl border transition-all cursor-pointer flex items-center justify-between text-slate-800 dark:text-zinc-200"
-                                style={isSelected ? { backgroundColor: `${settings.primaryColor}20`, borderColor: `${settings.primaryColor}50`, color: settings.primaryColor, boxShadow: `0 0 15px ${settings.primaryColor}20` } : { borderColor: 'rgba(255,255,255,0.05)', backgroundColor: 'rgba(255,255,255,0.02)' }}
+                                className={`p-3 rounded-2xl border transition-all cursor-pointer flex items-center justify-between text-slate-800 dark:text-zinc-200 group relative ${
+                                  isPopular && !isSelected
+                                    ? 'border-amber-500/40 dark:border-amber-500/50 bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent hover:border-amber-400 shadow-sm shadow-amber-500/10'
+                                    : ''
+                                }`}
+                                style={isSelected ? { backgroundColor: `${settings.primaryColor}20`, borderColor: `${settings.primaryColor}50`, color: settings.primaryColor, boxShadow: `0 0 15px ${settings.primaryColor}20` } : (!isPopular ? { borderColor: 'rgba(255,255,255,0.05)', backgroundColor: 'rgba(255,255,255,0.02)' } : {})}
                               >
                                 <div className="min-w-0 flex-1">
-                                  <p className="text-sm font-black truncate leading-tight mb-1" style={{ color: isSelected ? settings.primaryColor : 'inherit' }}>
-                                    {m.name}
-                                  </p>
+                                  <div className="flex items-center gap-1.5 mb-1">
+                                    <p className="text-sm font-black truncate leading-tight" style={{ color: isSelected ? settings.primaryColor : 'inherit' }}>
+                                      {m.name}
+                                    </p>
+                                    {isPopular && (
+                                      <span className="px-1.5 py-0.5 rounded-md bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/40 text-[9px] font-black uppercase flex items-center gap-1 shrink-0 shadow-sm" title="Matriz frequentemente utilizada">
+                                        <Sparkles className="h-2.5 w-2.5 text-amber-500 dark:text-amber-400 fill-amber-400 animate-pulse" /> Mais Usada
+                                      </span>
+                                    )}
+                                  </div>
                                   <div className="flex items-center gap-3 text-[10px] font-bold text-slate-500 dark:text-zinc-400">
                                     {ver?.stitch_count && <span>🪡 {ver.stitch_count.toLocaleString()} pts</span>}
                                     {ver?.color_count && <span>🎨 {ver.color_count} cores</span>}
@@ -1447,27 +1510,43 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
                           })}
                         </div>
                       ) : (
-                        <p className="text-xs text-slate-500 italic">Nenhuma matriz salva para este cliente ainda.</p>
+                        <p className="text-xs text-slate-500 italic py-2">
+                          {matrixSearchQuery ? `Nenhuma matriz encontrada para "${matrixSearchQuery}".` : 'Nenhuma matriz salva para este cliente ainda.'}
+                        </p>
                       )
                     )}
 
                     {activeMatrixTab === 'global' && (
-                      globalMatrices.length > 0 ? (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 max-h-[220px] overflow-y-auto custom-scrollbar pr-2">
-                          {globalMatrices.map(m => {
+                      filteredGlobalMatrices.length > 0 ? (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 max-h-[240px] overflow-y-auto custom-scrollbar pr-2">
+                          {filteredGlobalMatrices.map((m, index) => {
                             const ver = m.current_version;
                             const isSelected = selectedMatrixId === m.id;
+                            const usage = Number((m as any).order_count || (m as any).usage_count || 0);
+                            const isPopular = usage >= 2 || (index === 0 && usage > 0);
+
                             return (
                               <div
                                 key={m.id}
                                 onClick={() => handleSelectSavedMatrix(m)}
-                                className="p-3 rounded-2xl border transition-all cursor-pointer flex items-center justify-between text-slate-800 dark:text-zinc-200"
-                                style={isSelected ? { backgroundColor: `${settings.primaryColor}20`, borderColor: `${settings.primaryColor}50`, color: settings.primaryColor, boxShadow: `0 0 15px ${settings.primaryColor}20` } : { borderColor: 'rgba(255,255,255,0.05)', backgroundColor: 'rgba(255,255,255,0.02)' }}
+                                className={`p-3 rounded-2xl border transition-all cursor-pointer flex items-center justify-between text-slate-800 dark:text-zinc-200 group relative ${
+                                  isPopular && !isSelected
+                                    ? 'border-amber-500/40 dark:border-amber-500/50 bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent hover:border-amber-400 shadow-sm shadow-amber-500/10'
+                                    : ''
+                                }`}
+                                style={isSelected ? { backgroundColor: `${settings.primaryColor}20`, borderColor: `${settings.primaryColor}50`, color: settings.primaryColor, boxShadow: `0 0 15px ${settings.primaryColor}20` } : (!isPopular ? { borderColor: 'rgba(255,255,255,0.05)', backgroundColor: 'rgba(255,255,255,0.02)' } : {})}
                               >
                                 <div className="min-w-0 flex-1">
-                                  <p className="text-sm font-black truncate leading-tight mb-1" style={{ color: isSelected ? settings.primaryColor : 'inherit' }}>
-                                    {m.name}
-                                  </p>
+                                  <div className="flex items-center gap-1.5 mb-1">
+                                    <p className="text-sm font-black truncate leading-tight" style={{ color: isSelected ? settings.primaryColor : 'inherit' }}>
+                                      {m.name}
+                                    </p>
+                                    {isPopular && (
+                                      <span className="px-1.5 py-0.5 rounded-md bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/40 text-[9px] font-black uppercase flex items-center gap-1 shrink-0 shadow-sm" title="Matriz frequentemente utilizada">
+                                        <Sparkles className="h-2.5 w-2.5 text-amber-500 dark:text-amber-400 fill-amber-400 animate-pulse" /> Mais Usada
+                                      </span>
+                                    )}
+                                  </div>
                                   <div className="flex items-center gap-3 text-[10px] font-bold text-slate-500 dark:text-zinc-400">
                                     {ver?.stitch_count && <span>🪡 {ver.stitch_count.toLocaleString()} pts</span>}
                                     {ver?.color_count && <span>🎨 {ver.color_count} cores</span>}
@@ -1479,7 +1558,9 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
                           })}
                         </div>
                       ) : (
-                        <p className="text-xs text-slate-500 italic">Nenhuma matriz global encontrada na biblioteca da empresa.</p>
+                        <p className="text-xs text-slate-500 italic py-2">
+                          {matrixSearchQuery ? `Nenhuma matriz encontrada para "${matrixSearchQuery}".` : 'Nenhuma matriz global encontrada na biblioteca da empresa.'}
+                        </p>
                       )
                     )}
                   </div>

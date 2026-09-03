@@ -11,6 +11,7 @@ import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
 import { FinancialTransaction } from '@/types/stockTypes';
 import { printFinancialReportPDF, FinancialMovement } from '@/services/financialReportPdf';
+import { parseLocalDate } from '@/utils/dateHelper';
 
 /** Entrada consolidada de caixa vinda da página de Faturamento (pedidos pagos + receitas manuais). */
 export interface ReportIncomeEntry {
@@ -145,7 +146,7 @@ export const FinancialReportModal: React.FC<FinancialReportModalProps> = ({
     const term = search.trim().toLowerCase();
     return movements
       .filter(m => {
-        const d = new Date(m.date);
+        const d = parseLocalDate(m.date) || new Date(m.date);
         if (isNaN(d.getTime())) return false;
         if (!isWithinInterval(d, { start, end })) return false;
         if (typeFilter !== 'all' && m.type !== typeFilter) return false;
@@ -154,7 +155,7 @@ export const FinancialReportModal: React.FC<FinancialReportModalProps> = ({
           .filter(Boolean)
           .some(v => String(v).toLowerCase().includes(term));
       })
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      .sort((a, b) => (parseLocalDate(b.date)?.getTime() ?? 0) - (parseLocalDate(a.date)?.getTime() ?? 0));
   }, [movements, start, end, typeFilter, search]);
 
   const totals = useMemo(() => {
@@ -167,7 +168,7 @@ export const FinancialReportModal: React.FC<FinancialReportModalProps> = ({
   const grouped = useMemo(() => {
     const map: Record<string, FinancialMovement[]> = {};
     filtered.forEach(m => {
-      const k = format(new Date(m.date), 'yyyy-MM-dd');
+      const k = format(parseLocalDate(m.date) || new Date(m.date), 'yyyy-MM-dd');
       (map[k] ||= []).push(m);
     });
     return Object.entries(map).sort((a, b) => b[0].localeCompare(a[0]));
@@ -360,7 +361,7 @@ export const FinancialReportModal: React.FC<FinancialReportModalProps> = ({
                         <div className="min-w-0 flex-1">
                           <p className="text-xs font-bold text-slate-900 dark:text-zinc-100 truncate">{m.title}</p>
                           <p className="text-[10px] text-slate-500 dark:text-zinc-500 truncate">
-                            {format(new Date(m.date), 'HH:mm')} • {m.category}
+                            {format(parseLocalDate(m.date) || new Date(m.date), 'HH:mm')} • {m.category}
                             {m.method && m.method !== '-' ? ` • ${m.method}` : ''}
                             {m.who ? ` • ${m.who}` : ''}
                           </p>

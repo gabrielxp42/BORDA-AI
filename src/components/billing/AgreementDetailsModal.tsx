@@ -12,6 +12,7 @@ import {
 } from '@/services/installmentService';
 import { parseLocalDate, toLocalDateInput, diffInDays } from '@/utils/dateHelper';
 import { formatPaymentMethodName } from '@/utils/paymentHelper';
+import { PaymentStatusModal } from '@/components/orders/PaymentStatusModal';
 
 interface AgreementDetailsModalProps {
   isOpen: boolean;
@@ -46,11 +47,29 @@ export const AgreementDetailsModal: React.FC<AgreementDetailsModalProps> = ({
   const [editandoId, setEditandoId] = useState<string | null>(null);
   const [novaData, setNovaData] = useState('');
   const [salvando, setSalvando] = useState(false);
+  const [selectedParcelForPaymentModal, setSelectedParcelForPaymentModal] = useState<any | null>(null);
 
   if (!isOpen || !agreement) return null;
 
   const a = agreement;
   const progresso = a.totalCount ? Math.round((a.paidCount / a.totalCount) * 100) : 0;
+
+  const handleOpenBaixaModal = (p: InstallmentRow) => {
+    const parcelTx = {
+      id: p.id,
+      isManualTx: true,
+      isAgreementParcel: true,
+      type: 'income',
+      description: `Parcela ${p.meta.installmentIndex || 1}/${p.meta.totalInstallments || 1} — ${a.clientName}`,
+      total_amount: p.amount,
+      amount: p.amount,
+      status: 'pending',
+      client: { name: a.clientName, phone: a.clientPhone },
+      due_date: p.due_date,
+      notes: JSON.stringify(p.meta)
+    };
+    setSelectedParcelForPaymentModal(parcelTx);
+  };
 
   const salvarData = async (parcela: InstallmentRow) => {
     if (!novaData) { setEditandoId(null); return; }
@@ -84,8 +103,8 @@ export const AgreementDetailsModal: React.FC<AgreementDetailsModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-[120] flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
-      <div className="relative w-full max-w-3xl max-h-[92vh] flex flex-col rounded-3xl border border-white/10 bg-[#0d0d14] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+    <div className="fixed inset-0 z-[99999999] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
+      <div className="relative w-full max-w-3xl max-h-[92dvh] flex flex-col rounded-t-3xl sm:rounded-3xl border border-white/10 bg-[#0d0d14] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
 
         <div className="flex items-start justify-between p-5 border-b border-white/10 bg-gradient-to-r from-indigo-900/30 via-purple-900/20 to-transparent">
           <div className="flex items-center gap-3 min-w-0">
@@ -253,8 +272,8 @@ export const AgreementDetailsModal: React.FC<AgreementDetailsModalProps> = ({
                   <button
                     type="button"
                     disabled={salvando}
-                    onClick={() => darBaixa(p)}
-                    className="shrink-0 px-3 py-1.5 rounded-xl bg-emerald-600/80 hover:bg-emerald-600 text-white text-[10px] font-black uppercase tracking-wide transition-all active:scale-95 disabled:opacity-50"
+                    onClick={() => handleOpenBaixaModal(p)}
+                    className="shrink-0 px-3 py-1.5 rounded-xl bg-emerald-600/80 hover:bg-emerald-600 text-white text-[10px] font-black uppercase tracking-wide transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
                   >
                     Dar baixa
                   </button>
@@ -270,6 +289,21 @@ export const AgreementDetailsModal: React.FC<AgreementDetailsModalProps> = ({
             : `${a.totalCount - a.paidCount} parcela(s) em aberto — ${brl(a.pendingTotal, canSeeFinancials)} a receber.`}
         </div>
       </div>
+
+      {selectedParcelForPaymentModal && (
+        <PaymentStatusModal
+          isOpen={!!selectedParcelForPaymentModal}
+          onClose={() => setSelectedParcelForPaymentModal(null)}
+          order={selectedParcelForPaymentModal}
+          isBaixaMode={true}
+          defaultStatus="paid"
+          onStatusUpdated={() => {
+            setSelectedParcelForPaymentModal(null);
+            window.dispatchEvent(new CustomEvent('borda_orders_changed'));
+            onChanged?.();
+          }}
+        />
+      )}
     </div>
   );
 };

@@ -1,3 +1,4 @@
+import { parseLocalDate } from '@/utils/dateHelper';
 /**
  * RELATÓRIO FINANCEIRO POR PERÍODO (Entradas & Saídas)
  *
@@ -48,7 +49,7 @@ export const buildFinancialReportHTML = (data: FinancialReportPDFData): string =
   const emittedAt = new Date().toLocaleString('pt-BR');
 
   const sorted = [...data.movements].sort(
-    (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+    (a, b) => (parseLocalDate(a.date)?.getTime() ?? 0) - (parseLocalDate(b.date)?.getTime() ?? 0)
   );
 
   const totalIn = sorted.filter(m => m.type === 'income').reduce((s, m) => s + Number(m.amount || 0), 0);
@@ -73,7 +74,7 @@ export const buildFinancialReportHTML = (data: FinancialReportPDFData): string =
     });
 
     const rows = g.items.map(i => {
-      const hora = new Date(i.date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+      const hora = (parseLocalDate(i.date) || new Date(i.date)).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
       const isIn = i.type === 'income';
       return `
         <tr>

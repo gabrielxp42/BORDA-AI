@@ -27,7 +27,7 @@ export const FinancialTransactionModal: React.FC<FinancialTransactionModalProps>
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState<number | ''>('');
   const [category, setCategory] = useState<string>(isIncome ? 'Venda Avulsa / Balcão' : 'Compra de Insumo / Linha');
-  const [paymentMethod, setPaymentMethod] = useState<'pix' | 'cash' | 'credit_card' | 'transfer' | 'other'>('pix');
+  const [paymentMethod, setPaymentMethod] = useState<'pix' | 'cash' | 'credit_card' | 'transfer' | 'check' | 'other'>('pix');
   const [expenseType, setExpenseType] = useState<'fixed' | 'variable'>('variable');
   const [dueDate, setDueDate] = useState<string>('');
   const [status, setStatus] = useState<'pending' | 'paid'>('paid');
@@ -36,6 +36,9 @@ export const FinancialTransactionModal: React.FC<FinancialTransactionModalProps>
     d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
     return d.toISOString().slice(0, 16);
   });
+  // Cheque pré-datado: a data em que o cheque pode ser depositado.
+  // Enquanto não chega, o valor fica como "a receber", não como caixa.
+  const [checkDate, setCheckDate] = useState<string>('');
   const [selectedClientId, setSelectedClientId] = useState<string>('');
   const [clients, setClients] = useState<Array<{ id: string; name: string }>>([]);
   const [notes, setNotes] = useState('');
@@ -82,7 +85,13 @@ export const FinancialTransactionModal: React.FC<FinancialTransactionModalProps>
     setIsSubmitting(true);
     try {
       const finalDate = customDate ? new Date(customDate).toISOString() : new Date().toISOString();
-      const finalDueDate = expenseType === 'fixed' && dueDate ? dueDate : finalDate.split('T')[0];
+
+      // Cheque pré-datado compensa na data marcada: é ela que vale como
+      // vencimento, e o lançamento fica pendente até lá.
+      const ehChequePreDatado = paymentMethod === 'check' && !!checkDate;
+      const finalDueDate = ehChequePreDatado
+        ? checkDate
+        : (expenseType === 'fixed' && dueDate ? dueDate : finalDate.split('T')[0]);
 
       onSubmitTransaction({
         type,
@@ -92,7 +101,7 @@ export const FinancialTransactionModal: React.FC<FinancialTransactionModalProps>
         payment_method: paymentMethod,
         date: finalDate,
         due_date: finalDueDate,
-        status,
+        status: ehChequePreDatado ? 'pending' : status,
         order_id: selectedClientId ? `client:${selectedClientId}` : undefined,
         notes: notes.trim() || undefined,
       });
@@ -134,6 +143,7 @@ export const FinancialTransactionModal: React.FC<FinancialTransactionModalProps>
     { value: 'cash', label: '💵 Dinheiro em Espécie' },
     { value: 'credit_card', label: '💳 Cartão de Crédito / Débito' },
     { value: 'transfer', label: '🏦 Transferência Bancária / TED' },
+    { value: 'check', label: '🧾 Cheque' },
     { value: 'other', label: 'Outro' },
   ];
 
@@ -315,6 +325,26 @@ export const FinancialTransactionModal: React.FC<FinancialTransactionModalProps>
                   onChange={(val) => setStatus(val as any)}
                 />
               </div>
+            </div>
+          )}
+
+          {/* Data de compensação do cheque */}
+          {paymentMethod === 'check' && (
+            <div className="p-3 rounded-2xl bg-sky-500/10 border border-sky-500/25 space-y-1.5">
+              <label className="block text-[10px] font-black uppercase tracking-wider text-sky-700 dark:text-sky-300">
+                🧾 Cheque pré-datado para
+              </label>
+              <input
+                type="date"
+                value={checkDate}
+                onChange={(e) => setCheckDate(e.target.value)}
+                className="w-full bg-white dark:bg-black/40 border border-sky-500/30 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-white outline-none focus:border-sky-400"
+              />
+              <p className="text-[10px] text-sky-700/80 dark:text-sky-300/70 font-semibold">
+                {checkDate
+                  ? 'Fica em "A Receber" e entra no caixa só nessa data.'
+                  : 'Deixe em branco se o cheque é para depósito imediato.'}
+              </p>
             </div>
           )}
 

@@ -127,6 +127,7 @@ export function formatPaymentMethodName(method?: string): string {
   if (m === 'credit_card' || m === 'cartao' || m === 'cartão') return 'Cartão';
   if (m === 'cash' || m === 'dinheiro') return 'Dinheiro';
   if (m === 'transfer' || m === 'transferencia' || m === 'transferência') return 'Transferência';
+  if (m === 'check' || m === 'cheque') return 'Cheque';
   return method;
 }
 

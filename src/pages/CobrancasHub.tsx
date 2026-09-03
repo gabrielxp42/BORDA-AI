@@ -5,7 +5,8 @@ import {
   Send, FileText, User, Building, Phone, DollarSign, Plus, ChevronRight, ChevronDown,
   Layers, ArrowUpRight, Filter, Sparkles, RefreshCw, X, ShieldAlert, Check,
   CheckSquare, Square, ShieldCheck, Loader2, Target, Eye, ExternalLink,
-  Package, Trophy, History, TrendingUp, Zap, Flame, Award, Activity, Trash2
+  Package, Trophy, History, TrendingUp, Zap, Flame, Award, Activity, Trash2,
+  CalendarClock
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useProfile } from '@/contexts/ProfileContext';
@@ -109,6 +110,7 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
   const [selectedOrderForPaymentModal, setSelectedOrderForPaymentModal] = useState<any | null>(null);
   const [selectedClientOrdersForPaymentModal, setSelectedClientOrdersForPaymentModal] = useState<any[] | null>(null);
   const [txToDelete, setTxToDelete] = useState<any | null>(null);
+  const [optimisticSettledTxIds, setOptimisticSettledTxIds] = useState<Set<string>>(new Set());
 
   // Multi-seleção de Clientes para Disparo em Massa
   const [selectedClientIds, setSelectedClientIds] = useState<string[]>([]);
@@ -298,6 +300,8 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
 
   // Quitar Lançamento Manual / Parcela de Acordo com 1 clique
   const handleMarkManualTxPaid = async (txId: string) => {
+    // 0ms Latência Otimista: esconde visualmente a parcela quitada na hora!
+    setOptimisticSettledTxIds(prev => new Set(prev).add(txId));
     try {
       const { error } = await supabase
         .from('financial_transactions')
@@ -306,10 +310,16 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
 
       if (error) throw error;
       toast.success('Lançamento a receber quitado e registrado no caixa!');
+      window.dispatchEvent(new CustomEvent('borda_orders_changed'));
       fetchPendingData();
       fetchRecentPaidOrders();
     } catch (err: any) {
       console.error('Erro ao quitar lançamento manual:', err);
+      setOptimisticSettledTxIds(prev => {
+        const next = new Set(prev);
+        next.delete(txId);
+        return next;
+      });
       toast.error('Erro ao quitar lançamento: ' + (err.message || ''));
     }
   };
@@ -369,6 +379,7 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
     // 2. Processa Lançamentos Manuais / Parcelas de Acordo (financial_transactions)
     pendingTransactions.forEach(t => {
       if (t.status && t.status !== 'pending') return;
+      if (optimisticSettledTxIds.has(t.id)) return;
       const amountVal = Number(t.amount || 0);
       if (amountVal <= 0) return;
 
@@ -411,7 +422,7 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
         };
       }
 
-      const dueDate = t.due_date ? new Date(t.due_date) : new Date(t.date || t.created_at);
+      const dueDate = parseLocalDate(t.due_date) || parseLocalDate(t.date) || new Date(t.created_at);
 
       map[targetKey].manualTxs.push({
         id: t.id,
@@ -1086,7 +1097,14 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
                         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
                           {/* Encomendas de Produção */}
                           {debt.orders.map(ord => {
-                            const isInAgreement = ord.payment_status === 'in_agreement' || (ord.notes && ord.notes.includes('[ACORDO_ATIVO'));
+                            // Três marcas possíveis, dependendo de quando o acordo foi criado.
+                            const metaAcordo = parsePaymentMetadata(ord.notes).metadata;
+                            const isInAgreement = ord.payment_status === 'in_agreement'
+                              || Boolean(ord.notes && ord.notes.includes('[ACORDO_ATIVO'))
+                              || Boolean(metaAcordo.agreementId);
+                            const acordoDoPedido = metaAcordo.agreementId
+                              ? agreements.find(a => a.agreementId === metaAcordo.agreementId)
+                              : agreements.find(a => a.associatedOrderIds?.includes(ord.id));
                             const pendingVal = isInAgreement ? 0 : calculateOrderPendingVal(ord as any);
                             const totalVal = calculateOrderExactValue(ord as any);
                             const { metadata } = parsePaymentMetadata(ord.notes);
@@ -1113,15 +1131,34 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
                                     </span>
                                     <ExternalLink className="h-3 w-3 text-purple-600 dark:text-purple-400 opacity-60 group-hover:opacity-100 transition-opacity shrink-0" />
                                   </div>
-                                  <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-md shrink-0 ${
-                                    isInAgreement
-                                      ? 'bg-purple-500/20 text-purple-700 dark:text-purple-300 border border-purple-400/40'
-                                      : isHalf
-                                      ? 'bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-400/40'
-                                      : 'bg-rose-500/15 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-500/30'
-                                  }`}>
-                                    {isInAgreement ? '🤝 Em Acordo' : isHalf ? '🟡 Sinal Pago' : '⏳ Pendente'}
-                                  </span>
+                                  {isInAgreement ? (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (acordoDoPedido) setAcordoAberto(acordoDoPedido);
+                                      }}
+                                      title={acordoDoPedido
+                                        ? `Ver acordo: ${acordoDoPedido.paidCount}/${acordoDoPedido.totalCount} parcelas pagas`
+                                        : 'Este pedido já está dentro de um acordo de parcelamento'}
+                                      className="text-[9px] font-black uppercase px-2 py-1 rounded-md shrink-0 bg-purple-500/20 text-purple-700 dark:text-purple-300 border border-purple-400/40 hover:bg-purple-500/35 transition-colors flex items-center gap-1"
+                                    >
+                                      🤝 Em Acordo
+                                      {acordoDoPedido && (
+                                        <span className="opacity-80 normal-case font-bold">
+                                          {acordoDoPedido.paidCount}/{acordoDoPedido.totalCount} · ver
+                                        </span>
+                                      )}
+                                    </button>
+                                  ) : (
+                                    <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-md shrink-0 ${
+                                      isHalf
+                                        ? 'bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-400/40'
+                                        : 'bg-rose-500/15 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-500/30'
+                                    }`}>
+                                      {isHalf ? '🟡 Sinal Pago' : '⏳ Pendente'}
+                                    </span>
+                                  )}
                                 </div>
 
                                 {/* Barra de Progresso visual se pagou sinal */}
@@ -1512,7 +1549,7 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
 
       {/* Modal de Segurança & Atenção para Excluir Entrada Futura */}
       {txToDelete && (
-        <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-[99999999] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
           <div className="relative w-full max-w-md bg-white dark:bg-[#12121e] border border-rose-500/40 rounded-3xl p-6 shadow-2xl space-y-4 animate-in zoom-in-95 duration-200 text-slate-900 dark:text-zinc-100">
             
             {/* Header com Ícone de Alerta */}

@@ -105,11 +105,11 @@ const getOrderHTML = (order: OrderPDFData) => {
         body { font-family: 'Segoe UI', system-ui, -apple-system, Roboto, sans-serif; color: #1e293b; margin: 0; padding: 0; background-color: #ffffff; font-size: 13px; line-height: 1.5; }
         .brand-bar { height: 6px; background: ${brandColor}; width: 100%; border-radius: 4px 4px 0 0; margin-bottom: 20px; }
         .header { display: flex; justify-content: space-between; align-items: flex-start; padding-bottom: 20px; border-bottom: 2px solid #f1f5f9; margin-bottom: 24px; }
-        .company-title { font-size: 22px; font-weight: 900; color: ${brandColor}; letter-spacing: -0.5px; margin: 0; text-transform: uppercase; }
+        .company-title { font-size: 22px; font-weight: 900; color: ${brandColor}; letter-spacing: normal; margin: 0; text-transform: uppercase; }
         .company-subtitle { font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 1px; margin-top: 2px; }
         .company-info { font-size: 11px; color: #475569; margin-top: 6px; }
         .document-title { text-align: right; }
-        .doc-badge { font-size: 20px; font-weight: 900; color: #0f172a; letter-spacing: -0.5px; }
+        .doc-badge { font-size: 20px; font-weight: 900; color: #0f172a; letter-spacing: normal; }
         .doc-date { font-size: 11px; color: #64748b; margin-top: 4px; }
         .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
         .info-card { background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px 16px; }
@@ -134,7 +134,7 @@ const getOrderHTML = (order: OrderPDFData) => {
         .payment-info-text { font-size: 11px; color: #78350f; line-height: 1.6; }
         .total-box { min-width: 220px; background-color: #0f172a; color: #ffffff; border-radius: 12px; padding: 16px; text-align: right; }
         .total-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #94a3b8; }
-        .total-amount { font-size: 24px; font-weight: 900; color: #ffffff; margin-top: 4px; letter-spacing: -0.5px; }
+        .total-amount { font-size: 24px; font-weight: 900; color: #ffffff; margin-top: 4px; letter-spacing: normal; }
         .footer { border-top: 1px solid #e2e8f0; padding-top: 16px; text-align: center; font-size: 10px; color: #94a3b8; }
       </style>
     </head>
@@ -153,8 +153,8 @@ const getOrderHTML = (order: OrderPDFData) => {
         </div>
         <div class="document-title">
           <div class="doc-badge">ORDEM DE SERVIÇO ${orderCode}</div>
-          <div class="doc-date">Data da Entrada: <strong>${formattedDate}</strong></div>
-          <div class="doc-date">Previsão de Entrega: <strong>${formattedDueDate}</strong></div>
+          <div class="doc-date">Data da Entrada:&nbsp;<strong>${formattedDate}</strong></div>
+          <div class="doc-date">Previsão de Entrega:&nbsp;<strong>${formattedDueDate}</strong></div>
         </div>
       </div>
       <div class="info-grid">
@@ -197,7 +197,7 @@ const getOrderHTML = (order: OrderPDFData) => {
       <div class="summary-container">
         <div class="payment-info-box">
           <div class="payment-info-title">🔑 Dados para Pagamento & Atendimento</div>
-          <div class="payment-info-text">${canSee && order.pixKey ? `Chave PIX: <strong>${order.pixKey}</strong><br/>` : ''}${order.workingHours ? `Horário de Funcionamento: <strong>${order.workingHours}</strong><br/>` : ''}</div>
+          <div class="payment-info-text">${canSee && order.pixKey ? `Chave PIX:&nbsp;<strong>${order.pixKey}</strong><br/>` : ''}${order.workingHours ? `Horário de Funcionamento: <strong>${order.workingHours}</strong><br/>` : ''}</div>
         </div>
         ${canSee ? `<div class="total-box"><div class="total-label">Valor Total do Pedido</div><div class="total-amount">${formattedTotal}</div></div>` : ''}
       </div>
@@ -239,8 +239,14 @@ export const generateOrderPDFBase64 = async (order: OrderPDFData): Promise<strin
   container.style.boxSizing = 'border-box';
   document.body.appendChild(container);
 
-  // Aguarda 100ms para carregar quaisquer fontes ou imagens
-  await new Promise(r => setTimeout(r, 100));
+  // Espera as fontes ficarem realmente prontas antes de capturar.
+  // Se o html2canvas desenha com a fonte de fallback, as larguras calculadas
+  // não batem com as reais e o texto sai sobreposto — foi o que o cliente
+  // reportou ("tudo sobreposto"). Um setTimeout fixo não garantia isso.
+  try {
+    if (document.fonts?.ready) await document.fonts.ready;
+  } catch { /* navegador sem Font Loading API: segue com a espera abaixo */ }
+  await new Promise(r => setTimeout(r, 250));
 
   const canvas = await html2canvas(container, {
     scale: 2,
@@ -328,11 +334,11 @@ const getClientStatementHTML = (data: ClientStatementPDFData) => {
       <title>Extrato Detalhado de Débitos — ${data.clientName}</title>
       <style>
         @page { size: A4; margin: 12mm; }
-        * { box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; word-spacing: normal; letter-spacing: normal; }
+        * { box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; word-spacing: normal; letter-spacing: normal; white-space: normal; }
         body { font-family: 'Segoe UI', system-ui, -apple-system, Roboto, sans-serif; margin: 0; padding: 0; color: #1e293b; font-size: 12px; line-height: 1.4; background: #ffffff; }
         .brand-bar { height: 6px; background: ${brandColor}; width: 100%; border-radius: 4px 4px 0 0; margin-bottom: 16px; }
         .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #e2e8f0; padding-bottom: 12px; margin-bottom: 16px; }
-        .title { font-size: 20px; font-weight: 900; color: ${brandColor}; text-transform: uppercase; letter-spacing: -0.5px; margin: 0; }
+        .title { font-size: 20px; font-weight: 900; color: ${brandColor}; text-transform: uppercase; letter-spacing: normal; margin: 0; }
         .subtitle { font-size: 10px; color: #64748b; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px; }
         .client-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 12px 16px; margin-bottom: 16px; }
         .client-title { font-size: 10px; font-weight: 800; text-transform: uppercase; color: #64748b; margin-bottom: 2px; letter-spacing: 0.5px; }
@@ -356,7 +362,7 @@ const getClientStatementHTML = (data: ClientStatementPDFData) => {
         .font-bold { font-weight: 700; }
         
         .total-container { display: flex; justify-content: space-between; align-items: center; background: #0f172a; color: white; padding: 16px 20px; border-radius: 12px; margin-top: 20px; margin-bottom: 16px; page-break-inside: avoid; }
-        .total-val { font-size: 24px; font-weight: 900; color: #ffffff; letter-spacing: -0.5px; }
+        .total-val { font-size: 24px; font-weight: 900; color: #ffffff; letter-spacing: normal; }
         .pix-box { padding: 12px 16px; background: #fffbeb; border: 1px solid #fde68a; border-radius: 12px; color: #92400e; font-size: 11px; margin-bottom: 16px; page-break-inside: avoid; }
         .footer { border-top: 1px solid #e2e8f0; padding-top: 12px; text-align: center; font-size: 10px; color: #94a3b8; }
       </style>
