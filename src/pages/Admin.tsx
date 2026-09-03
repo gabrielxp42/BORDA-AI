@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import {
   ShieldCheck, Users, TrendingUp, DollarSign, Server, Key, Save,
   CheckCircle2, AlertTriangle, RefreshCw, BarChart2, PieChart as PieChartIcon,
-  Crown, UserCheck, Lock, Globe, TestTube, Sparkles, Activity
+  Crown, UserCheck, Lock, Globe, TestTube, Sparkles, Activity,
+  LifeBuoy
 } from 'lucide-react';
 import {
   ResponsiveContainer, AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
@@ -12,6 +13,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { EvolutionServerConfigCard } from '@/components/whatsapp/EvolutionServerConfigCard';
 import { toast } from 'sonner';
+import { PainelChamados } from '@/components/support/PainelChamados';
 
 interface UserProfileData {
   id: string;
@@ -24,7 +26,7 @@ interface UserProfileData {
 
 export const Admin: React.FC = () => {
   const { user, profile } = useAuth();
-  const [activeTab, setActiveTab] = useState<'analytics' | 'users' | 'evolution'>('analytics');
+  const [activeTab, setActiveTab] = useState<'analytics' | 'users' | 'evolution' | 'chamados'>('analytics');
   const [usersList, setUsersList] = useState<UserProfileData[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(true);
 
@@ -174,6 +176,17 @@ export const Admin: React.FC = () => {
           }`}
         >
           <Server className="h-4 w-4" /> Servidor Evolution API
+        </button>
+
+        <button
+          onClick={() => setActiveTab('chamados')}
+          className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs transition-all whitespace-nowrap cursor-pointer ${
+            activeTab === 'chamados'
+              ? 'bg-purple-600/20 text-purple-300 border border-purple-500/30 shadow-lg shadow-purple-500/10'
+              : 'text-zinc-400 hover:text-white hover:bg-white/5'
+          }`}
+        >
+          <LifeBuoy className="h-4 w-4" /> Chamados dos Usuários
         </button>
       </div>
 
@@ -407,6 +420,9 @@ export const Admin: React.FC = () => {
       {activeTab === 'evolution' && (
         <EvolutionServerConfigCard />
       )}
+
+      {/* TAB 4: CHAMADOS ABERTOS PELOS USUÁRIOS */}
+      {activeTab === 'chamados' && <PainelChamados />}
 
     </div>
   );

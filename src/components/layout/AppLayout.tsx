@@ -43,6 +43,7 @@ import { CobrancasHub } from '@/pages/CobrancasHub';
 import { LuxurySlideTransition } from '../effects/LuxurySlideTransition';
 import { FastDustTransition } from '../effects/FastDustTransition';
 import { processGabiInstallmentReminders } from '@/services/whatsappService';
+import { ReportarProblemaModal } from '@/components/support/ReportarProblemaModal';
 
 interface NavItem {
   label: string;
@@ -234,6 +235,32 @@ export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children })
   const { activeProfile, isUnlocked, permissions } = useProfile();
   const isChefe = (activeProfile as any)?.role === 'chefe' || isUnlocked || (permissions?.canSeeFinancials === true);
   const { user, profile: authProfile, signOut } = useAuth();
+
+  // Atalho de socorro: duas setas para baixo seguidas abrem o relato de problema.
+  // Fica fora de campo de texto para não atrapalhar quem está digitando.
+  const [reportAberto, setReportAberto] = useState(false);
+  useEffect(() => {
+    let ultima = 0;
+    const aoTeclar = (e: KeyboardEvent) => {
+      if (e.key !== 'ArrowDown') return;
+      const alvo = e.target as HTMLElement | null;
+      const digitando = !!alvo && (
+        alvo.tagName === 'INPUT' || alvo.tagName === 'TEXTAREA' ||
+        alvo.tagName === 'SELECT' || alvo.isContentEditable
+      );
+      if (digitando) return;
+
+      const agora = Date.now();
+      if (agora - ultima < 600) {
+        ultima = 0;
+        setReportAberto(true);
+      } else {
+        ultima = agora;
+      }
+    };
+    window.addEventListener('keydown', aoTeclar);
+    return () => window.removeEventListener('keydown', aoTeclar);
+  }, []);
   const navigate = useNavigate();
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -616,6 +643,8 @@ export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children })
           {children}
         </main>
       </div>
+
+      <ReportarProblemaModal isOpen={reportAberto} onClose={() => setReportAberto(false)} />
 
       {/* Mobile Bottom Navigation Bar */}
       <MobileBottomNav 
