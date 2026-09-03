@@ -20,6 +20,8 @@ import { AgreementsPanel } from '@/components/billing/AgreementsPanel';
 import { AgreementDetailsModal } from '@/components/billing/AgreementDetailsModal';
 import { ChefeOverviewPanel } from '@/components/billing/ChefeOverviewPanel';
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
+import { detectarProblemas } from '@/services/hubHealthService';
+import { HubHealthModal } from '@/components/billing/HubHealthModal';
 import { parsePaymentMetadata } from '@/utils/paymentHelper';
 import { formatCurrency } from '@/utils/currencyFormatter';
 import { format, differenceInDays, parseISO, addDays } from 'date-fns';
@@ -99,6 +101,14 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
   const [agreements, setAgreements] = useState<Agreement[]>([]);
   const [vista, setVista] = useState<'chefe' | 'faturas' | 'parcelas'>('chefe');
   const [acordoAberto, setAcordoAberto] = useState<Agreement | null>(null);
+  const [saudeAberta, setSaudeAberta] = useState(false);
+
+  // Aponta o que está estranho nos dados sem corrigir nada sozinho:
+  // quem conhece o negócio é que decide.
+  const problemas = useMemo(
+    () => detectarProblemas(pendingTransactions),
+    [pendingTransactions]
+  );
   const [recentPaidOrders, setRecentPaidOrders] = useState<RecentPaidOrder[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterTopic, setFilterTopic] = useState<'all' | 'critical' | 'recent_overdue' | 'upcoming' | 'vip'>('all');
@@ -1013,6 +1023,59 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
 
         {/* Lista de Clientes */}
         <div className="flex-1 overflow-y-auto p-4 space-y-3 scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-white/10">
+
+          {/* Panorama sempre visível. As ilhas laterais são hidden xl:flex, então
+              no celular — que é onde o cliente mais usa — não existia resumo. */}
+          {vista === 'faturas' && !loading && (
+            <div className="grid grid-cols-3 gap-2 xl:hidden">
+              <div className="rounded-2xl border border-amber-500/25 bg-amber-500/10 px-3 py-2.5">
+                <span className="text-[9px] font-black uppercase tracking-wider text-amber-700 dark:text-amber-300 block">
+                  A receber
+                </span>
+                <p className="text-sm font-black text-amber-700 dark:text-amber-400 mt-0.5 tabular-nums">
+                  {formatCurrency(grandTotalPendingVal, true)}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 px-3 py-2.5">
+                <span className="text-[9px] font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400 block">
+                  Devedores
+                </span>
+                <p className="text-sm font-black text-slate-900 dark:text-white mt-0.5">
+                  {clientDebtsList.length}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-rose-500/25 bg-rose-500/10 px-3 py-2.5">
+                <span className="text-[9px] font-black uppercase tracking-wider text-rose-700 dark:text-rose-300 block">
+                  Em atraso
+                </span>
+                <p className="text-sm font-black text-rose-600 dark:text-rose-400 mt-0.5">
+                  {clientDebtsList.filter(c => c.hasOverdue).length}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {problemas.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setSaudeAberta(true)}
+              className="w-full text-left rounded-2xl border border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20 px-4 py-3 flex items-center gap-3 transition-colors active:scale-[0.995]"
+            >
+              <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0" />
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-black text-amber-800 dark:text-amber-200">
+                  {problemas.length} ponto(s) para você conferir
+                </p>
+                <p className="text-[11px] text-amber-700/80 dark:text-amber-300/70">
+                  Parcelas sem data de cobrança ou acordo lançado duas vezes. Nada foi alterado.
+                </p>
+              </div>
+              <span className="text-[10px] font-black uppercase px-2.5 py-1 rounded-lg bg-amber-500/25 text-amber-800 dark:text-amber-200 shrink-0">
+                Revisar
+              </span>
+            </button>
+          )}
+
           {vista === 'chefe' ? (
             <ErrorBoundary area="Visão do Chefe">
             <ChefeOverviewPanel
@@ -1593,6 +1656,13 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
           defaultStatus="paid"
         />
       )}
+
+      <HubHealthModal
+        isOpen={saudeAberta}
+        onClose={() => setSaudeAberta(false)}
+        problemas={problemas}
+        onResolvido={() => { fetchPendingData(); fetchAgreements(); }}
+      />
 
       <AgreementDetailsModal
         isOpen={!!acordoAberto}
