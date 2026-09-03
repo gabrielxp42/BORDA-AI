@@ -1,0 +1,125 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap">
+  <style>
+    body { margin: 0; background: #09090d; font-family: 'Plus Jakarta Sans', system-ui, sans-serif; }
+    a { color: #f87171; } a:hover { color: #fca5a5; }
+  </style>
+</helmet>
+
+<div style="padding: 28px 32px; color: #f4f4f5;">
+
+  <!-- Cabeçalho: uma pergunta, uma resposta -->
+  <div style="display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; padding-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.08);">
+    <div>
+      <span style="display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #71717a;">Total a receber</span>
+      <span style="display: block; font-size: 38px; font-weight: 800; letter-spacing: -0.02em; color: #fff; margin-top: 2px; font-variant-numeric: tabular-nums;">R$ 47.312,80</span>
+      <span style="display: block; font-size: 13px; color: #a1a1aa; margin-top: 4px;">
+        18 clientes &nbsp;·&nbsp; <span style="color: #f87171; font-weight: 600;">5 em atraso</span>
+      </span>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 8px;">
+      <div style="display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; padding: 9px 14px; width: 260px;">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#71717a" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+        <span style="font-size: 13px; color: #71717a;">Buscar cliente ou pedido</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Filtros: texto, não caixas coloridas -->
+  <div style="display: flex; align-items: center; gap: 22px; padding: 16px 0 6px;">
+    <span style="font-size: 13px; font-weight: 700; color: #fff; border-bottom: 2px solid #ef4444; padding-bottom: 6px;">Todos <span style="color: #71717a; font-weight: 500;">18</span></span>
+    <span style="font-size: 13px; font-weight: 500; color: #a1a1aa; padding-bottom: 6px;">Em atraso <span style="color: #71717a;">5</span></span>
+    <span style="font-size: 13px; font-weight: 500; color: #a1a1aa; padding-bottom: 6px;">A vencer <span style="color: #71717a;">9</span></span>
+    <span style="font-size: 13px; font-weight: 500; color: #a1a1aa; padding-bottom: 6px;">Em acordo <span style="color: #71717a;">4</span></span>
+  </div>
+
+  <!-- Lista: uma linha por cliente -->
+  <div style="display: flex; flex-direction: column;">
+
+    <!-- Em atraso: única situação que ganha cor -->
+    <div style="display: flex; align-items: center; gap: 18px; padding: 16px 14px 16px 12px; border-bottom: 1px solid rgba(255,255,255,0.06); border-left: 2px solid #ef4444; background: rgba(239,68,68,0.03);">
+      <div style="flex: 1; min-width: 0;">
+        <span style="display: block; font-size: 15px; font-weight: 700; color: #fff;">MISS COUNTRY</span>
+        <span style="display: block; font-size: 12.5px; color: #a1a1aa; margin-top: 3px;">4 pedidos e 3 parcelas &nbsp;·&nbsp; próxima cobrança 07/09</span>
+      </div>
+      <div style="text-align: right; width: 140px; flex-shrink: 0;">
+        <span style="display: block; font-size: 16px; font-weight: 700; color: #fff; font-variant-numeric: tabular-nums;">R$ 19.987,50</span>
+        <span style="display: block; font-size: 12.5px; color: #f87171; margin-top: 2px; font-weight: 600;">34 dias em atraso</span>
+      </div>
+      <div style="width: 96px; flex-shrink: 0; display: flex; justify-content: flex-end;">
+        <span style="padding: 8px 16px; border-radius: 8px; font-size: 12.5px; font-weight: 700; background: #ef4444; color: #fff;">Cobrar</span>
+      </div>
+    </div>
+
+    <!-- Em dia: sem cor nenhuma -->
+    <div style="display: flex; align-items: center; gap: 18px; padding: 16px 14px 16px 12px; border-bottom: 1px solid rgba(255,255,255,0.06); border-left: 2px solid transparent;">
+      <div style="flex: 1; min-width: 0;">
+        <span style="display: block; font-size: 15px; font-weight: 700; color: #fff;">GUILHERME ORION</span>
+        <span style="display: block; font-size: 12.5px; color: #a1a1aa; margin-top: 3px;">2 pedidos &nbsp;·&nbsp; entrega combinada 12/09</span>
+      </div>
+      <div style="text-align: right; width: 140px; flex-shrink: 0;">
+        <span style="display: block; font-size: 16px; font-weight: 700; color: #fff; font-variant-numeric: tabular-nums;">R$ 565,75</span>
+        <span style="display: block; font-size: 12.5px; color: #71717a; margin-top: 2px;">vence em 9 dias</span>
+      </div>
+      <div style="width: 96px; flex-shrink: 0; display: flex; justify-content: flex-end;">
+        <span style="padding: 8px 16px; border-radius: 8px; font-size: 12.5px; font-weight: 700; background: rgba(255,255,255,0.07); color: #e4e4e7; border: 1px solid rgba(255,255,255,0.12);">Cobrar</span>
+      </div>
+    </div>
+
+    <!-- Já em acordo: estado, não alerta -->
+    <div style="display: flex; align-items: center; gap: 18px; padding: 16px 14px 16px 12px; border-bottom: 1px solid rgba(255,255,255,0.06); border-left: 2px solid transparent;">
+      <div style="flex: 1; min-width: 0;">
+        <span style="display: block; font-size: 15px; font-weight: 700; color: #fff;">MARCEL</span>
+        <span style="display: block; font-size: 12.5px; color: #a1a1aa; margin-top: 3px;">
+          <span style="color: #d4d4d8; font-weight: 600;">Parcelado</span> &nbsp;·&nbsp; 1 de 1 paga &nbsp;·&nbsp; próxima 07/09
+        </span>
+      </div>
+      <div style="text-align: right; width: 140px; flex-shrink: 0;">
+        <span style="display: block; font-size: 16px; font-weight: 700; color: #fff; font-variant-numeric: tabular-nums;">R$ 1.971,40</span>
+        <span style="display: block; font-size: 12.5px; color: #71717a; margin-top: 2px;">acordo em dia</span>
+      </div>
+      <div style="width: 96px; flex-shrink: 0; display: flex; justify-content: flex-end;">
+        <span style="padding: 8px 16px; border-radius: 8px; font-size: 12.5px; font-weight: 700; background: rgba(255,255,255,0.07); color: #e4e4e7; border: 1px solid rgba(255,255,255,0.12);">Ver acordo</span>
+      </div>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 18px; padding: 16px 14px 16px 12px; border-bottom: 1px solid rgba(255,255,255,0.06); border-left: 2px solid transparent;">
+      <div style="flex: 1; min-width: 0;">
+        <span style="display: block; font-size: 15px; font-weight: 700; color: #fff;">VERA</span>
+        <span style="display: block; font-size: 12.5px; color: #a1a1aa; margin-top: 3px;">5 pedidos &nbsp;·&nbsp; sem data combinada</span>
+      </div>
+      <div style="text-align: right; width: 140px; flex-shrink: 0;">
+        <span style="display: block; font-size: 16px; font-weight: 700; color: #fff; font-variant-numeric: tabular-nums;">R$ 201,39</span>
+        <span style="display: block; font-size: 12.5px; color: #71717a; margin-top: 2px;">a combinar</span>
+      </div>
+      <div style="width: 96px; flex-shrink: 0; display: flex; justify-content: flex-end;">
+        <span style="padding: 8px 16px; border-radius: 8px; font-size: 12.5px; font-weight: 700; background: rgba(255,255,255,0.07); color: #e4e4e7; border: 1px solid rgba(255,255,255,0.12);">Cobrar</span>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Regra do desenho -->
+  <div style="margin-top: 24px; padding: 16px 18px; border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; background: rgba(255,255,255,0.02);">
+    <span style="display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #71717a; margin-bottom: 10px;">A regra</span>
+    <div style="display: flex; flex-direction: column; gap: 7px;">
+      <span style="font-size: 12.5px; color: #d4d4d8; line-height: 1.55;"><b style="color:#fff;">Cinza é o normal.</b> Cliente em dia não precisa chamar atenção.</span>
+      <span style="font-size: 12.5px; color: #d4d4d8; line-height: 1.55;"><b style="color:#f87171;">Vermelho só para atraso.</b> Uma cor, um significado — bate o olho e sabe onde agir.</span>
+      <span style="font-size: 12.5px; color: #d4d4d8; line-height: 1.55;"><b style="color:#fff;">Uma ação por linha.</b> O botão sólido é o que fazer agora; o resto abre ao clicar na linha.</span>
+      <span style="font-size: 12.5px; color: #d4d4d8; line-height: 1.55;"><b style="color:#fff;">Frase em vez de etiqueta.</b> "4 pedidos e 3 parcelas" se lê; quatro chips coloridos, não.</span>
+    </div>
+  </div>
+
+</div>
+</x-dc>
+</body>
+</html>

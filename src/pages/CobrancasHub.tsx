@@ -1133,12 +1133,12 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
                 return (
                   <div
                     key={debt.clientId}
-                    className={`rounded-3xl border transition-all overflow-hidden ${
+                    className={`rounded-2xl border transition-all overflow-hidden border-l-[3px] ${
                       isSelected
-                        ? 'bg-purple-50 dark:bg-purple-950/30 border-purple-400 dark:border-purple-500/60 shadow-xl'
+                        ? 'bg-slate-100 dark:bg-white/[0.06] border-slate-300 dark:border-white/25 border-l-slate-400 dark:border-l-white/40'
                         : debt.hasOverdue
-                        ? 'bg-rose-50/70 hover:bg-rose-100/80 dark:bg-black dark:hover:bg-black/90 border-rose-200 dark:border-rose-500/40 hover:dark:border-rose-500/70'
-                        : 'bg-slate-50/90 hover:bg-slate-100/90 dark:bg-black dark:hover:bg-black/90 border-slate-200 dark:border-white/10 hover:dark:border-white/20'
+                        ? 'bg-white hover:bg-slate-50 dark:bg-black dark:hover:bg-white/[0.03] border-slate-200 dark:border-white/10 border-l-rose-500 dark:border-l-rose-500'
+                        : 'bg-white hover:bg-slate-50 dark:bg-black dark:hover:bg-white/[0.03] border-slate-200 dark:border-white/10 border-l-transparent'
                     }`}
                   >
                     {/* Header do Card do Cliente */}
@@ -1173,36 +1173,20 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
                                 🏢 {debt.clientCompany}
                               </span>
                             )}
-                            <span className="px-3 py-0.5 rounded-full bg-purple-500/15 dark:bg-purple-500/20 text-purple-800 dark:text-purple-300 border border-purple-200 dark:border-purple-500/40 text-[11px] font-black flex items-center gap-1.5 shrink-0 shadow-sm">
-                              <Package className="h-3.5 w-3.5 text-purple-600 dark:text-purple-400" />
-                              {totalItemsCount} {totalItemsCount === 1 ? 'Item Pendente' : 'Itens Pendentes'}
-                            </span>
-                            {debt.hasOverdue && (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-rose-500/15 dark:bg-rose-500/20 text-rose-800 dark:text-rose-400 border border-rose-300 dark:border-rose-500/40 text-[10px] font-black uppercase tracking-wider">
-                                ⚠️ ATRASO {debt.overdueDays} DIAS
-                              </span>
-                            )}
                           </div>
-                          <p className="text-[11px] text-slate-500 dark:text-zinc-400 mt-0.5 flex items-center gap-x-2 gap-y-0.5 flex-wrap">
-                            <span>{debt.clientPhone ? `📞 ${debt.clientPhone}` : 'Sem WhatsApp'}</span>
-
-                            {pedidosEmAberto.length > 0 && (
-                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-rose-500/10 text-rose-700 dark:text-rose-300 border border-rose-500/25 font-bold">
-                                🧵 {pedidosEmAberto.length} p/ cobrar · {formatCurrency(valorPedidos, true)}
-                              </span>
-                            )}
-
-                            {debt.manualTxs.length > 0 && (
-                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border border-indigo-500/25 font-bold">
-                                📆 {debt.manualTxs.length} parcela(s) · {formatCurrency(valorParcelas, true)}
-                              </span>
-                            )}
-
-                            {proximoVenc && (
-                              <span className="inline-flex items-center gap-1 font-bold text-slate-600 dark:text-zinc-300">
-                                Próx. {format(proximoVenc, 'dd/MM')}
-                              </span>
-                            )}
+                          {/* Composição em frase, não em etiquetas coloridas:
+                              "4 pedidos e 3 parcelas · próxima cobrança 07/09"
+                              se lê de uma vez; quatro chips obrigam a decifrar. */}
+                          <p className="text-[12px] text-slate-500 dark:text-zinc-400 mt-1 truncate">
+                            {[
+                              pedidosEmAberto.length > 0
+                                ? `${pedidosEmAberto.length} ${pedidosEmAberto.length === 1 ? 'pedido' : 'pedidos'}`
+                                : null,
+                              debt.manualTxs.length > 0
+                                ? `${debt.manualTxs.length} ${debt.manualTxs.length === 1 ? 'parcela' : 'parcelas'}`
+                                : null,
+                            ].filter(Boolean).join(' e ') || 'sem itens em aberto'}
+                            {proximoVenc && ` · próxima cobrança ${format(proximoVenc, 'dd/MM')}`}
                           </p>
                         </div>
                       </div>
@@ -1210,9 +1194,19 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
                       {/* Lado Direito: Total & Ações Rápidas */}
                       <div className="flex items-center gap-3 shrink-0">
                         <div className="text-right">
-                          <span className="text-[9px] font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400 block">A Pagar</span>
-                          <span className={`text-base font-black ${debt.hasOverdue ? 'text-rose-600 dark:text-rose-400' : 'text-purple-700 dark:text-purple-300'}`}>
+                          <span className="text-base font-bold text-slate-900 dark:text-white tabular-nums block">
                             {formatCurrency(debt.totalPending, true)}
+                          </span>
+                          <span className={`text-[12px] block mt-0.5 ${
+                            debt.hasOverdue
+                              ? 'text-rose-600 dark:text-rose-400 font-semibold'
+                              : 'text-slate-400 dark:text-zinc-500'
+                          }`}>
+                            {debt.hasOverdue
+                              ? `${debt.overdueDays} dias em atraso`
+                              : proximoVenc
+                                ? `vence ${format(proximoVenc, 'dd/MM')}`
+                                : 'a combinar'}
                           </span>
                         </div>
 
@@ -1230,24 +1224,28 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
                                 orders: [...debt.orders, ...debt.manualTxs],
                               });
                             }}
-                            className="px-3 py-1.5 rounded-xl text-xs font-black bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-600/20 transition-all flex items-center gap-1 cursor-pointer active:scale-95"
-                            title="Abrir Central de Cobrança WhatsApp (Evolution API + PDF)"
+                            className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 ${
+                              debt.hasOverdue
+                                ? 'bg-rose-600 hover:bg-rose-500 text-white'
+                                : 'bg-slate-100 dark:bg-white/[0.07] hover:bg-slate-200 dark:hover:bg-white/[0.12] text-slate-700 dark:text-zinc-200 border border-slate-200 dark:border-white/[0.12]'
+                            }`}
+                            title="Enviar cobrança pelo WhatsApp"
                           >
-                            <Send className="h-3 w-3" /> Cobrar WhatsApp
+                            <Send className="h-3 w-3" /> Cobrar
                           </button>
 
                           {pedidosEmAberto.length > 0 ? (
                             <button
                               type="button"
                               onClick={(e) => handleOpenInstallmentsModal(debt, e)}
-                              className="px-3 py-1.5 rounded-xl text-xs font-black bg-purple-600 hover:bg-purple-500 text-white shadow-md shadow-purple-600/20 transition-all flex items-center gap-1 cursor-pointer active:scale-95"
+                              className="px-3 py-2 rounded-lg text-xs font-semibold text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/[0.07] transition-all flex items-center gap-1.5 cursor-pointer"
                               title={`Agrupar ${pedidosEmAberto.length} pedido(s) ainda não acordado(s) num parcelamento`}
                             >
-                              <Layers className="h-3 w-3" /> Parcelar {pedidosEmAberto.length}
+                              <Layers className="h-3 w-3" /> Parcelar
                             </button>
                           ) : debt.manualTxs.length > 0 && (
                             <span
-                              className="px-3 py-1.5 rounded-xl text-[10px] font-black bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 flex items-center gap-1"
+                              className="px-3 py-2 rounded-lg text-[11px] font-semibold text-slate-500 dark:text-zinc-400 flex items-center gap-1.5"
                               title="Todos os pedidos deste cliente já estão dentro de um acordo. Não há o que parcelar de novo."
                             >
                               ✓ Tudo em acordo

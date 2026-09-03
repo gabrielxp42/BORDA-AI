@@ -1,0 +1,13 @@
+{
+  "artboards": [
+    { "file": "Atual.dc.html",   "x": 0,    "y": 0, "w": 720,  "h": 420 },
+    { "file": "Main.dc.html",    "x": 820,  "y": 0, "w": 1000, "h": 880 },
+    { "file": "Celular.dc.html", "x": 1920, "y": 0, "w": 390,  "h": 844 }
+  ],
+  "annotations": [
+    { "id": "nota-atual", "x": 0, "y": -110, "w": 300, "text": "Como está hoje\nSeis cores na mesma linha, dois botões com o mesmo peso." },
+    { "id": "nota-proposta", "x": 820, "y": -110, "w": 340, "text": "Proposta\nCinza é o normal. Vermelho só para atraso. Uma ação por linha." },
+    { "id": "nota-celular", "x": 1920, "y": -110, "w": 300, "text": "Mesmo desenho no celular\nHoje o resumo some abaixo de 1280px." }
+  ],
+  "launch": { "view": "canvas" }
+}
