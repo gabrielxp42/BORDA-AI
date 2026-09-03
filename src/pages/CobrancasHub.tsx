@@ -395,18 +395,49 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
       const clientPhone = metadata.clientPhone || '';
       const isAgreement = t.category === 'Parcela de Acordo' || Boolean(metadata.associatedOrders);
 
-      // Vincula ao cliente correspondente por Telefone ou Nome
+      // Vincula a parcela ao cliente certo.
+      //
+      // Antes casava só por telefone ou nome exato contra clientes que tinham
+      // pedidos PENDENTES. Só que pedido dentro de acordo sai das pendências —
+      // então o cliente nem existia no mapa, e a parcela virava um card
+      // separado. Era o "fatura num lugar, parcela em outro" relatado.
+      //
+      // O agreementId guarda o clientId real, então casamos por ele primeiro.
+      const clientIdMeta = metadata.clientId;
       let targetKey: string | null = null;
-      for (const key of Object.keys(map)) {
-        const c = map[key];
-        if (clientPhone && c.clientPhone && clientPhone.replace(/\D/g, '') === c.clientPhone.replace(/\D/g, '')) {
-          targetKey = key;
-          break;
+
+      if (clientIdMeta && map[clientIdMeta]) {
+        targetKey = clientIdMeta;
+      } else {
+        for (const key of Object.keys(map)) {
+          const c = map[key];
+          if (clientIdMeta && c.clientId === clientIdMeta) { targetKey = key; break; }
+          if (clientPhone && c.clientPhone && clientPhone.replace(/\D/g, '') === c.clientPhone.replace(/\D/g, '')) {
+            targetKey = key;
+            break;
+          }
+          if (c.clientName.trim().toLowerCase() === clientName.trim().toLowerCase()) {
+            targetKey = key;
+            break;
+          }
         }
-        if (c.clientName.trim().toLowerCase() === clientName.trim().toLowerCase()) {
-          targetKey = key;
-          break;
-        }
+      }
+
+      // Cliente sem nenhum pedido pendente (todos já em acordo): abre o card
+      // com o id real dele, não um sintético, para tudo continuar agrupado.
+      if (!targetKey && clientIdMeta) {
+        const chave: string = String(clientIdMeta);
+        targetKey = chave;
+        map[chave] = {
+          clientId: clientIdMeta,
+          clientName,
+          clientPhone,
+          orders: [],
+          manualTxs: [],
+          totalPending: 0,
+          hasOverdue: false,
+          overdueDays: 0,
+        } as any;
       }
 
       if (!targetKey) {
@@ -456,9 +487,20 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
 
     if (searchTerm.trim()) {
       const term = searchTerm.toLowerCase();
-      list = list.filter(
-        c => c.clientName.toLowerCase().includes(term) || (c.clientCompany && c.clientCompany.toLowerCase().includes(term))
-      );
+      // Busca por nome, empresa, telefone, número do pedido e descrição da
+      // parcela — o usuário procura pelo que tem na mão, não só pelo nome.
+      const digitos = term.replace(/\D/g, '');
+      list = list.filter(c => {
+        if (c.clientName.toLowerCase().includes(term)) return true;
+        if (c.clientCompany && c.clientCompany.toLowerCase().includes(term)) return true;
+        if (digitos && c.clientPhone && c.clientPhone.replace(/\D/g, '').includes(digitos)) return true;
+        if (c.orders.some((o: any) =>
+          String(o.order_number || '').includes(term.replace('#', '')) ||
+          String(o.id || '').toLowerCase().startsWith(term)
+        )) return true;
+        if (c.manualTxs.some((t: any) => (t.description || '').toLowerCase().includes(term))) return true;
+        return false;
+      });
     }
 
     if (filterTopic === 'critical') {
