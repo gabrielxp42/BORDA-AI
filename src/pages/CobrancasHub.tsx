@@ -17,6 +17,7 @@ import { groupIntoAgreements, Agreement } from '@/services/installmentService';
 import { AgreementsPanel } from '@/components/billing/AgreementsPanel';
 import { AgreementDetailsModal } from '@/components/billing/AgreementDetailsModal';
 import { ChefeOverviewPanel } from '@/components/billing/ChefeOverviewPanel';
+import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 import { parsePaymentMetadata } from '@/utils/paymentHelper';
 import { formatCurrency } from '@/utils/currencyFormatter';
 import { format, differenceInDays, parseISO, addDays } from 'date-fns';
@@ -921,6 +922,7 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
         {/* Lista de Clientes */}
         <div className="flex-1 overflow-y-auto p-4 space-y-3 scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-white/10">
           {vista === 'chefe' ? (
+            <ErrorBoundary area="Visão do Chefe">
             <ChefeOverviewPanel
               debtors={clientDebtsList as any}
               agreements={agreements}
@@ -933,12 +935,15 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
                 setSearchTerm(d.clientName);
               }}
             />
+            </ErrorBoundary>
           ) : vista === 'parcelas' ? (
-            <AgreementsPanel
-              agreements={agreements}
-              canSeeFinancials={isUnlocked}
-              onOpenAgreement={setAcordoAberto}
-            />
+            <ErrorBoundary area="Parcelas e Acordos">
+              <AgreementsPanel
+                agreements={agreements}
+                canSeeFinancials={isUnlocked}
+                onOpenAgreement={setAcordoAberto}
+              />
+            </ErrorBoundary>
           ) : loading ? (
             <div className="h-64 flex items-center justify-center text-slate-500 dark:text-zinc-500 text-xs font-bold gap-2">
               <Loader2 className="h-5 w-5 animate-spin text-purple-600 dark:text-purple-400" />

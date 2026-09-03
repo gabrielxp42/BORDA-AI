@@ -153,6 +153,26 @@ export const CreateInstallmentAgreementModal: React.FC<CreateInstallmentAgreemen
 
       // Identidade do acordo: amarra parcelas e pedidos, e é o que permite
       // editar, agrupar e evitar a contagem em dobro no "A Receber".
+      // TRAVA CONTRA ACORDO EM DUPLICIDADE
+      // Auditoria de 03/09 mostrou R$ 12,3 mil duplicados porque o mesmo acordo
+      // foi criado duas vezes com ~90s de intervalo: o usuário não teve certeza
+      // de que o primeiro deu certo e refez. Antes de gravar, conferimos se
+      // algum dos pedidos já está coberto por um acordo em aberto.
+      const jaEmAcordo = selectedOrders.filter(o => {
+        const meta = parsePaymentMetadata((o as any).notes).metadata;
+        return Boolean(meta.agreementId) || (o as any).payment_status === 'in_agreement';
+      });
+
+      if (jaEmAcordo.length > 0) {
+        const numeros = jaEmAcordo.map(o => `#${o.order_number || o.id.slice(0, 4)}`).join(', ');
+        toast.error(
+          `Estes pedidos já estão em um acordo: ${numeros}. Abra o acordo existente em vez de criar outro.`,
+          { id: toastId, duration: 9000 }
+        );
+        setIsSaving(false);
+        return;
+      }
+
       const agreementId = newAgreementId();
       const selectedOrderIdList = selectedOrders.map(o => o.id);
 

@@ -26,6 +26,7 @@ import { Login } from '@/pages/Login';
 import { Toaster } from 'sonner';
 import { TaskDock } from '@/components/TaskDock';
 import { CloudSyncModal } from '@/components/ui/CloudSyncModal';
+import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 
 export const App: React.FC = () => {
   return (
@@ -45,6 +46,7 @@ export const App: React.FC = () => {
                   path="/*"
                   element={
                     <ProtectedRoute>
+                      <ErrorBoundary area="Sistema">
                       <AppLayout>
                         <CloudSyncModal />
                         <TaskDock />
@@ -66,6 +68,7 @@ export const App: React.FC = () => {
                           <Route path="/admin" element={<Admin />} />
                         </Routes>
                       </AppLayout>
+                      </ErrorBoundary>
                     </ProtectedRoute>
                   }
                 />
