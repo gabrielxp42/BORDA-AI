@@ -6,7 +6,9 @@ import {
   Layers, ArrowUpRight, Filter, Sparkles, RefreshCw, X, ShieldAlert, Check,
   CheckSquare, Square, ShieldCheck, Loader2, Target, Eye, ExternalLink,
   Package, Trophy, History, TrendingUp, Zap, Flame, Award, Activity, Trash2,
-  CalendarClock
+  CalendarClock,
+  MessageCircle,
+  QrCode
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useProfile } from '@/contexts/ProfileContext';
@@ -751,6 +753,54 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
 
       {/* 🏆 WIDGET SATÉLITE DIREITA: ÚLTIMAS BAIXAS REALIZADAS (Desktop) */}
       <div className="hidden xl:flex flex-col gap-4 fixed right-6 top-8 bottom-8 w-80 z-20 pointer-events-auto overflow-y-auto pl-1">
+
+        {/* Card: WhatsApp dedicado do Financeiro (em breve) */}
+        <div className="relative p-5 rounded-3xl bg-white/95 dark:bg-zinc-950/90 backdrop-blur-2xl border border-emerald-500/30 shadow-2xl space-y-3 overflow-hidden">
+          <span className="absolute top-3 right-3 text-[9px] font-black uppercase tracking-wider px-2 py-1 rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/40">
+            Em breve
+          </span>
+
+          <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400 font-black text-xs uppercase tracking-wider">
+            <MessageCircle className="h-4 w-4" /> WhatsApp do Financeiro
+          </div>
+
+          <p className="text-[11px] text-slate-600 dark:text-zinc-400 leading-relaxed">
+            Um número só para cobrança, separado do atendimento. Faturas, parcelas
+            e lembretes sairiam por aqui — sem misturar com a conversa do dia a dia.
+          </p>
+
+          {/* Espaço reservado para o QR Code de pareamento */}
+          <div className="relative rounded-2xl border border-dashed border-emerald-500/40 bg-emerald-500/5 p-5 flex flex-col items-center justify-center gap-2">
+            <div className="h-24 w-24 rounded-xl bg-slate-200/70 dark:bg-white/5 border border-emerald-500/20 flex items-center justify-center">
+              <QrCode className="h-10 w-10 text-emerald-600/40 dark:text-emerald-400/40" />
+            </div>
+            <span className="text-[10px] font-bold text-slate-500 dark:text-zinc-500 text-center">
+              QR Code de pareamento aparecerá aqui
+            </span>
+          </div>
+
+          <div className="space-y-1.5">
+            {[
+              'Instância própria, isolada do atendimento',
+              'Disparo de cobrança e lembrete de parcela',
+              'Histórico de envio por cliente',
+            ].map(item => (
+              <div key={item} className="flex items-start gap-1.5 text-[10px] text-slate-500 dark:text-zinc-400">
+                <span className="text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5">•</span>
+                <span>{item}</span>
+              </div>
+            ))}
+          </div>
+
+          <button
+            type="button"
+            disabled
+            title="Ainda em desenvolvimento"
+            className="w-full py-2.5 rounded-2xl bg-slate-200 dark:bg-white/5 text-slate-400 dark:text-zinc-500 text-[11px] font-black uppercase tracking-wider cursor-not-allowed border border-slate-300 dark:border-white/10"
+          >
+            Conectar número — em breve
+          </button>
+        </div>
         
         {/* Card: Histórico ao Vivo de Baixas / Recebimentos */}
         <div className="p-5 rounded-3xl bg-white/95 dark:bg-zinc-950/90 backdrop-blur-2xl border border-slate-200 dark:border-white/10 shadow-2xl space-y-4">
