@@ -1315,8 +1315,14 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
                             return (
                               <div
                                 key={ord.id}
-                                onClick={() => setSelectedOrderForDetails(ord)}
-                                className="p-4 rounded-2xl bg-white dark:bg-zinc-950 border border-slate-200 dark:border-white/10 hover:border-purple-400 dark:hover:border-purple-500/60 hover:bg-slate-50 dark:hover:bg-zinc-900/60 active:scale-[0.98] transition-all space-y-2.5 group shadow-sm cursor-pointer select-none"
+                                onClick={() => {
+                                  // Num hub de cobrança o clique resolve a dívida.
+                                  // A ficha do pedido continua acessível pelo link abaixo.
+                                  if (isInAgreement && acordoDoPedido) setAcordoAberto(acordoDoPedido);
+                                  else setSelectedOrderForPaymentModal(ord);
+                                }}
+                                title={isInAgreement ? 'Abrir o acordo deste pedido' : 'Dar baixa neste pedido'}
+                                className="p-4 rounded-2xl bg-white dark:bg-zinc-950 border border-slate-200 dark:border-white/10 hover:border-slate-300 dark:hover:border-white/25 hover:bg-slate-50 dark:hover:bg-white/[0.04] active:scale-[0.98] transition-all space-y-2.5 group shadow-sm cursor-pointer select-none"
                               >
                                 <div className="flex items-center justify-between gap-1">
                                   <div className="flex items-center gap-1.5 min-w-0">
@@ -1390,6 +1396,14 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
                                   </span>
                                 </div>
 
+                                <button
+                                  type="button"
+                                  onClick={(e) => { e.stopPropagation(); setSelectedOrderForDetails(ord); }}
+                                  className="text-[10px] font-semibold text-slate-400 dark:text-zinc-500 hover:text-slate-700 dark:hover:text-zinc-200 underline underline-offset-2 transition-colors"
+                                >
+                                  ver ficha do pedido
+                                </button>
+
                                 {!isInAgreement && (
                                   <div className="pt-1 grid grid-cols-2 gap-1.5" onClick={(e) => e.stopPropagation()}>
                                     <button
@@ -1398,10 +1412,10 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
                                         e.stopPropagation();
                                         setSelectedOrderForPaymentModal(ord);
                                       }}
-                                      className="py-1.5 px-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-600 text-emerald-800 dark:text-emerald-200 hover:text-white border border-emerald-300 dark:border-emerald-500/30 text-[10px] font-black transition-all flex items-center justify-center gap-1 cursor-pointer active:scale-95 shadow-sm"
-                                      title="Dar baixa e selecionar forma de pagamento"
+                                      className="py-2 px-2 rounded-lg bg-slate-900 dark:bg-white/[0.12] hover:bg-slate-800 dark:hover:bg-white/20 text-white dark:text-white border border-transparent dark:border-white/15 text-[11px] font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
+                                      title="Registrar o pagamento deste pedido"
                                     >
-                                      <DollarSign className="h-3 w-3 text-emerald-600 dark:text-emerald-400" /> Quitar
+                                      <DollarSign className="h-3 w-3" /> Receber
                                     </button>
 
                                     <button
@@ -1410,10 +1424,10 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
                                         e.stopPropagation();
                                         setSelectedOrderForCollectionModal(ord);
                                       }}
-                                      className="py-1.5 px-2 rounded-xl bg-purple-500/15 hover:bg-purple-600 text-purple-800 dark:text-purple-200 hover:text-white border border-purple-300 dark:border-purple-500/30 text-[10px] font-black transition-all flex items-center justify-center gap-1 cursor-pointer active:scale-95 shadow-sm"
-                                      title="Cobrar via WhatsApp com Evolution API"
+                                      className="py-2 px-2 rounded-lg bg-slate-100 dark:bg-white/[0.06] hover:bg-slate-200 dark:hover:bg-white/[0.12] text-slate-700 dark:text-zinc-200 border border-slate-200 dark:border-white/[0.12] text-[11px] font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
+                                      title="Enviar cobrança pelo WhatsApp"
                                     >
-                                      <Send className="h-3 w-3 text-purple-600 dark:text-purple-400" /> Cobrar
+                                      <Send className="h-3 w-3" /> Cobrar
                                     </button>
                                   </div>
                                 )}
@@ -1446,22 +1460,18 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
                               <div
                                 key={tx.id}
                                 className={`p-4 rounded-2xl transition-all space-y-3 group shadow-sm ${
-                                  isAgreement
-                                    ? 'bg-gradient-to-br from-indigo-950/50 via-purple-950/40 to-zinc-950 border-2 border-indigo-500/50 hover:border-indigo-400 shadow-md shadow-indigo-950/30'
-                                    : 'bg-white dark:bg-zinc-950 border border-slate-200 dark:border-white/10 hover:border-purple-400 dark:hover:border-purple-500/60 hover:bg-slate-50 dark:hover:bg-zinc-900/60'
+                                  'bg-white dark:bg-zinc-950 border border-slate-200 dark:border-white/10 hover:border-slate-300 dark:hover:border-white/25 hover:bg-slate-50 dark:hover:bg-white/[0.04]'
                                 }`}
                               >
                                 <div className="flex items-center justify-between gap-1">
                                   <span className="font-black text-slate-900 dark:text-white text-xs truncate" title={tx.description}>
-                                    {isAgreement ? `🤝 ${tx.description}` : `📝 ${tx.description || 'Entrada Futura'}`}
+                                    {tx.description || 'Entrada Futura'}
                                   </span>
                                   <div className="flex items-center gap-1.5 shrink-0">
-                                    <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-md ${
-                                      isAgreement
-                                        ? 'bg-indigo-500/30 text-indigo-300 border border-indigo-400/50 shadow-sm animate-pulse'
-                                        : 'bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-400/40'
-                                    }`}>
-                                      {isAgreement ? `🤝 ACORDO (${tx.metadata?.installmentIndex || '1'}/${tx.metadata?.totalInstallments || '1'})` : 'Avulso'}
+                                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-white/[0.07] text-slate-600 dark:text-zinc-300 border border-slate-200 dark:border-white/10">
+                                      {isAgreement
+                                        ? `Parcela ${tx.metadata?.installmentIndex || 1} de ${tx.metadata?.totalInstallments || 1}`
+                                        : 'Avulso'}
                                     </span>
                                     <button
                                       type="button"
@@ -1508,10 +1518,10 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
                                   <button
                                     type="button"
                                     onClick={() => setSelectedOrderForPaymentModal(tx)}
-                                    className="py-1.5 px-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-600 text-emerald-800 dark:text-emerald-200 hover:text-white border border-emerald-300 dark:border-emerald-500/30 text-[10px] font-black transition-all flex items-center justify-center gap-1 cursor-pointer active:scale-95 shadow-sm"
-                                    title="Abrir modal para dar baixa e selecionar forma de pagamento"
+                                    className="py-2 px-2 rounded-lg bg-slate-900 dark:bg-white/[0.12] hover:bg-slate-800 dark:hover:bg-white/20 text-white border border-transparent dark:border-white/15 text-[11px] font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
+                                    title="Registrar o pagamento desta parcela"
                                   >
-                                    <DollarSign className="h-3 w-3 text-emerald-600 dark:text-emerald-400" /> Quitar
+                                    <DollarSign className="h-3 w-3" /> Receber
                                   </button>
 
                                   <button
@@ -1526,8 +1536,8 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
                                         orders: [tx]
                                       });
                                     }}
-                                    className="py-1.5 px-2 rounded-xl bg-purple-500/15 hover:bg-purple-600 text-purple-800 dark:text-purple-200 hover:text-white border border-purple-300 dark:border-purple-500/30 text-[10px] font-black transition-all flex items-center justify-center gap-1 cursor-pointer active:scale-95 shadow-sm"
-                                    title="Cobrar este lançamento via WhatsApp"
+                                    className="py-2 px-2 rounded-lg bg-slate-100 dark:bg-white/[0.06] hover:bg-slate-200 dark:hover:bg-white/[0.12] text-slate-700 dark:text-zinc-200 border border-slate-200 dark:border-white/[0.12] text-[11px] font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
+                                    title="Enviar cobrança desta parcela pelo WhatsApp"
                                   >
                                     <Send className="h-3 w-3 text-purple-600 dark:text-purple-400" /> Cobrar
                                   </button>

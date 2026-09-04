@@ -1,13 +1,13 @@
 {
   "artboards": [
-    { "file": "Atual.dc.html",   "x": 0,    "y": 0, "w": 720,  "h": 420 },
-    { "file": "Main.dc.html",    "x": 820,  "y": 0, "w": 1000, "h": 880 },
-    { "file": "Celular.dc.html", "x": 1920, "y": 0, "w": 390,  "h": 844 }
+    { "file": "Fluxo.dc.html",   "x": 0,    "y": 0,    "w": 760,  "h": 640 },
+    { "file": "Main.dc.html",    "x": 0,    "y": 780,  "w": 1280, "h": 860 },
+    { "file": "Celular.dc.html", "x": 1400, "y": 780,  "w": 390,  "h": 844 }
   ],
   "annotations": [
-    { "id": "nota-atual", "x": 0, "y": -110, "w": 300, "text": "Como está hoje\nSeis cores na mesma linha, dois botões com o mesmo peso." },
-    { "id": "nota-proposta", "x": 820, "y": -110, "w": 340, "text": "Proposta\nCinza é o normal. Vermelho só para atraso. Uma ação por linha." },
-    { "id": "nota-celular", "x": 1920, "y": -110, "w": 300, "text": "Mesmo desenho no celular\nHoje o resumo some abaixo de 1280px." }
+    { "id": "n-diag",  "x": 0,    "y": -120, "w": 420, "text": "O diagnóstico\nNove destinos saindo da mesma tela. Clicar num pedido leva para a tela de pedido — fora da cobrança." },
+    { "id": "n-hub",   "x": 0,    "y": 660,  "w": 460, "text": "O Hub novo\nEscolhe o cliente à esquerda, resolve à direita. Marca o que quer tratar, escolhe uma das três ações." },
+    { "id": "n-fone",  "x": 1400, "y": 660,  "w": 380, "text": "No celular\nMesmo modelo. Lista, depois detalhe. As ações ficam fixas embaixo, ao alcance do polegar." }
   ],
   "launch": { "view": "canvas" }
 }
