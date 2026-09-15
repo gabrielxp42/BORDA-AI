@@ -148,8 +148,8 @@ export const FinancialTransactionModal: React.FC<FinancialTransactionModalProps>
   ];
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/75 backdrop-blur-md animate-in fade-in duration-200">
-      <div className="relative w-full max-w-md max-h-[90dvh] overflow-y-auto custom-scrollbar rounded-t-3xl sm:rounded-3xl border border-slate-200 dark:border-white/10 bg-white dark:bg-[#0d0d14] text-slate-900 dark:text-zinc-100 shadow-2xl p-5 sm:p-6 space-y-5 animate-in zoom-in-95 duration-200">
+    <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/75 backdrop-blur-md animate-in fade-in duration-200 overscroll-contain">
+      <div className="relative w-full max-w-md max-h-[88dvh] sm:max-h-[90dvh] overflow-y-auto overscroll-contain custom-scrollbar rounded-t-3xl sm:rounded-3xl border border-slate-200 dark:border-white/10 bg-white dark:bg-[#0d0d14] text-slate-900 dark:text-zinc-100 shadow-2xl p-5 sm:p-6 space-y-4 animate-in zoom-in-95 duration-200">
         
         {/* Header */}
         <div className="flex items-center justify-between pb-4 border-b border-slate-200 dark:border-white/10">
@@ -360,12 +360,12 @@ export const FinancialTransactionModal: React.FC<FinancialTransactionModalProps>
             />
           </div>
 
-          {/* Submit */}
-          <div className="pt-2">
+          {/* Submit Stickied to bottom of modal */}
+          <div className="sticky bottom-0 z-20 pt-3 pb-2 bg-white/95 dark:bg-[#0d0d14]/95 backdrop-blur-md -mx-5 px-5 sm:-mx-6 sm:px-6 border-t border-slate-100 dark:border-white/10 mt-4">
             <button
               type="submit"
               disabled={isSubmitting}
-              className={`w-full py-3.5 rounded-2xl font-black text-sm text-white shadow-xl transition-all active:scale-[0.98] flex items-center justify-center gap-2 disabled:opacity-50 ${
+              className={`w-full py-3.5 rounded-2xl font-black text-sm text-white shadow-xl transition-all active:scale-[0.98] flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 ${
                 isIncome
                   ? 'bg-gradient-to-r from-emerald-600 to-teal-500 hover:brightness-110 shadow-emerald-500/25'
                   : 'bg-gradient-to-r from-rose-600 to-amber-600 hover:brightness-110 shadow-rose-500/25'

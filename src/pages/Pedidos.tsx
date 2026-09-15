@@ -813,7 +813,8 @@ export const Pedidos: React.FC = () => {
                 orderId: orderData.id,
                 clientId: orderData.client_id,
                 matrixName: cleanNotes,
-                quantity: orderData.items?.[0]?.quantity || 1
+                quantity: orderData.items?.[0]?.quantity || 1,
+                fullOrder: orderData
               });
               setIsCreateModalOpen(true);
             }}
@@ -852,7 +853,8 @@ export const Pedidos: React.FC = () => {
             orderId: orderToPrice.id,
             clientId: orderToPrice.client_id,
             matrixName: cleanNotes,
-            quantity: orderToPrice.items?.[0]?.quantity || 1
+            quantity: orderToPrice.items?.[0]?.quantity || 1,
+            fullOrder: orderToPrice
           });
           setSelectedOrderForDetails(null);
           setIsCreateModalOpen(true);
