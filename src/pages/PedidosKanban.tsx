@@ -167,28 +167,18 @@ export const PedidosKanban: React.FC<PedidosKanbanProps> = ({
         .from('orders')
         .select(`
           id, order_number, client_id, status, payment_status, payment_method, total_amount, due_date, notes, created_at, visible_profile_ids,
-          clients (name, phone, company_name)
+          clients (name, phone, company_name),
+          order_items (*)
         `)
         .eq('user_id', userId)
         .order('created_at', { ascending: false });
 
       if (ordersError) throw ordersError;
 
-      // Filtra itens apenas dos pedidos deste usuário (evita puxar tabela inteira)
-      const orderIds = (ordersData || []).map((o: any) => o.id);
-      const { data: itemsData, error: itemsError } = orderIds.length > 0
-        ? await supabase
-            .from('order_items')
-            .select('id, order_id, description, quantity, unit_price, total_price')
-            .in('order_id', orderIds)
-        : { data: [], error: null };
-
-      if (itemsError) throw itemsError;
-
       const formattedOrders: KanbanOrder[] = (ordersData || []).map((o: any) => ({
         ...o,
         client: o.clients,
-        items: itemsData?.filter(i => i.order_id === o.id) || []
+        items: o.order_items || []
       }));
 
       setOrders(formattedOrders);

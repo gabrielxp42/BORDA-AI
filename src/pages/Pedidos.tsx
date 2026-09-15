@@ -180,21 +180,16 @@ export const Pedidos: React.FC = () => {
         .from('orders')
         .select(`
           id, order_number, client_id, status, payment_status, payment_method, total_amount, due_date, notes, created_at, visible_profile_ids,
-          clients (name, phone, company_name)
+          clients (name, phone, company_name),
+          order_items (*)
         `)
         .eq('user_id', userId)
         .order('created_at', { ascending: false });
 
       if (ordersError) throw ordersError;
 
-      const { data: itemsData, error: itemsError } = await supabase
-        .from('order_items')
-        .select('*');
-
-      if (itemsError) throw itemsError;
-
       const formatted: Order[] = (ordersData || []).map((o: any) => {
-        const orderItems = itemsData?.filter(i => i.order_id === o.id) || [];
+        const orderItems = o.order_items || [];
         return {
           ...o,
           client: o.clients,

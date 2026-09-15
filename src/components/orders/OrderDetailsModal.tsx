@@ -58,10 +58,36 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
   const [tempItems, setTempItems] = useState<any[]>([]);
   const [isSavingQuickEdit, setIsSavingQuickEdit] = useState(false);
   const [showPrintOptions, setShowPrintOptions] = useState(false);
+  const [fetchedItems, setFetchedItems] = useState<any[]>([]);
+
+  // Carrega itens 100% atualizados e completos direto do banco
+  useEffect(() => {
+    if (!isOpen || !order?.id) return;
+
+    const loadOrderItems = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('order_items')
+          .select('*')
+          .eq('order_id', order.id)
+          .order('created_at', { ascending: true });
+
+        if (!error && data && data.length > 0) {
+          setFetchedItems(data);
+        } else {
+          setFetchedItems(order.order_items || order.items || []);
+        }
+      } catch (err) {
+        setFetchedItems(order.order_items || order.items || []);
+      }
+    };
+
+    loadOrderItems();
+  }, [isOpen, order?.id, order?.order_items, order?.items]);
 
   useEffect(() => {
     const fetchMatrixUrls = async () => {
-      const rawItems = order?.order_items || order?.items || [];
+      const rawItems = fetchedItems.length > 0 ? fetchedItems : (order?.order_items || order?.items || []);
       if (rawItems.length === 0) return;
       const urls: Record<string, string> = {};
       const previews: Record<string, string> = {};
@@ -122,13 +148,14 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
     if (isOpen) {
       fetchMatrixUrls();
     }
-  }, [order, isOpen]);
+  }, [order, isOpen, fetchedItems]);
 
   if (!isOpen || !order) return null;
 
   const { cleanNotes, metadata } = parsePaymentMetadata(order.notes);
 
   const getPrintData = () => {
+    const rawItems = fetchedItems.length > 0 ? fetchedItems : (order.order_items || order.items || []);
     return {
       id: order.id,
       orderNumber: order.order_number || order.id.slice(0, 6),
@@ -141,7 +168,7 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
       paymentMethod: order.payment_method,
       totalAmount: order.total_amount || 0,
       notes: order.notes,
-      items: (order.order_items || order.items || []).map((i: any) => ({
+      items: rawItems.map((i: any) => ({
         description: i.description,
         quantity: i.quantity || 1,
         unitPrice: i.unit_price || 0,
@@ -490,7 +517,7 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                   </thead>
                   <tbody className="divide-y divide-slate-200 dark:divide-white/5 font-medium text-slate-800 dark:text-zinc-200">
                     {(() => {
-                      const rawItems = order.order_items || order.items || [];
+                      const rawItems = fetchedItems.length > 0 ? fetchedItems : (order.order_items || order.items || []);
                       const itemsToRender = (isQuickEditing && tempItems.length > 0) ? tempItems : rawItems;
                       return itemsToRender && itemsToRender.length > 0 ? (
                         itemsToRender.map((item: any, idx: number) => (
@@ -724,9 +751,10 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                   </span>
                   <h3 className="text-lg sm:text-2xl font-black text-slate-900 dark:text-white leading-tight">
                     {(() => {
+                      const rawItems = fetchedItems.length > 0 ? fetchedItems : (order.order_items || order.items || []);
                       const currentTotalPieces = isQuickEditing 
                         ? tempItems.reduce((acc, item) => acc + (Number(item.quantity) || 1), 0)
-                        : ((order.order_items || order.items || [])?.reduce((acc: number, it: any) => acc + (it.quantity || 1), 0) || 1);
+                        : (rawItems.reduce((acc: number, it: any) => acc + (it.quantity || 1), 0) || 1);
                       
                       const currentTotalAmount = isQuickEditing
                         ? tempItems.reduce((acc, item) => acc + (Number(item.quantity) || 1) * (Number(item.unit_price) || 0), 0)

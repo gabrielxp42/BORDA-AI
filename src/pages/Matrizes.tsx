@@ -2,8 +2,9 @@ import React, { useState } from 'react';
 import { Layers, Plus, Search, FileCode, CheckCircle, Tag, Eye, ChevronDown, ChevronRight, User, FolderOpen, Folder, Download, Hash, Maximize2, Clock, X, HardDrive, AlertCircle, DollarSign, RefreshCw, Save, Edit2, Star, Minus } from 'lucide-react';
 import { Matrix } from '@/types/borda';
 import { ClientSelect } from '../components/ui/ClientSelect';
-import { EmbroideryDropzone } from '../components/ui/EmbroideryDropzone';
-import { EmbroideryMetadata } from '../utils/embroideryParser';
+import { EmbroideryDropzone, type EmbroideryParseState } from '../components/ui/EmbroideryDropzone';
+import { EmbroideryMetadataDetails } from '../components/ui/EmbroideryMetadataDetails';
+import { EmbroideryMetadata, isValidatedEmbroidery, embroideryProvenance } from '../utils/embroideryParser';
 import { MatrixDetailsModal } from '../components/matrices/MatrixDetailsModal';
 import { supabase } from '../integrations/supabase/client';
 import { useCompanySettings } from '../contexts/CompanySettingsContext';
@@ -35,15 +36,29 @@ export const Matrizes: React.FC = () => {
   // Form State
   const [name, setName] = useState('');
   const [clientId, setClientId] = useState('');
-  const [stitchCount, setStitchCount] = useState(15000);
-  const [colorCount, setColorCount] = useState(4);
-  const [widthMm, setWidthMm] = useState(80);
-  const [heightMm, setHeightMm] = useState(60);
+  const [stitchCount, setStitchCount] = useState(0);
+  const [colorCount, setColorCount] = useState(0);
+  const [widthMm, setWidthMm] = useState(0);
+  const [heightMm, setHeightMm] = useState(0);
   const [unit, setUnit] = useState<'cm' | 'mm'>('cm');
   const [format, setFormat] = useState('dst');
   const [fixedPrice, setFixedPrice] = useState<string>('');
   const [previewUrl, setPreviewUrl] = useState<string | undefined>();
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [parseState, setParseState] = useState<EmbroideryParseState>('idle');
+  const [parsedMetadata, setParsedMetadata] = useState<EmbroideryMetadata | null>(null);
+  const measurementsReady = parseState !== 'parsing' && parseState !== 'error'
+    && Number.isInteger(stitchCount) && stitchCount > 0 && Number.isInteger(colorCount) && colorCount > 0
+    && Number.isFinite(widthMm) && widthMm > 0 && Number.isFinite(heightMm) && heightMm > 0
+    && (!selectedFile || isValidatedEmbroidery(parsedMetadata));
+  React.useEffect(() => () => { if (previewUrl?.startsWith('blob:')) URL.revokeObjectURL(previewUrl); }, [previewUrl]);
+  const handleParseStateChange = (state: EmbroideryParseState) => {
+    setParseState(state);
+    if (state === 'parsing') {
+      setParsedMetadata(null); setSelectedFile(null); setPreviewUrl(undefined);
+      setStitchCount(0); setColorCount(0); setWidthMm(0); setHeightMm(0);
+    }
+  };
   const [isSaving, setIsSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -171,26 +186,18 @@ export const Matrizes: React.FC = () => {
   };
 
   const handleFileParsed = (meta: EmbroideryMetadata, file: File) => {
-    if (meta.name && !name) setName(meta.name);
-    if (meta.stitches) setStitchCount(meta.stitches);
-    if (meta.colors) setColorCount(meta.colors);
-    if (meta.widthMm) {
-      setWidthMm(meta.widthMm);
-      if (meta.widthMm < 10) setUnit('mm');
-      else setUnit('cm');
-    }
-    if (meta.heightMm) {
-      setHeightMm(meta.heightMm);
-      if (meta.heightMm < 10 && (!meta.widthMm || meta.widthMm < 10)) setUnit('mm');
-    }
-    if (meta.format && meta.format !== 'unknown') setFormat(meta.format);
-    if (meta.preview_url) setPreviewUrl(meta.preview_url);
-    setSelectedFile(file);
+    if (!isValidatedEmbroidery(meta)) throw new Error('Dados da matriz não validados.');
+    setName(meta.name);
+    setStitchCount(meta.stitches); setColorCount(meta.colors);
+    setWidthMm(meta.widthMm); setHeightMm(meta.heightMm);
+    setUnit('mm'); setFormat(meta.format);
+    setPreviewUrl(meta.preview_url); setParsedMetadata(meta); setSelectedFile(file);
   };
 
   const handleAddMatrix = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
+    if (!measurementsReady) { setFormError('Aguarde a validação de pontos, cores e medidas da matriz.'); return; }
     
     if (!editingMatrixDataId && !selectedFile) {
       setFormError('Você precisa fazer o upload do arquivo da matriz.');
@@ -302,6 +309,7 @@ export const Matrizes: React.FC = () => {
             width_mm: Number(widthMm),
             height_mm: Number(heightMm),
             color_count: Number(colorCount),
+            notes: parsedMetadata ? embroideryProvenance(parsedMetadata) : null,
             estimated_time_minutes: Math.round((stitchCount / 1000) * 0.7),
           })
           .select()
@@ -322,13 +330,13 @@ export const Matrizes: React.FC = () => {
       setEditingMatrixVersionId(null);
       setName('');
       setClientId('');
-      setStitchCount(15000);
-      setColorCount(4);
-      setWidthMm(80);
-      setHeightMm(60);
+      setStitchCount(0);
+      setColorCount(0);
+      setWidthMm(0);
+      setHeightMm(0);
       setFormat('dst');
       setFixedPrice('');
-      setSelectedFile(null);
+      setSelectedFile(null); setParsedMetadata(null); setParseState('idle');
       setPreviewUrl(undefined);
       fetchMatrices();
     } catch (err: any) {
@@ -426,12 +434,12 @@ export const Matrizes: React.FC = () => {
               setEditingMatrixDataId(null);
               setEditingMatrixVersionId(null);
               setName('');
-              setStitchCount(15000);
-              setColorCount(4);
-              setWidthMm(80);
-              setHeightMm(60);
-              setFixedPrice('');
-              setSelectedFile(null);
+              setStitchCount(0);
+              setColorCount(0);
+              setWidthMm(0);
+              setHeightMm(0);
+              setFixedPrice(''); setPreviewUrl(undefined);
+              setSelectedFile(null); setParsedMetadata(null); setParseState('idle');
               setIsModalOpen(true);
             }}
             className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-2xl text-white font-bold text-xs shadow-lg hover:opacity-90 transition-all active:scale-95"
@@ -794,10 +802,11 @@ export const Matrizes: React.FC = () => {
                                     setEditingMatrixVersionId(v?.id || null);
                                     setName(m.name);
                                     setClientId(m.client_id || '');
-                                    setStitchCount(v?.stitch_count || 15000);
-                                    setColorCount(v?.color_count || 1);
-                                    setWidthMm(v?.width_mm || 80);
-                                    setHeightMm(v?.height_mm || 60);
+                                    setStitchCount(v?.stitch_count ?? 0);
+                                    setColorCount(v?.color_count ?? 0);
+                                    setSelectedFile(null); setParsedMetadata(null); setParseState('idle'); setPreviewUrl(undefined);
+                                    setWidthMm(v?.width_mm ?? 0);
+                                    setHeightMm(v?.height_mm ?? 0);
                                     setFixedPrice(m.fixed_price !== null ? String(m.fixed_price).replace('.', ',') : '');
                                     setFormat(v?.file_format || 'dst');
                                     setIsModalOpen(true);
@@ -865,7 +874,8 @@ export const Matrizes: React.FC = () => {
               
               {!editingMatrixDataId && (
                 <div className="mb-6">
-                  <EmbroideryDropzone onFileParsed={handleFileParsed} />
+                  <EmbroideryDropzone onFileParsed={handleFileParsed} onParseStateChange={handleParseStateChange} multiple={false} />
+                  <EmbroideryMetadataDetails metadata={parsedMetadata} />
                 </div>
               )}
 
@@ -899,17 +909,19 @@ export const Matrizes: React.FC = () => {
                   <input
                     type="number"
                     required
-                    value={stitchCount}
+                    value={stitchCount || ''}
+                    min="1" step="1" placeholder="Pendente" readOnly={!!selectedFile} disabled={parseState === 'parsing'}
                     onChange={(e) => setStitchCount(Number(e.target.value))}
                     className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-2 text-xs text-white mt-1 focus:outline-none"
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-bold text-zinc-400 uppercase">Nº de Cores</label>
+                  <label className="text-xs font-bold text-zinc-400 uppercase">{format === 'dst' ? 'Etapas de cor (DST)' : 'Nº de Cores'}</label>
                   <input
                     type="number"
                     required
-                    value={colorCount}
+                    value={colorCount || ''}
+                    min="1" step="1" placeholder="Pendente" readOnly={!!selectedFile} disabled={parseState === 'parsing'}
                     onChange={(e) => setColorCount(Number(e.target.value))}
                     className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-2 text-xs text-white mt-1 focus:outline-none"
                   />
@@ -921,8 +933,8 @@ export const Matrizes: React.FC = () => {
                   <label className="text-xs font-bold text-zinc-400 uppercase">Largura ({unit.toUpperCase()})</label>
                   <input
                     type="number"
-                    step="0.1"
-                    value={unit === 'cm' ? Number((widthMm / 10).toFixed(2)) : widthMm}
+                    step="any" min="0.0001" placeholder="Pendente" readOnly={!!selectedFile} disabled={parseState === 'parsing'}
+                    value={widthMm ? Number((unit === 'cm' ? widthMm / 10 : widthMm).toFixed(6)) : ''}
                     onChange={(e) => {
                       const val = Number(e.target.value);
                       setWidthMm(unit === 'cm' ? val * 10 : val);
@@ -934,8 +946,8 @@ export const Matrizes: React.FC = () => {
                   <label className="text-xs font-bold text-zinc-400 uppercase">Altura ({unit.toUpperCase()})</label>
                   <input
                     type="number"
-                    step="0.1"
-                    value={unit === 'cm' ? Number((heightMm / 10).toFixed(2)) : heightMm}
+                    step="any" min="0.0001" placeholder="Pendente" readOnly={!!selectedFile} disabled={parseState === 'parsing'}
+                    value={heightMm ? Number((unit === 'cm' ? heightMm / 10 : heightMm).toFixed(6)) : ''}
                     onChange={(e) => {
                       const val = Number(e.target.value);
                       setHeightMm(unit === 'cm' ? val * 10 : val);
@@ -946,7 +958,7 @@ export const Matrizes: React.FC = () => {
                 <div>
                   <label className="text-xs font-bold text-zinc-400 uppercase">Formato</label>
                   <select
-                    value={format}
+                    value={format} disabled={!!selectedFile || parseState === 'parsing'}
                     onChange={(e) => setFormat(e.target.value)}
                     className="w-full bg-[#12121a] border border-white/10 rounded-2xl px-4 py-2 text-xs text-white mt-1 focus:outline-none"
                   >
@@ -963,7 +975,7 @@ export const Matrizes: React.FC = () => {
                 <div className="relative flex flex-col sm:flex-row items-center justify-between gap-4">
                   {(() => {
                     const isOverridden = fixedPrice.trim() !== '';
-                    const autoPrice = calculateEmbroideryPrice({ stitchCount: stitchCount || 0, colorCount: colorCount || 1, quantity: 1 }, rules).totalPrice;
+                    const autoPrice = measurementsReady ? calculateEmbroideryPrice({ stitchCount, colorCount, quantity: 1 }, rules).totalPrice : 0;
                     const displayPrice = isOverridden ? parseFloat(fixedPrice.replace(',', '.') || '0') : autoPrice;
                     
                     return (
@@ -972,10 +984,10 @@ export const Matrizes: React.FC = () => {
                           {isOverridden ? 'Preço Fixado Manualmente' : 'Preço Calculado Automático'}
                         </label>
                         <p className={`text-xl font-black mt-1 ${isOverridden ? 'text-amber-400' : 'text-emerald-400'}`}>
-                          {formatCurrency(displayPrice)}
+                          {measurementsReady ? formatCurrency(displayPrice) : 'Aguardando dados da matriz'}
                         </p>
                         <p className="text-[10px] text-zinc-500 mt-1 leading-tight">
-                          {isOverridden 
+                          {!measurementsReady ? 'Pontos, cores e medidas pendentes de validação.' : isOverridden 
                             ? 'Este valor será usado em vez da precificação automática.'
                             : `Baseado em ${stitchCount.toLocaleString()} pts e ${colorCount} cores, de acordo com suas regras.`}
                         </p>
@@ -1049,7 +1061,7 @@ export const Matrizes: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  disabled={isSaving}
+                  disabled={isSaving || !measurementsReady}
                   className="px-6 py-2.5 rounded-xl text-white font-black text-xs transition-all flex items-center gap-2 disabled:opacity-50 hover:opacity-90"
                   style={{ backgroundColor: settings.primaryColor }}
                 >

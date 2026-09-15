@@ -8,8 +8,9 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { calculateEmbroideryPrice } from '@/services/pricingEngine';
-import { EmbroideryDropzone } from '../ui/EmbroideryDropzone';
-import { EmbroideryMetadata } from '@/utils/embroideryParser';
+import { EmbroideryDropzone, type EmbroideryParseState } from '../ui/EmbroideryDropzone';
+import { EmbroideryMetadataDetails } from '../ui/EmbroideryMetadataDetails';
+import { EmbroideryMetadata, isValidatedEmbroidery, embroideryProvenance } from '@/utils/embroideryParser';
 import { ClientSelect } from '../ui/ClientSelect';
 import { DatePicker } from '../ui/DatePicker';
 import { useCompanySettings } from '@/contexts/CompanySettingsContext';
@@ -95,8 +96,14 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
   // File Dropzone Accordion
   const [isDropzoneExpanded, setIsDropzoneExpanded] = useState<boolean>(false);
   const [lastParsedFile, setLastParsedFile] = useState<string | null>(null);
-  const [parsedMatrixFile, setParsedMatrixFile] = useState<File | null>(null);
   const [parsedMatrixMeta, setParsedMatrixMeta] = useState<EmbroideryMetadata | null>(null);
+  const importedPreviewUrls = React.useRef(new Set<string>());
+  useEffect(() => () => {
+    for (const url of importedPreviewUrls.current) URL.revokeObjectURL(url);
+    importedPreviewUrls.current.clear();
+  }, []);
+  const [parseState, setParseState] = useState<EmbroideryParseState>('idle');
+  const importBlocked = parseState === 'parsing' || parseState === 'error';
   const [saveToLibrary, setSaveToLibrary] = useState<boolean>(true);
 
   // Saved client matrices
@@ -162,6 +169,8 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
     totalPrice: number;
     manualUnitPrice?: number;
     matrixId?: string | null;
+    embroideryMetadata?: EmbroideryMetadata;
+    embroideryFile?: File;
   }[]>([]);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [isAddingNewMatrix, setIsAddingNewMatrix] = useState(false);
@@ -189,7 +198,8 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
   }, [lastParsedFile]);
 
   // Compute live price
-  const calculation = calculateEmbroideryPrice(
+  const canCalculate = !importBlocked && Number.isInteger(Number(stitchCount)) && Number(stitchCount) > 0 && Number.isInteger(Number(colorCount)) && Number(colorCount) > 0;
+  const calculation = !canCalculate ? {baseStitchCost: 0, operationalMarginAmount: 0, colorAddonAmount: 0, bigHoopAddonAmount: 0, readyPieceAddonAmount: 0, fringeAddonAmount: 0, laserAddonAmount: 0, pressAddonAmount: 0, unitPrice: 0, totalPrice: 0, breakdown: []} : calculateEmbroideryPrice(
     {
       stitchCount: Math.max(0, Number(stitchCount) || 0),
       colorCount: Math.max(1, Number(colorCount) || 1),
@@ -283,6 +293,8 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
               setColorCount(item.colorCount ? item.colorCount : '');
               setQuantity(item.quantity);
               setSelectedMatrixId(item.matrixId || null);
+              setParsedMatrixMeta(item.embroideryMetadata || null);
+              setLastParsedFile(item.embroideryMetadata?.name || null);
             }
           }
         }
@@ -303,7 +315,10 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
       paymentStatus,
       paymentMethod,
       depositAmount,
-      orderItemsList,
+      orderItemsList: orderItemsList.map(({embroideryFile: _file, embroideryMetadata, ...item}) => ({
+        ...item,
+        embroideryMetadata: embroideryMetadata ? {...embroideryMetadata, preview_url: undefined} : undefined,
+      })),
       selectedItemId
     };
     
@@ -314,7 +329,7 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
   }, [selectedClientId, entryMode, observations, paymentStatus, paymentMethod, depositAmount, orderItemsList, selectedItemId, initialData]);
 
   useEffect(() => {
-    if (selectedItemId) {
+    if (selectedItemId && !importBlocked) {
       setOrderItemsList(prev => prev.map(item => {
         if (item.id === selectedItemId) {
           const calcUnitPrice = entryMode === 'budget' ? calculation.unitPrice : 0;
@@ -324,7 +339,7 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
             ...item,
             matrixName: matrixName,
             stitchCount: Number(stitchCount) || 0,
-            colorCount: Number(colorCount) || 1,
+            colorCount: Number(colorCount) || 0,
             quantity: newQty,
             unitPrice: finalUnitPrice,
             totalPrice: finalUnitPrice * newQty,
@@ -334,7 +349,7 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
         return item;
       }));
     }
-  }, [matrixName, stitchCount, colorCount, quantity, calculation.unitPrice, calculation.totalPrice, selectedMatrixId, selectedItemId, entryMode]);
+  }, [matrixName, stitchCount, colorCount, quantity, calculation.unitPrice, calculation.totalPrice, selectedMatrixId, selectedItemId, entryMode, importBlocked]);
 
   const handleManualUnitPriceChange = (id: string, value: string) => {
     const numValue = value === '' ? undefined : Number(value);
@@ -372,6 +387,10 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
   };
 
   const handleSelectItem = (item: any) => {
+    if (parseState === 'parsing') return;
+    setParseState('idle');
+    setParsedMatrixMeta(item.embroideryMetadata || null);
+    setLastParsedFile(item.embroideryMetadata?.name || null);
     setSelectedItemId(item.id);
     setMatrixName(item.matrixName);
     setStitchCount(item.stitchCount ? item.stitchCount : '');
@@ -381,11 +400,12 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
   };
 
   const handleAddNewItem = () => {
+    if (parseState === 'parsing') return;
     const newItem = {
       id: `item_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
       matrixName: '',
       stitchCount: 0,
-      colorCount: 1,
+      colorCount: 0,
       quantity: 1,
       unitPrice: 0,
       totalPrice: 0,
@@ -631,62 +651,26 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
     toast.success(`Matriz "${matrix.name}" adicionada ao carrinho!`);
   };
 
-  const handleFileParsed = (meta: EmbroideryMetadata, file: File) => {
-    const parsedName = meta.name || file.name.replace(/\.[^/.]+$/, "");
-    const parsedStitches = meta.stitches || 0;
-    const parsedColors = meta.colors || 1;
-
-    setLastParsedFile(parsedName);
-    setParsedMatrixFile(file);
-    setParsedMatrixMeta(meta);
-
-    // Auto-adiciona na lista de matrizes do pedido se tiver pontos válidos ou nome
-    if (parsedName) {
-      const calcPrice = calculateEmbroideryPrice(
-        {
-          stitchCount: Math.max(0, parsedStitches),
-          colorCount: Math.max(1, parsedColors),
-          quantity: Math.max(1, Number(quantity) || 1),
-          chargeColorAddon,
-          isBigHoop,
-          isReadyPiece,
-          isFringe,
-          hasLaser,
-          hasPress,
-        },
-        rules
-      );
-
-      const newItemData = {
-        matrixName: parsedName,
-        stitchCount: parsedStitches,
-        colorCount: parsedColors,
-        quantity: Math.max(1, Number(quantity) || 1),
-        unitPrice: calcPrice.unitPrice,
-        totalPrice: calcPrice.totalPrice,
-        matrixId: null
-      };
-
-      setOrderItemsList(prev => {
-        // Se o item selecionado atual estiver em branco, vamos sobrescrevê-lo
-        const currentItem = prev.find(i => i.id === selectedItemId);
-        if (currentItem && !currentItem.matrixName && !currentItem.stitchCount) {
-          const updatedItem = { ...currentItem, ...newItemData };
-          setTimeout(() => handleSelectItem(updatedItem), 0);
-          return prev.map(i => i.id === selectedItemId ? updatedItem : i);
-        }
-        
-        // Senão, cria um novo item
-        const newItem = {
-          id: `item_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
-          ...newItemData
-        };
-        setTimeout(() => handleSelectItem(newItem), 0);
-        return [...prev, newItem];
-      });
-      
-      toast.success(`Matriz "${parsedName}" importada e pronta para edição!`);
+  const handleParseStateChange = (state: EmbroideryParseState) => {
+    setParseState(state);
+    if (state === 'parsing') {
+      setSelectedItemId(null); setMatrixName(''); setStitchCount(''); setColorCount('');
+      setParsedMatrixMeta(null); setLastParsedFile(null);
     }
+  };
+
+  const handleFileParsed = (meta: EmbroideryMetadata, file: File) => {
+    if (!isValidatedEmbroidery(meta)) throw new Error('Dados da matriz não validados.');
+    if (meta.preview_url) importedPreviewUrls.current.add(meta.preview_url);
+    const itemQuantity = Math.max(1, Number(quantity) || 1);
+    const price = calculateEmbroideryPrice({stitchCount: meta.stitches, colorCount: meta.colors,
+      quantity: itemQuantity, chargeColorAddon, isBigHoop, isReadyPiece, isFringe, hasLaser, hasPress}, rules);
+    const item = {id: crypto.randomUUID(), matrixName: meta.name, stitchCount: meta.stitches,
+      colorCount: meta.colors, quantity: itemQuantity, unitPrice: price.unitPrice, totalPrice: price.totalPrice,
+      matrixId: null, embroideryMetadata: meta, embroideryFile: file};
+    setOrderItemsList(previous => [...previous.filter(existing => existing.matrixName || existing.stitchCount > 0), item]);
+    handleSelectItem(item);
+    toast.success('Matriz "' + meta.name + '" importada com dados conferidos.');
   };
 
   const handleFileAttachment = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -700,6 +684,13 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
   };
 
   const handleCreateOrder = async () => {
+    if (importBlocked) { toast.error('Conclua a validação da matriz antes de salvar.'); return; }
+    if (entryMode === 'budget' && orderItemsList.some(item => !Number.isInteger(item.stitchCount) || item.stitchCount <= 0 || !Number.isInteger(item.colorCount) || item.colorCount <= 0 || (item.embroideryMetadata && !isValidatedEmbroidery(item.embroideryMetadata)))) {
+      toast.error('Há uma matriz com pontos ou cores pendentes no pedido.'); return;
+    }
+    if (entryMode === 'budget' && saveToLibrary && orderItemsList.some(item => item.embroideryMetadata && !item.matrixId && !(item.embroideryFile instanceof File))) {
+      toast.error('Anexe novamente as matrizes do rascunho para salvar os arquivos na biblioteca.'); return;
+    }
     if (!selectedClientId) {
       toast.error("Selecione um cliente.");
       return;
@@ -716,6 +707,7 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
     }
 
     setIsSaving(true);
+    const importedMatrixIds = new Map<string, string>();
     try {
       // 1. Upload attachments to Supabase Storage
       const uploadedUrls: string[] = [];
@@ -758,58 +750,33 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
       }
       const notesWithMetadata = serializePaymentMetadata(observations, initialMetadata);
 
-      // 1.5 Save to library if toggled
-      if (!isQuick && saveToLibrary && parsedMatrixFile && selectedClientId) {
-        try {
-          const uniqueSuffix = Math.random().toString(36).substring(2, 6).toUpperCase();
-          const { data: mxData } = await supabase
-            .from('matrices')
-            .insert({
-              name: matrixName.trim(),
-              client_id: selectedClientId,
-              code: `MAT-${Date.now().toString(36).toUpperCase()}-${uniqueSuffix}`,
-              status: 'approved',
-              category: 'Geral',
-            })
-            .select()
-            .single();
-
-          if (mxData) {
-            const ext = parsedMatrixFile.name.split('.').pop();
-            const filePath = `${mxData.id}/${Date.now()}.${ext}`;
-            const { error: upErr } = await supabase.storage
-              .from('embroidery_files')
-              .upload(filePath, parsedMatrixFile);
-
-            if (!upErr) {
-              const fileUrl = supabase.storage.from('embroidery_files').getPublicUrl(filePath).data.publicUrl;
-              const { data: verData } = await supabase
-                .from('matrix_versions')
-                .insert({
-                  matrix_id: mxData.id,
-                  version_number: 1,
-                  file_name: parsedMatrixFile.name,
-                  file_url: fileUrl,
-                  file_format: parsedMatrixMeta?.format || ext || 'dst',
-                  stitch_count: Number(stitchCount) || 0,
-                  width_mm: parsedMatrixMeta?.widthMm || 0,
-                  height_mm: parsedMatrixMeta?.heightMm || 0,
-                  color_count: Number(colorCount) || 1,
-                  estimated_time_minutes: Math.round((Number(stitchCount) / 1000) * 0.7),
-                })
-                .select()
-                .single();
-
-              if (verData) {
-                await supabase.from('matrices').update({ current_version_id: verData.id }).eq('id', mxData.id);
-                // Link the order item to this matrix
-                setSelectedMatrixId(mxData.id);
-              }
-            }
-            toast.success('✅ Matriz salva na biblioteca do cliente!');
-          }
-        } catch (libErr) {
-          console.error('Erro ao salvar na biblioteca:', libErr);
+      // Keep each uploaded file paired with its own extracted metadata.
+      if (!isQuick && saveToLibrary) {
+        for (const item of orderItemsList) {
+          if (!item.embroideryFile || item.matrixId) continue;
+          const meta = item.embroideryMetadata;
+          if (!isValidatedEmbroidery(meta)) throw new Error('Metadados da matriz não validados.');
+          const {data: matrix, error: matrixError} = await supabase.from('matrices').insert({
+            name: item.matrixName.trim(), client_id: selectedClientId,
+            code: 'MAT-' + crypto.randomUUID(), status: 'approved', category: 'Geral',
+          }).select().single();
+          if (matrixError) throw matrixError;
+          const filePath = matrix.id + '/' + Date.now() + '.' + meta.format;
+          const {error: uploadError} = await supabase.storage.from('embroidery_files').upload(filePath, item.embroideryFile);
+          if (uploadError) throw uploadError;
+          const fileUrl = supabase.storage.from('embroidery_files').getPublicUrl(filePath).data.publicUrl;
+          const {data: version, error: versionError} = await supabase.from('matrix_versions').insert({
+            matrix_id: matrix.id, version_number: 1, file_name: item.embroideryFile.name, file_url: fileUrl,
+            file_format: meta.format, stitch_count: meta.stitches, color_count: meta.colors,
+            width_mm: meta.widthMm, height_mm: meta.heightMm,
+            notes: embroideryProvenance(meta),
+            estimated_time_minutes: Math.round((meta.stitches / 1000) * 0.7),
+          }).select().single();
+          if (versionError) throw versionError;
+          const {error: linkError} = await supabase.from('matrices').update({current_version_id: version.id}).eq('id', matrix.id);
+          if (linkError) throw linkError;
+          importedMatrixIds.set(item.id, matrix.id);
+          setOrderItemsList(previous => previous.map(existing => existing.id === item.id ? {...existing, matrixId: matrix.id} : existing));
         }
       }
 
@@ -886,7 +853,7 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
 
           const itemsPayload = validItems.map(it => ({
             order_id: order.id,
-            matrix_id: it.matrixId || null,
+            matrix_id: importedMatrixIds.get(it.id) || it.matrixId || null,
             description: buildItemDesc(it.matrixName, it.stitchCount, it.colorCount),
             quantity: it.quantity,
             unit_price: isQuick ? 0 : it.unitPrice,
@@ -1172,10 +1139,11 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
   };
 
   const isFormValid = useMemo(() => {
+    if (importBlocked) return false;
     return entryMode === 'quick'
       ? selectedClientId && matrixName.trim() && quantity && Number(quantity) > 0
       : selectedClientId && matrixName.trim() && stitchCount && Number(stitchCount) > 0 && quantity && Number(quantity) > 0;
-  }, [entryMode, selectedClientId, matrixName, quantity, stitchCount]);
+  }, [entryMode, selectedClientId, matrixName, quantity, stitchCount, importBlocked]);
 
   const handlePrintReceiptAction = async (printType: 'a4' | 'thermal') => {
     if (!isFormValid) {
@@ -1595,7 +1563,7 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
                       
                       {(!hasItemsInCart || isAddingNewMatrix) ? (
                         <>
-                          <EmbroideryDropzone onFileParsed={handleFileParsed} primaryColor={settings.primaryColor} />
+                          <EmbroideryDropzone onFileParsed={handleFileParsed} onParseStateChange={handleParseStateChange} primaryColor={settings.primaryColor} />
                           <div className="pt-3 flex items-center justify-between">
                             <button
                               type="button"
@@ -1608,7 +1576,8 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
                             {hasItemsInCart && (
                               <button
                                 type="button"
-                                onClick={() => setIsAddingNewMatrix(false)}
+                                onClick={() => { if (parseState !== 'parsing') { setParseState('idle'); setIsAddingNewMatrix(false); } }}
+                                disabled={parseState === 'parsing'}
                                 className="text-[10px] font-bold text-red-400 hover:text-red-500 uppercase tracking-wider transition-colors"
                               >
                                 Cancelar
@@ -1630,6 +1599,7 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
                       )}
                     </div>
                     
+                    <EmbroideryMetadataDetails metadata={parsedMatrixMeta} />
                     {/* Save to Library Toggle */}
                     {lastParsedFile && (
                       <div className="px-5 py-4 flex items-center justify-between bg-white dark:bg-black/40 border-t border-slate-200 dark:border-white/10">
@@ -1772,7 +1742,7 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
                     {(() => {
                       const editingItem = orderItemsList.find(it => it.id === selectedItemId);
                       // Se tem matrixId (veio da biblioteca) ou se já tem um nome e pontos (veio do leitor)
-                      const isAutoFilled = !!editingItem && (!!editingItem.matrixId || (editingItem.matrixName && editingItem.stitchCount > 0));
+                      const isAutoFilled = !!editingItem && (!!editingItem.matrixId || isValidatedEmbroidery(editingItem.embroideryMetadata));
                       const inputBorderClass = isAutoFilled ? 'border-emerald-500/40 bg-emerald-500/5' : 'border-slate-300 dark:border-white/10';
                       const inputColorStyle = isAutoFilled ? { borderColor: '#10b98180' } : undefined;
 
@@ -1802,7 +1772,7 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
                                 </label>
                                 <input
                                   type="number"
-                                  value={stitchCount}
+                                  value={stitchCount} readOnly={!!parsedMatrixMeta} disabled={parseState === 'parsing'}
                                   onChange={e => setStitchCount(e.target.value === '' ? '' : Number(e.target.value))}
                                   className={`w-full bg-slate-50 dark:bg-white/5 border rounded-2xl px-4 py-2 text-xs font-bold text-slate-900 dark:text-white focus:outline-none transition-all ${
                                     showValidationErrors && (!stitchCount || Number(stitchCount) <= 0) ? 'border-red-500 ring-2 ring-red-500/20 bg-red-500/10' : (!stitchCount ? 'border-red-500/40 bg-red-500/5' : inputBorderClass)
@@ -1818,7 +1788,7 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
                                 </label>
                                 <input
                                   type="number"
-                                  value={colorCount}
+                                  value={colorCount} readOnly={!!parsedMatrixMeta} disabled={parseState === 'parsing'}
                                   onChange={e => setColorCount(e.target.value === '' ? '' : Number(e.target.value))}
                                   className={`w-full bg-slate-50 dark:bg-white/5 border rounded-2xl px-4 py-2 text-xs text-slate-900 dark:text-white focus:outline-none transition-all ${inputBorderClass}`}
                                   style={colorCount ? (inputColorStyle || { borderColor: `${settings.primaryColor}30` }) : undefined}
@@ -2366,7 +2336,7 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
                         setShowValidationErrors(false);
                         handleCreateOrder();
                       }}
-                      disabled={isSaving}
+                      disabled={isSaving || importBlocked}
                       className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:opacity-95 text-white font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 active:scale-[0.98] transition-all disabled:opacity-50"
                     >
                       <Save className="h-4 w-4" />
