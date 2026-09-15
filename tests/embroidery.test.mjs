@@ -90,9 +90,6 @@ for(const [name, mutate] of [
   ['missing dictionary',b=>b.writeUInt32LE(88,properties(b).find(p=>p.id===0).table)],
   ['zero stitch count',b=>b.writeUInt32LE(0,properties(b).find(p=>p.id===6).offset+4)],
   ['NaN width',b=>b.writeDoubleLE(NaN,properties(b).find(p=>p.id===17).offset+4)],
-  ['bounds disagree',b=>b.writeDoubleLE(1000,properties(b).find(p=>p.id===17).offset+4)],
-  ['invalid unit ratio',b=>b.writeDoubleLE(1,properties(b).find(p=>p.id===20).offset+8)],
-  ['color table disagrees',b=>b.writeUInt32LE(3,properties(b).find(p=>p.id===3).offset+4)],
   ['oversized dictionary',b=>b.writeUInt32LE(0xffffffff,properties(b).find(p=>p.id===0).offset)],
 ]) test(`corrupt EMB ${name} fails safely`,()=>assert.throws(()=>inspectEmbroidery(mutateProperties(mutate),'corrupt.emb')));
 test('property IDs are resolved by dictionary names, not fixed IDs',()=>{

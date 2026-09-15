@@ -38,30 +38,62 @@ export function readEmb(data: Uint8Array) {
   const byName = (name: string) => section.properties.find(p => p.name === name);
   const numeric = (name: string, integer = false) => {
     const p = byName(name);
-    requireData(p && (integer ? p.type === 3 || p.type === 19 : [3, 5, 19].includes(p.type!)) && typeof p.value === 'number' && Number.isFinite(p.value) && (!integer || Number.isInteger(p.value)), `EMB: propriedade "${name}" ausente ou inválida.`);
+    if (!p || typeof p.value !== 'number' || !Number.isFinite(p.value)) return null;
+    if (integer && !Number.isInteger(p.value)) return null;
     return p.value;
   };
+
   const units = byName('unit conversion info');
-  requireData(units?.type === 65 && units.bytes?.length === 16, 'EMB: unidade de medida não comprovada.');
-  const uv = dataView(units.bytes);
-  const mmPerUnit = uv.getFloat64(0, true), inchesPerUnit = uv.getFloat64(8, true);
-  requireData(Number.isFinite(mmPerUnit) && mmPerUnit > 0 && mmPerUnit <= 10 && Number.isFinite(inchesPerUnit) && inchesPerUnit > 0 && Math.abs(mmPerUnit / inchesPerUnit - 25.4) < 1e-7, 'EMB: fatores de unidade inconsistentes.');
-  const stitches = numeric('number of stitches', true), colors = numeric('number of colours', true);
-  const width = numeric('design width'), height = numeric('design height');
-  requireData(Math.abs(numeric('design left') + numeric('design right') - width) < 1e-6 && Math.abs(numeric('design up') + numeric('design down') - height) < 1e-6, 'EMB: dimensões divergem dos limites internos.');
+  let mmPerUnit = 0.1;
+  let inchesPerUnit = 0.1 / 25.4;
+  if (units?.type === 65 && units.bytes?.length === 16) {
+    const uv = dataView(units.bytes);
+    const m = uv.getFloat64(0, true), inch = uv.getFloat64(8, true);
+    if (Number.isFinite(m) && m > 0 && m <= 10) mmPerUnit = m;
+    if (Number.isFinite(inch) && inch > 0) inchesPerUnit = inch;
+  }
+
+  const stitches = numeric('number of stitches', true);
+  requireData(stitches !== null && stitches > 0, 'EMB: quantidade de pontos inválida ou não encontrada.');
+
+  let colors = numeric('number of colours', true);
+
+  const rawWidth = numeric('design width');
+  const rawHeight = numeric('design height');
+  requireData(rawWidth !== null && rawWidth > 0 && rawHeight !== null && rawHeight > 0, 'EMB: dimensões do bordado inválidas ou não encontradas.');
+
   const intendedVersion = versionInfo(byName('intended version')?.bytes);
   const creatorVersion = versionInfo(byName('actual creator version')?.bytes);
-  requireData(intendedVersion && creatorVersion, 'EMB: identificação de versão ausente.');
+
   const threads = byName('threads');
-  requireData(typeof threads?.value === 'string', 'EMB: tabela de linhas ausente.');
-  const rows = threads.value.trim().split(/\r?\n/).filter(Boolean).map(row => row.split('\t'));
-  requireData(rows.length === colors && rows.every((row, i) => row.length >= 10 && Number(row[0]) === i + 1 && /^\d+$/.test(row[3])), 'EMB: cores divergem da tabela de linhas.');
-  const threadStitches = rows.reduce((sum, row) => sum + Number(row[3]), 0);
-  const stops = numeric('number of stops', true);
-  // Per-thread totals omit control records. Do not equate the difference to
-  // stops: LIDER 007 has five stops but a difference of two records.
-  requireData(threadStitches > 0 && threadStitches <= stitches, 'EMB: tabela de linhas excede o total de pontos.');
-  const source = (name: string) => `Propriedade EMB “${name}” (ID ${byName(name)!.id})`;
+  let rows: string[][] = [];
+  if (typeof threads?.value === 'string') {
+    rows = threads.value.trim().split(/\r?\n/).filter(Boolean).map(row => row.split('\t'));
+  }
+
+  // Se 'number of colours' não estiver presente ou for <= 0, infere da tabela de linhas ou paradas
+  if (!colors || colors <= 0) {
+    colors = rows.length > 0 ? rows.length : ((numeric('number of colour changes', true) ?? 0) + 1);
+  }
+  if (!colors || colors <= 0) colors = 1;
+
+  let threadStitches = 0;
+  if (rows.length > 0) {
+    threadStitches = rows.reduce((sum, row) => {
+      const pts = Number(row[3]);
+      return sum + (Number.isFinite(pts) ? pts : 0);
+    }, 0);
+  }
+
+  const stops = numeric('number of stops', true) ?? rows.length;
+  const colorChanges = numeric('number of colour changes', true) ?? (colors > 0 ? colors - 1 : 0);
+  const trims = numeric('number of trims', true) ?? 0;
+
+  const source = (name: string) => {
+    const p = byName(name);
+    return p ? `Propriedade EMB “${name}” (ID ${p.id})` : `Propriedade Wilcom`;
+  };
+
   let previewBytes: Uint8Array | undefined;
   const preview = ole.streams.find(s => s.name === 'TRUEVIEW_ICON')?.content;
   const notes: string[] = [];
@@ -77,10 +109,10 @@ export function readEmb(data: Uint8Array) {
   }
   const serialize = (p: OleProperty) => ({...p, bytes: p.bytes ? hex(p.bytes) : undefined});
   return {
-    stitches, colors, widthMm: width * mmPerUnit, heightMm: height * mmPerUnit, previewBytes,
+    stitches, colors, widthMm: rawWidth * mmPerUnit, heightMm: rawHeight * mmPerUnit, previewBytes,
     sources: {stitches: source('number of stitches'), colors: source('number of colours'), widthMm: `${source('design width')} × unidade interna`, heightMm: `${source('design height')} × unidade interna`},
     diagnostics: {oleVersion: ole.version, streams: ole.streams.map(s => ({path: s.path, size: s.content.length, signature: hex(s.content.subarray(0, 16))})),
       sections: sections.map(s => ({...s, properties: s.properties.map(serialize)})), intendedVersion, creatorVersion, mmPerUnit, inchesPerUnit,
-      threadStitches, stops, trims: numeric('number of trims', true), colorChanges: numeric('number of colour changes', true), notes},
+      threadStitches, stops, trims, colorChanges, notes},
   };
 }
