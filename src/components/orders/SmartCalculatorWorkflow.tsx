@@ -840,15 +840,18 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
         
         if (validItems.length > 0) {
           const buildItemDesc = (rawName: string, stitches: number, colors: number) => {
-            const clean = rawName.trim();
+            let clean = (rawName || '').replace(/<!--[\s\S]*?-->/g, '').trim();
+            if (!clean || clean.includes('PAYMENT_METADATA') || clean.startsWith('{')) {
+              clean = 'Bordado Personalizado';
+            }
             if (/^(entrada|sinal|desenvolvimento|serviço|taxa|frete|desconto):/i.test(clean)) {
               return clean;
             }
             const cleanName = clean.replace(/^bordado:\s*/gi, '').trim();
             if (stitches === 0) {
-              return cleanName;
+              return cleanName || 'Bordado Personalizado';
             }
-            return `Bordado: ${cleanName} (${stitches.toLocaleString()} pts, ${colors || 1} cores)`;
+            return `Bordado: ${cleanName} (${stitches.toLocaleString('pt-BR')} pts, ${colors || 1} cores)`;
           };
 
           const itemsPayload = validItems.map(it => ({
@@ -867,23 +870,27 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
           if (batchErr) {
             console.error('Erro no insert de múltiplos itens:', batchErr);
           }
-        } else if (matrixName.trim()) {
+        } else if (matrixName.trim() && !matrixName.includes('PAYMENT_METADATA')) {
           // Fallback para item único configurado nos inputs
           const buildItemDesc = (rawName: string, stitches: number, colors: number) => {
-            const clean = rawName.trim();
+            let clean = (rawName || '').replace(/<!--[\s\S]*?-->/g, '').trim();
+            if (!clean || clean.includes('PAYMENT_METADATA') || clean.startsWith('{')) {
+              clean = 'Bordado Personalizado';
+            }
             if (/^(entrada|sinal|desenvolvimento|serviço|taxa|frete|desconto):/i.test(clean)) {
               return clean;
             }
             const cleanName = clean.replace(/^bordado:\s*/gi, '').trim();
             if (stitches === 0) {
-              return cleanName;
+              return cleanName || 'Bordado Personalizado';
             }
-            return `Bordado: ${cleanName} (${stitches.toLocaleString()} pts, ${colors || 1} cores)`;
+            return `Bordado: ${cleanName} (${stitches.toLocaleString('pt-BR')} pts, ${colors || 1} cores)`;
           };
 
+          const cleanMatrixName = matrixName.replace(/<!--[\s\S]*?-->/g, '').trim();
           const descText = isQuick 
-            ? `Entrada: ${matrixName.replace(/^(bordado:\s*|entrada:\s*)+/gi, '').trim()}`
-            : buildItemDesc(matrixName, Number(stitchCount) || 0, Number(colorCount) || 0);
+            ? `Entrada: ${cleanMatrixName.replace(/^(bordado:\s*|entrada:\s*)+/gi, '').trim() || 'Entrada de Peças'}`
+            : buildItemDesc(cleanMatrixName, Number(stitchCount) || 0, Number(colorCount) || 0);
 
           const { error: itemError } = await supabase
             .from('order_items')

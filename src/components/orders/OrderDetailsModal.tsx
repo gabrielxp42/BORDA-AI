@@ -74,8 +74,12 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
 
         if (!error && data && data.length > 0) {
           setFetchedItems(data);
+        } else if (order.order_items && order.order_items.length > 0) {
+          setFetchedItems(order.order_items);
+        } else if (order.items && order.items.length > 0) {
+          setFetchedItems(order.items);
         } else {
-          setFetchedItems(order.order_items || order.items || []);
+          setFetchedItems([]);
         }
       } catch (err) {
         setFetchedItems(order.order_items || order.items || []);
@@ -83,6 +87,12 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
     };
 
     loadOrderItems();
+
+    const handleOrdersChanged = () => {
+      loadOrderItems();
+    };
+    window.addEventListener('borda_orders_changed', handleOrdersChanged);
+    return () => window.removeEventListener('borda_orders_changed', handleOrdersChanged);
   }, [isOpen, order?.id, order?.order_items, order?.items]);
 
   useEffect(() => {
@@ -651,7 +661,13 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                     ) : (
                       <tr>
                         <td colSpan={4} className="p-4 text-center text-slate-500 dark:text-zinc-400">
-                          {order.notes || 'Sem itens individuais descritos'}
+                          {(() => {
+                            const clean = (cleanNotes || '').replace(/<!--[\s\S]*?-->/g, '').trim();
+                            if (!clean || clean.includes('PAYMENT_METADATA') || clean.startsWith('{')) {
+                              return 'Sem itens individuais descritos';
+                            }
+                            return clean;
+                          })()}
                         </td>
                       </tr>
                     );
@@ -954,8 +970,14 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                     <button
                       type="button"
                       onClick={() => {
+                        const raw = fetchedItems.length > 0 ? fetchedItems : (order.order_items || order.items || []);
+                        const orderWithFreshItems = {
+                          ...order,
+                          items: raw,
+                          order_items: raw
+                        };
                         onClose();
-                        onEditOrder(order);
+                        onEditOrder(orderWithFreshItems);
                       }}
                       className="flex-1 sm:flex-none px-3 sm:px-4 py-2.5 sm:py-3 rounded-2xl text-[10px] sm:text-xs font-black uppercase tracking-wider text-slate-700 dark:text-zinc-300 bg-slate-100 hover:bg-slate-200 dark:bg-white/5 dark:hover:bg-white/10 shadow-sm flex items-center justify-center gap-1.5 sm:gap-2 transition-all hover:opacity-90 active:scale-95 border border-slate-200 dark:border-white/10"
                     >
@@ -967,8 +989,14 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                     <button
                       type="button"
                       onClick={() => {
+                        const raw = fetchedItems.length > 0 ? fetchedItems : (order.order_items || order.items || []);
+                        const orderWithFreshItems = {
+                          ...order,
+                          items: raw,
+                          order_items: raw
+                        };
                         onClose();
-                        onPriceOrder(order);
+                        onPriceOrder(orderWithFreshItems);
                       }}
                       className="flex-1 sm:flex-none px-3 sm:px-6 py-2.5 sm:py-3 rounded-2xl text-[10px] sm:text-xs font-black uppercase tracking-wider text-white shadow-lg flex items-center justify-center gap-1.5 sm:gap-2 transition-all hover:opacity-90 active:scale-95 animate-bounce"
                       style={{ backgroundColor: settings.primaryColor }}

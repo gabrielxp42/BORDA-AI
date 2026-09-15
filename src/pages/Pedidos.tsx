@@ -809,10 +809,14 @@ export const Pedidos: React.FC = () => {
             onOpenDetails={(order) => setSelectedOrderForDetails(order)}
             onQuickPrice={(orderData) => {
               const { cleanNotes } = parsePaymentMetadata(orderData.notes);
+              const sanitizedCleanNotes = (cleanNotes || '').replace(/<!--[\s\S]*?-->/g, '').trim();
+              const safeMatrixName = (!sanitizedCleanNotes || sanitizedCleanNotes.includes('PAYMENT_METADATA') || sanitizedCleanNotes.startsWith('{'))
+                ? ''
+                : sanitizedCleanNotes;
               setInitialOrderData({
                 orderId: orderData.id,
                 clientId: orderData.client_id,
-                matrixName: cleanNotes,
+                matrixName: safeMatrixName,
                 quantity: orderData.items?.[0]?.quantity || 1,
                 fullOrder: orderData
               });
@@ -849,10 +853,14 @@ export const Pedidos: React.FC = () => {
         onDelete={handleDeleteOrder}
         onPriceOrder={(orderToPrice) => {
           const { cleanNotes } = parsePaymentMetadata(orderToPrice.notes);
+          const sanitizedCleanNotes = (cleanNotes || '').replace(/<!--[\s\S]*?-->/g, '').trim();
+          const safeMatrixName = (!sanitizedCleanNotes || sanitizedCleanNotes.includes('PAYMENT_METADATA') || sanitizedCleanNotes.startsWith('{'))
+            ? ''
+            : sanitizedCleanNotes;
           setInitialOrderData({
             orderId: orderToPrice.id,
             clientId: orderToPrice.client_id,
-            matrixName: cleanNotes,
+            matrixName: safeMatrixName,
             quantity: orderToPrice.items?.[0]?.quantity || 1,
             fullOrder: orderToPrice
           });
