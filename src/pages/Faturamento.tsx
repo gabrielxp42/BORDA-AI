@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { parseLocalDate, toLocalDateInput, combineDayAndTime } from '@/utils/dateHelper';
+import { parseLocalDate, toLocalDateInput, combineDayAndTime, diffInDays } from '@/utils/dateHelper';
 import { supabase } from '@/integrations/supabase/client';
 import { useProfile } from '@/contexts/ProfileContext';
 import { useCompanySettings } from '@/contexts/CompanySettingsContext';
@@ -29,7 +29,8 @@ import {
   Trash2,
   Filter,
   Zap,
-  Plus
+  Plus,
+  CalendarClock
 } from 'lucide-react';
 import {
   BarChart, 
@@ -55,13 +56,14 @@ import { ReceitaDetailsModal } from '@/components/billing/ReceitaDetailsModal';
 import { DespesasDetailsModal } from '@/components/billing/DespesasDetailsModal';
 import { CreateReceivableModal } from '@/components/billing/CreateReceivableModal';
 import { FinancialReportModal } from '@/components/billing/FinancialReportModal';
+import { PaymentStatusModal } from '@/components/orders/PaymentStatusModal';
 import { FinancialTransaction, FinancialTransactionType } from '@/types/stockTypes';
 import { format, startOfMonth, endOfMonth, subMonths, eachMonthOfInterval, eachDayOfInterval, isSameDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
 import { formatCurrency } from '@/utils/currencyFormatter';
 import { parsePaymentMetadata, formatPaymentMethodName, isOrderLinkedTx } from '@/utils/paymentHelper';
-import { isInstallment, parseInstallmentMeta } from '@/services/installmentService';
+import { isInstallment, parseInstallmentMeta, updateInstallmentDueDate } from '@/services/installmentService';
 import { syncLocalToCloud } from '@/utils/cloudSync';
 
 interface ClientBillingData {
@@ -98,7 +100,8 @@ export const Faturamento: React.FC = () => {
   const [isCreateReceivableOpen, setIsCreateReceivableOpen] = useState(false);
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [expandedCard, setExpandedCard] = useState<'receita' | 'despesas' | 'areceber' | null>(null);
-  const [receberFilter, setReceberFilter] = useState<'all' | 'production' | 'delivered'>('all');
+  const [receberFilter, setReceberFilter] = useState<'all' | 'orders' | 'agreements' | 'overdue' | 'upcoming' | 'production' | 'delivered'>('all');
+  const [selectedItemForBaixaModal, setSelectedItemForBaixaModal] = useState<any | null>(null);
 
   // Manual Cash Flow State (Receitas & Despesas) — Sincronizado via Supabase
   const [financialTransactions, setFinancialTransactions] = useState<FinancialTransaction[]>([]);
@@ -232,6 +235,168 @@ export const Faturamento: React.FC = () => {
       topDebtors
     };
   }, [allTimePendingOrders]);
+
+  // Lista 100% Unificada de Todas as Pendências e Faturamentos A Receber:
+  // Combina Faturas de Pedidos em Aberto + Parcelas de Acordos + Entradas Futuras Manuais
+  const allUnifiedPendingItems = useMemo(() => {
+    // 1. Pedidos normais pendentes
+    const orderItems = allTimePendingOrders.map(o => {
+      const totalVal = Number(o.total_amount || 0);
+      const isHalf = o.payment_status === 'half_paid';
+      const pendingVal = isHalf ? totalVal * 0.5 : totalVal;
+      const dueInfo = o.due_date ? (() => {
+        const d = parseLocalDate(o.due_date);
+        if (!d) return { status: 'no_date' as const, diff: 0 };
+        const diff = diffInDays(d, new Date());
+        if (diff < 0) return { status: 'overdue' as const, diff };
+        if (diff === 0) return { status: 'today' as const, diff: 0 };
+        return { status: 'upcoming' as const, diff };
+      })() : { status: 'no_date' as const, diff: 0 };
+
+      return {
+        id: `order-${o.id}`,
+        rawId: o.id,
+        kind: 'order' as const,
+        title: `Pedido #${o.order_number || o.id.slice(0, 4)}`,
+        orderNumber: o.order_number,
+        clientName: o.clients?.name || 'Cliente Geral',
+        clientPhone: o.clients?.phone || '',
+        clientId: o.clients?.id || o.id,
+        companyName: o.clients?.company_name,
+        createdAt: o.created_at,
+        dueDate: o.due_date,
+        dueStatus: dueInfo.status,
+        dueDiff: dueInfo.diff,
+        productionStatus: o.status === 'entregue' ? ('entregue' as const) : ('producao' as const),
+        paymentStatus: isHalf ? ('half_paid' as const) : ('pending' as const),
+        paymentStatusLabel: isHalf ? '⚡ Sinal 50%' : '⏳ 100% Pendente',
+        totalAmount: totalVal,
+        pendingAmount: pendingVal,
+        originalOrder: o,
+        originalTx: undefined
+      };
+    });
+
+    // 2. Parcelas de Acordos Comerciais em aberto
+    const agreementParcelItems = financialTransactions
+      .filter(t => t.type === 'income' && t.status !== 'paid' && isInstallment(t))
+      .map(t => {
+        const meta = parseInstallmentMeta(t.notes);
+        const amt = Number(t.amount || 0);
+        const dueInfo = t.due_date || t.date ? (() => {
+          const d = parseLocalDate(t.due_date || t.date);
+          if (!d) return { status: 'no_date' as const, diff: 0 };
+          const diff = diffInDays(d, new Date());
+          if (diff < 0) return { status: 'overdue' as const, diff };
+          if (diff === 0) return { status: 'today' as const, diff: 0 };
+          return { status: 'upcoming' as const, diff };
+        })() : { status: 'no_date' as const, diff: 0 };
+
+        const indexLabel = meta.installmentIndex && meta.totalInstallments 
+          ? `Parc. ${meta.installmentIndex}/${meta.totalInstallments}` 
+          : 'Parcela de Acordo';
+
+        return {
+          id: `parcel-${t.id}`,
+          rawId: t.id,
+          kind: 'agreement_parcel' as const,
+          title: `🤝 Acordo (${indexLabel})${meta.associatedOrders ? ` [${meta.associatedOrders}]` : ''}`,
+          orderNumber: undefined,
+          clientName: meta.clientName || 'Cliente Geral',
+          clientPhone: meta.clientPhone || '',
+          clientId: meta.clientId,
+          companyName: undefined,
+          createdAt: t.created_at || t.date,
+          dueDate: t.due_date || t.date,
+          dueStatus: dueInfo.status,
+          dueDiff: dueInfo.diff,
+          productionStatus: 'acordo' as const,
+          paymentStatus: 'parcel_pending' as const,
+          paymentStatusLabel: `🤝 ${indexLabel}`,
+          totalAmount: amt,
+          pendingAmount: amt,
+          originalOrder: undefined,
+          originalTx: t,
+          meta
+        };
+      });
+
+    // 3. Outras entradas futuras / lançamentos manuais
+    const idsDePedidosJaListados = new Set(allTimePendingOrders.map(o => o.id));
+    const manualPendingItems = financialTransactions
+      .filter(t => {
+        if (t.type !== 'income') return false;
+        if (t.status === 'paid') return false;
+        if (isInstallment(t)) return false;
+        if (t.order_id && idsDePedidosJaListados.has(t.order_id)) return false;
+        if (isOrderLinkedTx(t, idsDePedidosJaListados)) return false;
+        return true;
+      })
+      .map(t => {
+        const amt = Number(t.amount || 0);
+        const dueInfo = t.due_date || t.date ? (() => {
+          const d = parseLocalDate(t.due_date || t.date);
+          if (!d) return { status: 'no_date' as const, diff: 0 };
+          const diff = diffInDays(d, new Date());
+          if (diff < 0) return { status: 'overdue' as const, diff };
+          if (diff === 0) return { status: 'today' as const, diff: 0 };
+          return { status: 'upcoming' as const, diff };
+        })() : { status: 'no_date' as const, diff: 0 };
+
+        return {
+          id: `manual-${t.id}`,
+          rawId: t.id,
+          kind: 'manual' as const,
+          title: t.description || 'Entrada Futura Avulsa',
+          orderNumber: undefined,
+          clientName: t.category || 'Receita Direta',
+          clientPhone: '',
+          clientId: undefined,
+          companyName: undefined,
+          createdAt: t.created_at || t.date,
+          dueDate: t.due_date || t.date,
+          dueStatus: dueInfo.status,
+          dueDiff: dueInfo.diff,
+          productionStatus: 'manual' as const,
+          paymentStatus: 'pending' as const,
+          paymentStatusLabel: '⏳ A Receber',
+          totalAmount: amt,
+          pendingAmount: amt,
+          originalOrder: undefined,
+          originalTx: t
+        };
+      });
+
+    return [...orderItems, ...agreementParcelItems, ...manualPendingItems].sort((a, b) => {
+      const da = parseLocalDate(a.dueDate || a.createdAt)?.getTime() ?? 0;
+      const db = parseLocalDate(b.dueDate || b.createdAt)?.getTime() ?? 0;
+      return da - db;
+    });
+  }, [allTimePendingOrders, financialTransactions]);
+
+  const unifiedSummary = useMemo(() => {
+    const totalGeral = allUnifiedPendingItems.reduce((s, it) => s + it.pendingAmount, 0);
+    const atrasados = allUnifiedPendingItems.filter(it => it.dueStatus === 'overdue');
+    const totalAtrasados = atrasados.reduce((s, it) => s + it.pendingAmount, 0);
+    const aVencer = allUnifiedPendingItems.filter(it => it.dueStatus === 'today' || it.dueStatus === 'upcoming');
+    const totalAVencer = aVencer.reduce((s, it) => s + it.pendingAmount, 0);
+    const parcelas = allUnifiedPendingItems.filter(it => it.kind === 'agreement_parcel');
+    const totalParcelas = parcelas.reduce((s, it) => s + it.pendingAmount, 0);
+    const faturas = allUnifiedPendingItems.filter(it => it.kind === 'order');
+    const totalFaturas = faturas.reduce((s, it) => s + it.pendingAmount, 0);
+
+    return {
+      totalGeral,
+      totalAtrasados,
+      qtdAtrasados: atrasados.length,
+      totalAVencer,
+      qtdAVencer: aVencer.length,
+      totalParcelas,
+      qtdParcelas: parcelas.length,
+      totalFaturas,
+      qtdFaturas: faturas.length,
+    };
+  }, [allUnifiedPendingItems]);
 
   // KPI calculations
   const [grandTotal, setGrandTotal] = useState(0);
@@ -1214,7 +1379,7 @@ export const Faturamento: React.FC = () => {
       <div id="billing-tabs-container" className="flex items-center gap-2 p-1.5 bg-white/5 border border-white/10 rounded-2xl overflow-x-auto custom-scrollbar">
         {[
           { id: 'resumo', label: '📊 Visão Geral & DRE' },
-          { id: 'areceber', label: `⏳ Faturas A Receber (${allTimePendingOrders.length})` },
+          { id: 'areceber', label: `⏳ Faturas & Parcelas (${allUnifiedPendingItems.length})` },
           { id: 'fixos', label: '📌 Contas Fixas' },
           { id: 'variaveis', label: '💸 Gastos Variáveis' },
           { id: 'entradas', label: '📥 Extrato de Entradas' },
@@ -1235,107 +1400,143 @@ export const Faturamento: React.FC = () => {
 
       {/* CONTEÚDO DAS 5 ABAS DO FATURAMENTO */}
 
-      {/* ABA 1: ⏳ A RECEBER (ACUMULADO DE TODOS OS TEMPOS) */}
+      {/* ABA 1: ⏳ A RECEBER UNIFICADO (FATURAS + PARCELAS DE ACORDOS + ENTRADAS FUTURAS) */}
       {activeTab === 'areceber' && (
         <div className="space-y-6 animate-in fade-in duration-200">
-          {/* Card Banner do Saldo Acumulado */}
-          <div className={`glass-panel p-6 rounded-3xl border relative overflow-hidden flex flex-col md:flex-row md:items-center justify-between gap-4 ${
-            receberFilter === 'production'
-              ? 'border-amber-500/30 bg-gradient-to-r from-amber-950/30 via-black/40 to-amber-950/20'
-              : receberFilter === 'delivered'
-              ? 'border-indigo-500/30 bg-gradient-to-r from-indigo-950/30 via-black/40 to-indigo-950/20'
-              : 'border-zinc-500/30 bg-gradient-to-r from-zinc-950/30 via-black/40 to-zinc-950/20'
-          }`}>
-            <div className="space-y-1 z-10">
-              <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${
-                receberFilter === 'production'
-                  ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                  : receberFilter === 'delivered'
-                  ? 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/30'
-                  : 'bg-zinc-500/20 text-zinc-400 border border-zinc-500/30'
-              }`}>
-                <Clock className="h-3 w-3" /> 
-                {receberFilter === 'production' && 'Saldo A Receber (Em Produção)'}
-                {receberFilter === 'delivered' && 'Saldo A Receber (Já Entregues)'}
-                {receberFilter === 'all' && 'Saldo Pendente Acumulado Geral'}
-              </span>
-              <h2 className="text-3xl font-black text-white tracking-tight">
-                {formatCurrency(
-                  allTimePendingOrders
-                    .filter(o => {
-                      if (receberFilter === 'production') return o.status !== 'entregue';
-                      if (receberFilter === 'delivered') return o.status === 'entregue';
-                      return true;
-                    })
-                    .reduce((sum, o) => {
-                      const total = Number(o.total_amount || 0);
-                      if (o.payment_status === 'half_paid') return sum + (total * 0.5);
-                      return sum + total;
-                    }, 0),
-                  permissions?.canSeeFinancials ?? true
-                )}
-              </h2>
-              <p className="text-xs text-zinc-400">
-                {receberFilter === 'production' && `Saldo pendente dos serviços que ainda estão sendo produzidos na oficina (${allTimePendingOrders.filter(o => o.status !== 'entregue').length} pedido(s) pendentes).`}
-                {receberFilter === 'delivered' && `Saldo a receber a prazo de pedidos que já foram entregues ao cliente (${allTimePendingOrders.filter(o => o.status === 'entregue').length} faturamento(s) pendentes).`}
-                {receberFilter === 'all' && `Total acumulado de faturas pendentes de cobrança em todo o histórico da oficina (${allTimePendingOrders.length} pedido(s) a receber).`}
-              </p>
-            </div>
-
-            <div className="relative z-10 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-              {/* Filtro Sub-Tabs */}
-              <div className="flex items-center gap-1.5 bg-black/40 border border-white/10 rounded-2xl p-1">
-                {[
-                  { id: 'all', label: '📂 Todos' },
-                  { id: 'production', label: '⏳ Em Produção' },
-                  { id: 'delivered', label: '📦 Entregues' },
-                ].map(sub => (
-                  <button
-                    key={sub.id}
-                    onClick={() => setReceberFilter(sub.id as any)}
-                    className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer ${
-                      receberFilter === sub.id
-                        ? 'bg-purple-600 text-white shadow-md'
-                        : 'text-zinc-400 hover:text-white'
-                    }`}
-                  >
-                    {sub.label}
-                  </button>
-                ))}
+          {/* Card Banner do Saldo Acumulado Unificado */}
+          <div className="glass-panel p-6 rounded-3xl border border-purple-500/30 bg-gradient-to-r from-purple-950/30 via-black/50 to-indigo-950/30 relative overflow-hidden space-y-4">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="space-y-1 z-10">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-purple-500/20 text-purple-300 border border-purple-500/35">
+                  <Clock className="h-3 w-3" /> Saldo Pendente Acumulado Geral (Faturas &amp; Parcelas)
+                </span>
+                <h2 className="text-3xl sm:text-4xl font-black text-white tracking-tight">
+                  {formatCurrency(unifiedSummary.totalGeral, permissions?.canSeeFinancials ?? true)}
+                </h2>
+                <p className="text-xs text-zinc-400">
+                  {allUnifiedPendingItems.length} lançamento(s) a receber no total: {unifiedSummary.qtdFaturas} fatura(s) de pedidos ({formatCurrency(unifiedSummary.totalFaturas, permissions?.canSeeFinancials ?? true)}) e {unifiedSummary.qtdParcelas} parcela(s) de acordos ({formatCurrency(unifiedSummary.totalParcelas, permissions?.canSeeFinancials ?? true)}).
+                </p>
               </div>
 
-              <button
-                onClick={() => setIsCreateReceivableOpen(true)}
-                className="px-4 py-2 rounded-2xl bg-gradient-to-r from-amber-500 to-amber-600 hover:brightness-110 text-black text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shadow-lg shadow-amber-500/20 active:scale-95 transition-all cursor-pointer whitespace-nowrap"
-              >
-                <Plus className="h-4 w-4" /> Nova Entrada Futura
-              </button>
+              <div className="flex items-center gap-2.5 z-10 flex-wrap">
+                <button
+                  onClick={() => setIsCreateReceivableOpen(true)}
+                  className="px-4 py-2 rounded-2xl bg-gradient-to-r from-amber-500 to-amber-600 hover:brightness-110 text-black text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shadow-lg shadow-amber-500/20 active:scale-95 transition-all cursor-pointer whitespace-nowrap"
+                >
+                  <Plus className="h-4 w-4" /> Nova Entrada Futura
+                </button>
+                <button
+                  onClick={() => setIsReceberModalOpen(true)}
+                  className="px-4 py-2 rounded-2xl bg-purple-600/30 hover:bg-purple-600/50 text-purple-200 border border-purple-500/40 text-xs font-black uppercase tracking-wider flex items-center gap-1.5 active:scale-95 transition-all cursor-pointer whitespace-nowrap"
+                >
+                  <CalendarClock className="h-4 w-4" /> Ver Análise Avançada
+                </button>
+              </div>
+            </div>
 
-              <div className="relative w-full sm:w-56">
-                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-500" />
-                <input 
-                  type="text" 
-                  placeholder="Buscar por cliente..."
-                  value={searchTerm}
-                  onChange={e => setSearchTerm(e.target.value)}
-                  className="w-full bg-black/60 border border-white/10 rounded-2xl pl-9 pr-4 py-2 text-xs text-zinc-200 outline-none focus:border-purple-500"
-                />
+            {/* Sub-KPIs de Destaque para Atrasados e A Vencer */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-3 border-t border-white/10">
+              <div className="p-3 rounded-2xl bg-white/5 border border-white/10">
+                <span className="text-[10px] font-bold text-zinc-400 block uppercase">⏳ Faturas Avulsas</span>
+                <p className="text-base sm:text-lg font-black text-white mt-0.5">
+                  {formatCurrency(unifiedSummary.totalFaturas, permissions?.canSeeFinancials ?? true)}
+                </p>
+                <span className="text-[10px] text-zinc-500">{unifiedSummary.qtdFaturas} pedido(s)</span>
+              </div>
+
+              <div className="p-3 rounded-2xl bg-indigo-500/10 border border-indigo-500/20">
+                <span className="text-[10px] font-bold text-indigo-300 block uppercase">🤝 Parcelas de Acordos</span>
+                <p className="text-base sm:text-lg font-black text-indigo-400 mt-0.5">
+                  {formatCurrency(unifiedSummary.totalParcelas, permissions?.canSeeFinancials ?? true)}
+                </p>
+                <span className="text-[10px] text-indigo-300/70">{unifiedSummary.qtdParcelas} parcela(s)</span>
+              </div>
+
+              <div className="p-3 rounded-2xl bg-rose-500/10 border border-rose-500/20">
+                <span className="text-[10px] font-bold text-rose-300 block uppercase">🚨 Vencidos / Atrasados</span>
+                <p className="text-base sm:text-lg font-black text-rose-400 mt-0.5">
+                  {formatCurrency(unifiedSummary.totalAtrasados, permissions?.canSeeFinancials ?? true)}
+                </p>
+                <span className="text-[10px] text-rose-300/70">{unifiedSummary.qtdAtrasados} pendência(s)</span>
+              </div>
+
+              <div className="p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/20">
+                <span className="text-[10px] font-bold text-emerald-300 block uppercase">📅 A Vencer (Em dia)</span>
+                <p className="text-base sm:text-lg font-black text-emerald-400 mt-0.5">
+                  {formatCurrency(unifiedSummary.totalAVencer, permissions?.canSeeFinancials ?? true)}
+                </p>
+                <span className="text-[10px] text-emerald-300/70">{unifiedSummary.qtdAVencer} pendência(s)</span>
               </div>
             </div>
           </div>
 
-          {/* Tabela de Pedidos Pendentes (A Receber) */}
+          {/* Filtros e Barra de Busca */}
+          <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+            <div className="flex items-center gap-1.5 bg-black/40 border border-white/10 rounded-2xl p-1 overflow-x-auto custom-scrollbar">
+              {[
+                { id: 'all', label: `📂 Todos (${allUnifiedPendingItems.length})` },
+                { id: 'orders', label: `⏳ Faturas (${unifiedSummary.qtdFaturas})` },
+                { id: 'agreements', label: `🤝 Parcelas (${unifiedSummary.qtdParcelas})` },
+                { id: 'overdue', label: `🚨 Atrasados (${unifiedSummary.qtdAtrasados})` },
+                { id: 'upcoming', label: `📅 A Vencer (${unifiedSummary.qtdAVencer})` },
+                { id: 'production', label: '🧵 Em Produção' },
+                { id: 'delivered', label: '📦 Entregues' },
+              ].map(sub => (
+                <button
+                  key={sub.id}
+                  onClick={() => setReceberFilter(sub.id as any)}
+                  className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer whitespace-nowrap ${
+                    receberFilter === sub.id
+                      ? 'bg-purple-600 text-white shadow-md'
+                      : 'text-zinc-400 hover:text-white'
+                  }`}
+                >
+                  {sub.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="relative w-full md:w-72">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-500" />
+              <input 
+                type="text" 
+                placeholder="Buscar por cliente, pedido ou acordo..."
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+                className="w-full bg-black/60 border border-white/10 rounded-2xl pl-9 pr-4 py-2 text-xs text-zinc-200 outline-none focus:border-purple-500"
+              />
+            </div>
+          </div>
+
+          {/* Tabela Unificada de Pendências A Receber */}
           <div className="glass-panel rounded-3xl border border-white/10 overflow-hidden">
             <div className="p-4 border-b border-white/10 bg-white/5 flex items-center justify-between">
               <h3 className="text-xs font-black uppercase tracking-wider text-white flex items-center gap-2">
-                <Receipt className="h-4 w-4 text-amber-400" /> Detalhes dos Saldos em Aberto
+                <Receipt className="h-4 w-4 text-amber-400" /> Lista Unificada de Contas &amp; Parcelas em Aberto
               </h3>
               <span className="text-[10px] font-bold text-zinc-400">
-                {allTimePendingOrders.filter(o => {
-                  if (receberFilter === 'production') return o.status !== 'entregue';
-                  if (receberFilter === 'delivered') return o.status === 'entregue';
-                  return true;
-                }).length} registro(s) pendente(s)
+                {(() => {
+                  const filtered = allUnifiedPendingItems
+                    .filter(it => {
+                      if (receberFilter === 'orders') return it.kind === 'order';
+                      if (receberFilter === 'agreements') return it.kind === 'agreement_parcel';
+                      if (receberFilter === 'overdue') return it.dueStatus === 'overdue';
+                      if (receberFilter === 'upcoming') return it.dueStatus === 'today' || it.dueStatus === 'upcoming';
+                      if (receberFilter === 'production') return it.productionStatus === 'producao';
+                      if (receberFilter === 'delivered') return it.productionStatus === 'entregue';
+                      return true;
+                    })
+                    .filter(it => {
+                      const term = searchTerm.toLowerCase();
+                      return (
+                        it.clientName.toLowerCase().includes(term) ||
+                        it.title.toLowerCase().includes(term) ||
+                        (it.clientPhone && it.clientPhone.includes(term)) ||
+                        (it.orderNumber && String(it.orderNumber).includes(term))
+                      );
+                    });
+                  return `${filtered.length} registro(s) exibido(s)`;
+                })()}
               </span>
             </div>
 
@@ -1343,134 +1544,213 @@ export const Faturamento: React.FC = () => {
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
                   <tr className="border-b border-white/10 bg-white/5 font-bold uppercase text-[10px] text-zinc-400">
-                    <th className="px-6 py-4">Pedido / Cliente</th>
-                    <th className="px-6 py-4">Data Entrada</th>
-                    <th className="px-6 py-4">Combinado p/ Pagamento</th>
-                    <th className="px-6 py-4 text-center">Status Pagamento</th>
-                    <th className="px-6 py-4 text-right">Valor Total</th>
-                    <th className="px-6 py-4 text-right">A Receber</th>
-                    <th className="px-6 py-4 text-center">Ações Rápidas</th>
+                    <th className="px-5 py-3.5">Origem / Cliente</th>
+                    <th className="px-5 py-3.5">Data Entrada</th>
+                    <th className="px-5 py-3.5">Vencimento / Combinado</th>
+                    <th className="px-5 py-3.5 text-center">Situação / Status</th>
+                    <th className="px-5 py-3.5 text-right">Valor Total</th>
+                    <th className="px-5 py-3.5 text-right">A Receber</th>
+                    <th className="px-5 py-3.5 text-center">Ações Rápidas</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5 font-medium text-zinc-200">
                   {(() => {
-                    const filtered = allTimePendingOrders
-                      .filter(o => {
-                        if (receberFilter === 'production') return o.status !== 'entregue';
-                        if (receberFilter === 'delivered') return o.status === 'entregue';
+                    const filtered = allUnifiedPendingItems
+                      .filter(it => {
+                        if (receberFilter === 'orders') return it.kind === 'order';
+                        if (receberFilter === 'agreements') return it.kind === 'agreement_parcel';
+                        if (receberFilter === 'overdue') return it.dueStatus === 'overdue';
+                        if (receberFilter === 'upcoming') return it.dueStatus === 'today' || it.dueStatus === 'upcoming';
+                        if (receberFilter === 'production') return it.productionStatus === 'producao';
+                        if (receberFilter === 'delivered') return it.productionStatus === 'entregue';
                         return true;
                       })
-                      .filter(o => 
-                        (o.clients?.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-                        String(o.order_number || o.id).includes(searchTerm)
-                      );
+                      .filter(it => {
+                        const term = searchTerm.toLowerCase();
+                        return (
+                          it.clientName.toLowerCase().includes(term) ||
+                          it.title.toLowerCase().includes(term) ||
+                          (it.clientPhone && it.clientPhone.includes(term)) ||
+                          (it.orderNumber && String(it.orderNumber).includes(term))
+                        );
+                      });
 
                     if (filtered.length === 0) {
                       return (
                         <tr>
                           <td colSpan={7} className="px-6 py-12 text-center text-zinc-500">
-                            🎉 Nenhum faturamento pendente encontrado com estes filtros!
+                            🎉 Nenhuma pendência encontrada com os filtros selecionados!
                           </td>
                         </tr>
                       );
                     }
 
-                    return filtered.map((o) => {
-                      const totalVal = Number(o.total_amount || 0);
-                      const isHalf = o.payment_status === 'half_paid';
-                      const pendingVal = isHalf ? totalVal * 0.5 : totalVal;
-
+                    return filtered.map((item) => {
                       return (
-                        <tr key={o.id} className="hover:bg-white/5 transition-colors">
-                          <td className="px-6 py-4">
-                            <p className="font-bold text-white flex items-center gap-1.5">
-                              #{o.order_number || o.id.slice(0, 4)} - {o.clients?.name || 'Cliente Geral'}
-                              {o.status === 'entregue' ? (
+                        <tr key={item.id} className="hover:bg-white/5 transition-colors">
+                          <td className="px-5 py-3.5">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-bold text-white">
+                                {item.title} — {item.clientName}
+                              </span>
+                              {item.kind === 'order' && item.productionStatus === 'entregue' && (
                                 <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/35">
                                   📦 Entregue
                                 </span>
-                              ) : (
+                              )}
+                              {item.kind === 'order' && item.productionStatus === 'producao' && (
                                 <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/35">
-                                  ⏳ Produção
+                                  🧵 Produção
                                 </span>
                               )}
+                              {item.kind === 'agreement_parcel' && (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/35">
+                                  🤝 Acordo
+                                </span>
+                              )}
+                              {item.kind === 'manual' && (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/35">
+                                  ⚡ Avulso
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-[11px] text-zinc-400 mt-0.5">
+                              {item.clientPhone ? `📞 ${item.clientPhone}` : 'Sem telefone cadastrado'}
                             </p>
-                            <p className="text-[11px] text-zinc-400">{o.clients?.phone || 'Sem telefone'}</p>
                           </td>
-                          <td className="px-6 py-4 text-zinc-400">
-                            {o.created_at ? format(new Date(o.created_at), 'dd/MM/yyyy') : '-'}
+
+                          <td className="px-5 py-3.5 text-zinc-400 whitespace-nowrap">
+                            {item.createdAt ? format(new Date(item.createdAt), 'dd/MM/yyyy') : '-'}
                           </td>
-                          <td className="px-6 py-4">
-                            <input 
-                              type="date"
-                              value={toLocalDateInput(o.due_date)}
-                              onChange={async (e) => {
-                                const newDate = e.target.value;
-                                try {
-                                  const { error } = await supabase
-                                    .from('orders')
-                                    .update({ due_date: newDate ? new Date(newDate).toISOString() : null })
-                                    .eq('id', o.id);
-                                  if (error) throw error;
-                                  toast.success('Data combinada atualizada!');
-                                  fetchBillingData();
-                                } catch (err) {
-                                  toast.error('Erro ao atualizar data combinada.');
-                                }
-                              }}
-                              className="bg-black/40 border border-white/10 rounded-xl px-2 py-1 text-[11px] text-amber-400 outline-none focus:border-amber-500 font-bold"
-                            />
+
+                          <td className="px-5 py-3.5">
+                            <div className="space-y-1">
+                              <input 
+                                type="date"
+                                value={toLocalDateInput(item.dueDate)}
+                                onChange={async (e) => {
+                                  const newDate = e.target.value;
+                                  try {
+                                    if (item.kind === 'order') {
+                                      const { error } = await supabase
+                                        .from('orders')
+                                        .update({ due_date: newDate ? new Date(newDate).toISOString() : null })
+                                        .eq('id', item.rawId);
+                                      if (error) throw error;
+                                    } else if (item.kind === 'agreement_parcel') {
+                                      await updateInstallmentDueDate(item.rawId, newDate);
+                                    } else {
+                                      const { error } = await supabase
+                                        .from('financial_transactions')
+                                        .update({ due_date: newDate || null, date: newDate || new Date().toISOString() })
+                                        .eq('id', item.rawId);
+                                      if (error) throw error;
+                                    }
+                                    toast.success('Data combinada atualizada!');
+                                    fetchBillingData();
+                                  } catch (err) {
+                                    toast.error('Erro ao atualizar data combinada.');
+                                  }
+                                }}
+                                className="bg-black/40 border border-white/10 rounded-xl px-2 py-1 text-[11px] text-amber-400 outline-none focus:border-amber-500 font-bold"
+                              />
+                              <div>
+                                {item.dueStatus === 'overdue' && (
+                                  <span className="inline-block text-[10px] font-black text-rose-400">
+                                    ⚠️ Atrasado {Math.abs(item.dueDiff || 0)}d
+                                  </span>
+                                )}
+                                {item.dueStatus === 'today' && (
+                                  <span className="inline-block text-[10px] font-black text-amber-400">
+                                    ⏰ Vence Hoje
+                                  </span>
+                                )}
+                                {item.dueStatus === 'upcoming' && (
+                                  <span className="inline-block text-[10px] font-bold text-sky-400">
+                                    📅 Em {item.dueDiff}d
+                                  </span>
+                                )}
+                              </div>
+                            </div>
                           </td>
-                          <td className="px-6 py-4 text-center">
+
+                          <td className="px-5 py-3.5 text-center">
                             <span className={`inline-block px-2.5 py-1 rounded-full text-[9px] font-black uppercase ${
-                              isHalf 
-                                ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30' 
+                              item.paymentStatus === 'half_paid'
+                                ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30'
+                                : item.kind === 'agreement_parcel'
+                                ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
                                 : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
                             }`}>
-                              {isHalf ? '⚡ Sinal 50% Recebido' : '⏳ 100% Pendente'}
+                              {item.paymentStatusLabel}
                             </span>
                           </td>
-                          <td className="px-6 py-4 text-right font-bold text-zinc-300">
-                            {formatCurrency(totalVal, permissions?.canSeeFinancials ?? true)}
+
+                          <td className="px-5 py-3.5 text-right font-bold text-zinc-300 whitespace-nowrap">
+                            {formatCurrency(item.totalAmount, permissions?.canSeeFinancials ?? true)}
                           </td>
-                          <td className="px-6 py-4 text-right font-black text-amber-400 text-sm">
-                            {formatCurrency(pendingVal, permissions?.canSeeFinancials ?? true)}
+
+                          <td className="px-5 py-3.5 text-right font-black text-amber-400 text-sm whitespace-nowrap">
+                            {formatCurrency(item.pendingAmount, permissions?.canSeeFinancials ?? true)}
                           </td>
-                          <td className="px-6 py-4">
+
+                          <td className="px-5 py-3.5">
                             <div className="flex items-center justify-center gap-2">
                               <button
                                 onClick={() => setSelectedClient({
-                                  id: o.clients?.id || o.id,
-                                  name: o.clients?.name || 'Cliente Geral',
-                                  phone: o.clients?.phone || '',
+                                  id: item.clientId || item.rawId,
+                                  name: item.clientName,
+                                  phone: item.clientPhone || '',
                                   orderCount: 1,
-                                  totalAmount: totalVal,
-                                  paidAmount: isHalf ? totalVal * 0.5 : 0,
-                                  pendingAmount: pendingVal,
-                                  orders: [o]
+                                  totalAmount: item.totalAmount,
+                                  paidAmount: item.totalAmount - item.pendingAmount,
+                                  pendingAmount: item.pendingAmount,
+                                  orders: item.originalOrder ? [item.originalOrder] : []
                                 })}
-                                className="px-3 py-1.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[11px] font-bold flex items-center gap-1.5 transition-all cursor-pointer"
-                                title="Disparar Fatura via WhatsApp"
+                                className="px-3 py-1.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[11px] font-bold flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap"
+                                title="Disparar Cobrança via WhatsApp"
                               >
                                 <Send className="h-3 w-3" /> Cobrar Zap
                               </button>
 
                               <button
-                                onClick={async () => {
-                                  try {
-                                    const { error } = await supabase
-                                      .from('orders')
-                                      .update({ payment_status: 'paid' })
-                                      .eq('id', o.id);
-                                    if (error) throw error;
-                                    toast.success("Fatura quitada com sucesso!");
-                                    fetchBillingData();
-                                  } catch (err) {
-                                    toast.error("Erro ao registrar quitação.");
+                                onClick={() => {
+                                  if (item.kind === 'order') {
+                                    setSelectedItemForBaixaModal({
+                                      ...item.originalOrder,
+                                      client: item.originalOrder?.clients || { name: item.clientName, phone: item.clientPhone }
+                                    });
+                                  } else if (item.kind === 'agreement_parcel') {
+                                    setSelectedItemForBaixaModal({
+                                      id: item.rawId,
+                                      isManualTx: true,
+                                      isAgreementParcel: true,
+                                      type: 'income',
+                                      description: item.title,
+                                      total_amount: item.pendingAmount,
+                                      amount: item.pendingAmount,
+                                      status: 'pending',
+                                      client: { name: item.clientName, phone: item.clientPhone },
+                                      due_date: item.dueDate,
+                                      notes: item.originalTx?.notes || JSON.stringify(item.meta || {})
+                                    });
+                                  } else {
+                                    setSelectedItemForBaixaModal({
+                                      id: item.rawId,
+                                      isManualTx: true,
+                                      type: 'income',
+                                      description: item.title,
+                                      total_amount: item.pendingAmount,
+                                      amount: item.pendingAmount,
+                                      status: 'pending',
+                                      client: { name: item.clientName, phone: item.clientPhone },
+                                      due_date: item.dueDate,
+                                      notes: item.originalTx?.notes
+                                    });
                                   }
                                 }}
-                                className="px-3 py-1.5 rounded-xl bg-purple-500/10 hover:bg-purple-500/20 text-purple-300 border border-purple-500/30 text-[11px] font-bold flex items-center gap-1.5 transition-all cursor-pointer"
-                                title="Marcar como Pago"
+                                className="px-3 py-1.5 rounded-xl bg-purple-500/10 hover:bg-purple-500/20 text-purple-300 border border-purple-500/30 text-[11px] font-bold flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap"
+                                title="Dar Baixa com Forma de Pagamento e Recibo"
                               >
                                 <CheckCircle2 className="h-3 w-3" /> Dar Baixa
                               </button>
@@ -2417,7 +2697,7 @@ export const Faturamento: React.FC = () => {
         canSeeFinancials={permissions?.canSeeFinancials ?? true}
         onSelectClientForZap={(client) => setSelectedClient(client)}
         onRefreshData={fetchBillingData}
-        defaultFilter={receberFilter}
+        defaultFilter={receberFilter === 'production' || receberFilter === 'delivered' ? receberFilter : 'all'}
         onOpenCreateReceivable={() => setIsCreateReceivableOpen(true)}
         pendingTransactions={financialTransactions.filter(t => t.type === 'income' && t.status === 'pending')}
       />
@@ -2457,6 +2737,21 @@ export const Faturamento: React.FC = () => {
         companyName={settings.systemName}
         companyColor={settings.primaryColor}
       />
+
+      {/* Modal de Quitação / Baixa com Forma de Pagamento e Sincronização Automática */}
+      {selectedItemForBaixaModal && (
+        <PaymentStatusModal
+          isOpen={!!selectedItemForBaixaModal}
+          onClose={() => setSelectedItemForBaixaModal(null)}
+          order={selectedItemForBaixaModal}
+          isBaixaMode={true}
+          defaultStatus="paid"
+          onStatusUpdated={() => {
+            setSelectedItemForBaixaModal(null);
+            fetchBillingData();
+          }}
+        />
+      )}
     </div>
   );
 };

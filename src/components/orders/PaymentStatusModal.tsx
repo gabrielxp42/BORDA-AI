@@ -5,6 +5,7 @@ import { useCompanySettings } from '@/contexts/CompanySettingsContext';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
 import { parsePaymentMetadata, serializePaymentMetadata, updatePaymentMetadata, formatPaymentMethodName } from '@/utils/paymentHelper';
+import { parseInstallmentMeta, syncAgreementOrders } from '@/services/installmentService';
 import { useProfile } from '@/contexts/ProfileContext';
 import { sendEvolutionText } from '@/services/whatsappService';
 import { format } from 'date-fns';
@@ -241,6 +242,16 @@ export const PaymentStatusModal: React.FC<PaymentStatusModalProps> = ({
               notes: txTarget.notes || JSON.stringify({ clientName: targetClient?.name, clientPhone: targetClient?.phone })
             });
           }
+        }
+
+        // Sincroniza e dá baixa automática nos pedidos vinculados se for acordo
+        const txMeta = parseInstallmentMeta(txTarget.notes || (txTarget.rawTx ? txTarget.rawTx.notes : null));
+        if (txMeta.agreementId) {
+          await syncAgreementOrders(txMeta.agreementId, {
+            paidAt: exactPaidAt,
+            method: selectedMethod,
+            operator: operatorName,
+          });
         }
 
         toast.success(

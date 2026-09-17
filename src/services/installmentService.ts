@@ -204,7 +204,138 @@ export async function updateInstallmentAmount(id: string, valor: number): Promis
   if (error) throw error;
 }
 
-/** Dá baixa numa parcela, registrando quando e por quem. */
+import { parsePaymentMetadata, serializePaymentMetadata } from '@/utils/paymentHelper';
+
+/** Sincroniza o status dos pedidos vinculados a um acordo conforme as parcelas são pagas. */
+export async function syncAgreementOrders(
+  agreementId: string,
+  opts?: { paidAt?: string; method?: string; operator?: string }
+): Promise<void> {
+  if (!agreementId) return;
+
+  try {
+    // 1. Busca todas as transações do acordo (parcelas e entrada)
+    const { data: txs, error: txErr } = await supabase
+      .from('financial_transactions')
+      .select('*')
+      .ilike('notes', `%${agreementId}%`);
+
+    if (txErr || !txs || txs.length === 0) return;
+
+    // 2. Coleta IDs de todos os pedidos associados
+    const associatedOrderIds = new Set<string>();
+    let totalAgreement = 0;
+    let totalPaid = 0;
+
+    txs.forEach(t => {
+      const meta = parseInstallmentMeta(t.notes);
+      if (meta.associatedOrderIds && Array.isArray(meta.associatedOrderIds)) {
+        meta.associatedOrderIds.forEach(id => associatedOrderIds.add(id));
+      }
+      const val = Number(t.amount || 0);
+      totalAgreement += val;
+      if (t.status === 'paid') {
+        totalPaid += val;
+      }
+    });
+
+    const orderIdList = Array.from(associatedOrderIds);
+    if (orderIdList.length === 0) return;
+
+    // 3. Busca os pedidos no Supabase
+    const { data: orders, error: ordErr } = await supabase
+      .from('orders')
+      .select('id, total_amount, payment_status, notes, order_number')
+      .in('id', orderIdList);
+
+    if (ordErr || !orders || orders.length === 0) return;
+
+    const isFullySettled = totalAgreement > 0 && (totalAgreement - totalPaid <= 0.01);
+    const quitadaEm = opts?.paidAt || new Date().toISOString();
+    const operator = opts?.operator || 'Sistema';
+    const method = opts?.method || 'pix';
+
+    if (isFullySettled) {
+      // Quitação total: todos os pedidos do acordo viram 'paid'
+      for (const ord of orders) {
+        const { cleanNotes, metadata } = parsePaymentMetadata(ord.notes);
+        await supabase
+          .from('orders')
+          .update({
+            payment_status: 'paid',
+            payment_method: method,
+            notes: serializePaymentMetadata(cleanNotes, {
+              ...metadata,
+              paidAt: quitadaEm,
+              paidByOperator: operator,
+              agreementId,
+              agreementCreatedAt: metadata.agreementCreatedAt || quitadaEm,
+            } as any),
+          })
+          .eq('id', ord.id);
+      }
+    } else if (totalPaid > 0.01) {
+      // Baixa proporcional progressiva nos pedidos conforme o saldo pago
+      let pool = totalPaid;
+      for (const ord of orders) {
+        const ordVal = Number(ord.total_amount || 0);
+        const { cleanNotes, metadata } = parsePaymentMetadata(ord.notes);
+
+        if (pool >= ordVal - 0.01 && ordVal > 0) {
+          // Este pedido foi 100% coberto pelo valor já pago do acordo
+          pool -= ordVal;
+          await supabase
+            .from('orders')
+            .update({
+              payment_status: 'paid',
+              payment_method: method,
+              notes: serializePaymentMetadata(cleanNotes, {
+                ...metadata,
+                paidAt: quitadaEm,
+                paidByOperator: operator,
+                agreementId,
+              } as any),
+            })
+            .eq('id', ord.id);
+        } else if (pool > 0.01 && ordVal > 0) {
+          // Cobertura parcial deste pedido
+          const partialDeposit = Math.round(pool * 100) / 100;
+          pool = 0;
+          await supabase
+            .from('orders')
+            .update({
+              payment_status: 'half_paid',
+              payment_method: method,
+              notes: serializePaymentMetadata(cleanNotes, {
+                ...metadata,
+                depositAmount: partialDeposit,
+                paidAt: quitadaEm,
+                paidByOperator: operator,
+                agreementId,
+              } as any),
+            })
+            .eq('id', ord.id);
+        } else {
+          // Ainda não coberto pelos pagamentos efetuados
+          await supabase
+            .from('orders')
+            .update({
+              payment_status: 'in_agreement',
+              notes: serializePaymentMetadata(cleanNotes, {
+                ...metadata,
+                agreementId,
+              } as any),
+            })
+            .eq('id', ord.id);
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Erro ao sincronizar pedidos do acordo:', err);
+  }
+}
+
+/** Dá baixa numa parcela, registrando quando e por quem e sincronizando pedidos. */
 export async function settleInstallment(
   id: string,
   opts?: { paidAt?: string; method?: string; operator?: string }
@@ -227,15 +358,69 @@ export async function settleInstallment(
       notes: JSON.stringify({ ...meta, paidAt: quitadaEm, paidByOperator: opts?.operator }),
     })
     .eq('id', id);
+
   if (error) throw error;
+
+  // Sincroniza e dá baixa automática nos pedidos vinculados
+  if (meta.agreementId) {
+    await syncAgreementOrders(meta.agreementId, {
+      paidAt: quitadaEm,
+      method: opts?.method,
+      operator: opts?.operator,
+    });
+  }
 }
 
-/** Remove um acordo inteiro (todas as parcelas ainda em aberto). */
+/** Remove um acordo inteiro (todas as parcelas ainda em aberto) e restaura pedidos. */
 export async function deleteAgreement(agreementId: string, ids: string[]): Promise<void> {
-  if (!ids.length) return;
-  const { error } = await supabase
-    .from('financial_transactions')
-    .delete()
-    .in('id', ids);
+  if (!ids.length && !agreementId) return;
+
+  try {
+    // 1. Localiza os pedidos vinculados para restaurá-los
+    const { data: txs } = await supabase
+      .from('financial_transactions')
+      .select('notes')
+      .in('id', ids.length ? ids : ['']);
+
+    const associatedOrderIds = new Set<string>();
+    (txs || []).forEach(t => {
+      const meta = parseInstallmentMeta(t.notes);
+      if (meta.associatedOrderIds && Array.isArray(meta.associatedOrderIds)) {
+        meta.associatedOrderIds.forEach(id => associatedOrderIds.add(id));
+      }
+    });
+
+    const orderIdList = Array.from(associatedOrderIds);
+    if (orderIdList.length > 0) {
+      // Restaura pedidos de volta para 'pending'
+      const { data: orders } = await supabase
+        .from('orders')
+        .select('id, payment_status, notes')
+        .in('id', orderIdList);
+
+      for (const ord of (orders || [])) {
+        if (ord.payment_status === 'in_agreement') {
+          const { cleanNotes, metadata } = parsePaymentMetadata(ord.notes);
+          const { agreementId: _, agreementCreatedAt: __, ...restMeta } = metadata as any;
+          await supabase
+            .from('orders')
+            .update({
+              payment_status: restMeta.depositAmount ? 'half_paid' : 'pending',
+              notes: serializePaymentMetadata(cleanNotes, restMeta),
+            })
+            .eq('id', ord.id);
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Erro ao restaurar pedidos ao deletar acordo:', err);
+  }
+
+  // 2. Deleta as transações
+  const query = ids.length 
+    ? supabase.from('financial_transactions').delete().in('id', ids)
+    : supabase.from('financial_transactions').delete().ilike('notes', `%${agreementId}%`);
+
+  const { error } = await query;
   if (error) throw error;
 }

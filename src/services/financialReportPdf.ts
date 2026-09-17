@@ -121,13 +121,15 @@ export const buildFinancialReportHTML = (data: FinancialReportPDFData): string =
       <meta charset="UTF-8">
       <title>Relatório Financeiro - ${esc(data.periodLabel)}</title>
       <style>
-        * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-        body { margin: 0; padding: 22px; color: #1e293b; font-size: 12px; }
-        .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 3px solid ${brandColor}; padding-bottom: 14px; margin-bottom: 16px; }
-        .title { font-size: 19px; font-weight: 900; color: #0f172a; text-transform: uppercase; }
-        .subtitle { font-size: 11px; color: #64748b; font-weight: 600; margin-top: 2px; }
+        * { box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; word-spacing: normal !important; letter-spacing: normal !important; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; margin: 0; padding: 20px; color: #1e293b; font-size: 11px; line-height: 1.45; -webkit-font-smoothing: antialiased; }
+        .header-table { width: 100%; border-collapse: collapse; table-layout: fixed; border-bottom: 3px solid ${brandColor}; padding-bottom: 12px; margin-bottom: 16px; }
+        .header-left { width: 68%; vertical-align: top; padding-right: 14px; word-break: break-word; }
+        .header-right { width: 32%; vertical-align: top; text-align: right; word-break: break-word; }
+        .title { font-size: 18px; font-weight: 900; color: #0f172a; text-transform: uppercase; line-height: 1.25; margin: 0 0 2px 0; word-break: break-word; }
+        .subtitle { font-size: 11px; color: #64748b; font-weight: 600; margin-top: 2px; word-break: break-word; }
         .cards { display: flex; gap: 10px; margin-bottom: 18px; }
-        .card { flex: 1; border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px 12px; background: #f8fafc; }
+        .card { flex: 1; border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px 12px; background: #f8fafc; word-break: break-word; }
         .card-l { font-size: 9px; font-weight: 800; text-transform: uppercase; color: #64748b; letter-spacing: .04em; }
         .card-v { font-size: 16px; font-weight: 900; margin-top: 3px; }
         .in { color: #059669; }
@@ -138,35 +140,37 @@ export const buildFinancialReportHTML = (data: FinancialReportPDFData): string =
         .day-tot b { font-size: 10px; font-weight: 800; margin-left: 12px; }
         .day-tot .in { color: #34d399; }
         .day-tot .out { color: #f87171; }
-        table { width: 100%; border-collapse: collapse; }
+        table { width: 100%; border-collapse: collapse; table-layout: fixed; }
         th { background: #f1f5f9; text-align: left; padding: 6px 10px; font-size: 9px; font-weight: 800; text-transform: uppercase; color: #475569; border-bottom: 1px solid #cbd5e1; }
-        td { padding: 7px 10px; border-bottom: 1px solid #eef2f7; vertical-align: top; }
+        td { padding: 7px 10px; border-bottom: 1px solid #eef2f7; vertical-align: top; word-break: break-word; }
         .text-right { text-align: right; }
         .mono { font-variant-numeric: tabular-nums; color: #64748b; font-weight: 700; }
-        .desc { font-weight: 700; color: #0f172a; }
-        .meta { font-size: 9px; color: #94a3b8; margin-top: 1px; }
-        .src { font-size: 8px; font-weight: 900; padding: 2px 6px; border-radius: 5px; }
+        .desc { font-weight: 700; color: #0f172a; word-break: break-word; }
+        .meta { font-size: 9px; color: #94a3b8; margin-top: 1px; word-break: break-word; }
+        .src { font-size: 8px; font-weight: 900; padding: 2px 6px; border-radius: 5px; white-space: nowrap; }
         .src-order { background: #ede9fe; color: #6d28d9; }
         .src-manual { background: #e0f2fe; color: #0369a1; }
         td.in, td.out { font-weight: 800; font-variant-numeric: tabular-nums; }
-        .footer-total { display: flex; justify-content: space-between; align-items: center; background: #0f172a; color: #fff; padding: 14px 18px; border-radius: 12px; margin-top: 8px; }
+        .footer-total { display: flex; justify-content: space-between; align-items: center; background: #0f172a; color: #fff; padding: 14px 18px; border-radius: 12px; margin-top: 8px; page-break-inside: avoid; }
         .empty { padding: 40px; text-align: center; color: #94a3b8; border: 1px dashed #cbd5e1; border-radius: 10px; }
         @media print { body { padding: 10px; } }
       </style>
     </head>
     <body>
-      <div class="header">
-        <div>
-          <div class="title">${companyName}</div>
-          <div class="subtitle">Relatório Financeiro &mdash; Entradas &amp; Saídas</div>
-          <div class="subtitle"><b>Período:</b> ${esc(data.periodLabel)}${data.filterLabel ? ` &nbsp;&bull;&nbsp; <b>Filtro:</b> ${esc(data.filterLabel)}` : ''}</div>
-        </div>
-        <div style="text-align:right">
-          <div style="font-weight:800; font-size:10px; color:#64748b;">EMISSÃO</div>
-          <div style="font-weight:700; font-size:11px;">${emittedAt}</div>
-          <div style="font-size:10px; color:#64748b; margin-top:2px;">${sorted.length} lançamento(s)</div>
-        </div>
-      </div>
+      <table class="header-table">
+        <tr>
+          <td class="header-left">
+            <div class="title">${companyName}</div>
+            <div class="subtitle">Relatório Financeiro &mdash; Entradas &amp; Saídas</div>
+            <div class="subtitle"><b>Período:</b> ${esc(data.periodLabel)}${data.filterLabel ? ` &nbsp;&bull;&nbsp; <b>Filtro:</b> ${esc(data.filterLabel)}` : ''}</div>
+          </td>
+          <td class="header-right">
+            <div style="font-weight:800; font-size:9px; color:#64748b;">EMISSÃO</div>
+            <div style="font-weight:700; font-size:11px;">${emittedAt}</div>
+            <div style="font-size:10px; color:#64748b; margin-top:2px;">${sorted.length} lançamento(s)</div>
+          </td>
+        </tr>
+      </table>
 
       <div class="cards">
         <div class="card">

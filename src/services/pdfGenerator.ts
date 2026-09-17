@@ -100,49 +100,51 @@ const getOrderHTML = (order: OrderPDFData) => {
       <meta charset="UTF-8">
       <title>Ordem de Serviço ${orderCode} - ${companyName}</title>
       <style>
-        @page { size: A4; margin: 15mm; }
-        * { box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-        body { font-family: 'Segoe UI', system-ui, -apple-system, Roboto, sans-serif; color: #1e293b; margin: 0; padding: 0; background-color: #ffffff; font-size: 13px; line-height: 1.5; }
-        .brand-bar { height: 6px; background: ${brandColor}; width: 100%; border-radius: 4px 4px 0 0; margin-bottom: 20px; }
-        .header { display: flex; justify-content: space-between; align-items: flex-start; padding-bottom: 20px; border-bottom: 2px solid #f1f5f9; margin-bottom: 24px; }
-        .company-title { font-size: 22px; font-weight: 900; color: ${brandColor}; letter-spacing: normal; margin: 0; text-transform: uppercase; }
-        .company-subtitle { font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 1px; margin-top: 2px; }
-        .company-info { font-size: 11px; color: #475569; margin-top: 6px; }
-        .document-title { text-align: right; }
-        .doc-badge { font-size: 20px; font-weight: 900; color: #0f172a; letter-spacing: normal; }
-        .doc-date { font-size: 11px; color: #64748b; margin-top: 4px; }
-        .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
-        .info-card { background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px 16px; }
-        .card-label { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: #64748b; margin-bottom: 6px; }
-        .card-value { font-size: 14px; font-weight: 700; color: #0f172a; }
-        .card-subtext { font-size: 11px; color: #475569; margin-top: 2px; }
-        .status-pill { display: inline-block; padding: 6px 12px; border-radius: 20px; font-size: 11px; font-weight: 800; text-transform: uppercase; background-color: ${paymentBadgeBg}; color: ${paymentBadgeColor}; border: 1px solid ${paymentBadgeColor}40; }
-        .table-container { margin-bottom: 24px; border-radius: 12px; overflow: hidden; border: 1px solid #e2e8f0; }
-        table { width: 100%; border-collapse: collapse; }
-        th { background-color: ${brandColor}; color: #ffffff; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; padding: 12px 16px; text-align: left; }
-        td { padding: 12px 16px; border-bottom: 1px solid #f1f5f9; color: #334155; font-size: 12px; }
-        tr:nth-child(even) { background-color: #f8fafc; }
+        @page { size: A4; margin: 12mm; }
+        * { box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; word-spacing: normal !important; letter-spacing: normal !important; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; color: #1e293b; margin: 0; padding: 0; background-color: #ffffff; font-size: 12px; line-height: 1.45; -webkit-font-smoothing: antialiased; }
+        .brand-bar { height: 6px; background: ${brandColor}; width: 100%; border-radius: 4px 4px 0 0; margin-bottom: 16px; }
+        .header-table { width: 100%; border-collapse: collapse; table-layout: fixed; margin-bottom: 20px; border-bottom: 2px solid #f1f5f9; padding-bottom: 16px; }
+        .header-left { width: 60%; vertical-align: top; padding-right: 14px; word-break: break-word; }
+        .header-right { width: 40%; vertical-align: top; text-align: right; word-break: break-word; }
+        .company-title { font-size: 19px; font-weight: 900; color: ${brandColor}; margin: 0 0 2px 0; text-transform: uppercase; line-height: 1.25; word-break: break-word; }
+        .company-subtitle { font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px; }
+        .company-info { font-size: 11px; color: #475569; margin-top: 6px; line-height: 1.4; word-break: break-word; }
+        .doc-badge { font-size: 18px; font-weight: 900; color: #0f172a; line-height: 1.25; }
+        .doc-date { font-size: 11px; color: #64748b; margin-top: 4px; line-height: 1.4; }
+        .info-table { width: 100%; border-collapse: separate; border-spacing: 12px 0; margin-left: -12px; margin-right: -12px; margin-bottom: 20px; table-layout: fixed; }
+        .info-cell { width: 50%; vertical-align: top; background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 12px 14px; word-break: break-word; }
+        .card-label { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: #64748b; margin-bottom: 4px; }
+        .card-value { font-size: 14px; font-weight: 700; color: #0f172a; word-break: break-word; }
+        .card-subtext { font-size: 11px; color: #475569; margin-top: 3px; word-break: break-word; }
+        .status-pill { display: inline-block; padding: 5px 10px; border-radius: 20px; font-size: 10px; font-weight: 800; text-transform: uppercase; background-color: ${paymentBadgeBg}; color: ${paymentBadgeColor}; border: 1px solid ${paymentBadgeColor}40; white-space: nowrap; }
+        .table-container { margin-bottom: 20px; border-radius: 12px; overflow: hidden; border: 1px solid #e2e8f0; }
+        table.items-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+        table.items-table th { background-color: ${brandColor}; color: #ffffff; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; padding: 10px 12px; text-align: left; }
+        table.items-table td { padding: 10px 12px; border-bottom: 1px solid #f1f5f9; color: #334155; font-size: 11px; word-break: break-word; vertical-align: top; }
+        table.items-table tr:nth-child(even) { background-color: #f8fafc; }
         .text-right { text-align: right; }
         .text-center { text-align: center; }
         .font-bold { font-weight: 700; }
-        .notes-box { background-color: #faf5ff; border: 1px solid #e9d5ff; border-radius: 12px; padding: 14px 16px; margin-bottom: 24px; }
-        .notes-title { font-size: 11px; font-weight: 800; color: ${brandColor}; text-transform: uppercase; margin-bottom: 4px; }
-        .notes-content { font-size: 12px; color: #475569; font-style: italic; }
-        .summary-container { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; margin-bottom: 30px; }
-        .payment-info-box { flex: 1; background-color: #fffbeb; border: 1px solid #fde68a; border-radius: 12px; padding: 14px 16px; }
-        .payment-info-title { font-size: 11px; font-weight: 800; color: #d97706; text-transform: uppercase; margin-bottom: 6px; }
-        .payment-info-text { font-size: 11px; color: #78350f; line-height: 1.6; }
-        .total-box { min-width: 220px; background-color: #0f172a; color: #ffffff; border-radius: 12px; padding: 16px; text-align: right; }
-        .total-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #94a3b8; }
-        .total-amount { font-size: 24px; font-weight: 900; color: #ffffff; margin-top: 4px; letter-spacing: normal; }
-        .footer { border-top: 1px solid #e2e8f0; padding-top: 16px; text-align: center; font-size: 10px; color: #94a3b8; }
+        .notes-box { background-color: #faf5ff; border: 1px solid #e9d5ff; border-radius: 12px; padding: 12px 14px; margin-bottom: 20px; word-break: break-word; }
+        .notes-title { font-size: 10px; font-weight: 800; color: ${brandColor}; text-transform: uppercase; margin-bottom: 4px; }
+        .notes-content { font-size: 11px; color: #475569; font-style: italic; line-height: 1.4; word-break: break-word; }
+        .summary-table { width: 100%; border-collapse: separate; border-spacing: 12px 0; margin-left: -12px; margin-right: -12px; margin-bottom: 24px; table-layout: fixed; }
+        .payment-info-cell { vertical-align: top; background-color: #fffbeb; border: 1px solid #fde68a; border-radius: 12px; padding: 12px 14px; word-break: break-word; }
+        .payment-info-title { font-size: 10px; font-weight: 800; color: #d97706; text-transform: uppercase; margin-bottom: 4px; }
+        .payment-info-text { font-size: 11px; color: #78350f; line-height: 1.5; word-break: break-word; }
+        .total-cell { width: 230px; vertical-align: middle; background-color: #0f172a; color: #ffffff; border-radius: 12px; padding: 14px 16px; text-align: right; }
+        .total-label { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: #94a3b8; }
+        .total-amount { font-size: 22px; font-weight: 900; color: #ffffff; margin-top: 2px; }
+        .footer { border-top: 1px solid #e2e8f0; padding-top: 14px; text-align: center; font-size: 10px; color: #94a3b8; }
       </style>
     </head>
     <body>
       <div class="brand-bar"></div>
-      <div class="header">
-        <div>
-            <h1 class="company-title">${companyName}</h1>
+      <table class="header-table">
+        <tr>
+          <td class="header-left">
+            <div class="company-title">${companyName}</div>
             <div class="company-subtitle">${companySubtitle}</div>
             <div class="company-info">
               ${order.companyAddress ? `📍 ${order.companyAddress}<br/>` : ''}
@@ -150,29 +152,40 @@ const getOrderHTML = (order: OrderPDFData) => {
               ${order.companyEmail ? ` | ✉️ ${order.companyEmail}` : ''}
               ${order.companyDocument ? `<br/>📄 CNPJ/CPF: ${order.companyDocument}` : ''}
             </div>
-        </div>
-        <div class="document-title">
-          <div class="doc-badge">ORDEM DE SERVIÇO ${orderCode}</div>
-          <div class="doc-date">Data da Entrada:&nbsp;<strong>${formattedDate}</strong></div>
-          <div class="doc-date">Previsão de Entrega:&nbsp;<strong>${formattedDueDate}</strong></div>
-        </div>
-      </div>
-      <div class="info-grid">
-        <div class="info-card">
-          <div class="card-label">Cliente / Destinatário</div>
-          <div class="card-value">${order.clientName}</div>
-          ${order.clientCompany ? `<div class="card-subtext">🏢 ${order.clientCompany}</div>` : ''}
-          ${order.clientPhone ? `<div class="card-subtext">📞 ${order.clientPhone}</div>` : ''}
-        </div>
-        <div class="info-card">
-          <div class="card-label">Status do Pagamento</div>
-          <div style="margin-top: 4px;"><span class="status-pill">${paymentStatusText}</span></div>
-          ${order.paymentMethod ? `<div class="card-subtext" style="margin-top: 8px;">Método: <strong>${order.paymentMethod.toUpperCase()}</strong></div>` : ''}
-        </div>
-      </div>
+          </td>
+          <td class="header-right">
+            <div class="doc-badge">ORDEM DE SERVIÇO ${orderCode}</div>
+            <div class="doc-date">Data da Entrada:&nbsp;<strong>${formattedDate}</strong></div>
+            <div class="doc-date">Previsão de Entrega:&nbsp;<strong>${formattedDueDate}</strong></div>
+          </td>
+        </tr>
+      </table>
+
+      <table class="info-table">
+        <tr>
+          <td class="info-cell">
+            <div class="card-label">Cliente / Destinatário</div>
+            <div class="card-value">${order.clientName}</div>
+            ${order.clientCompany ? `<div class="card-subtext">🏢 ${order.clientCompany}</div>` : ''}
+            ${order.clientPhone ? `<div class="card-subtext">📞 ${order.clientPhone}</div>` : ''}
+          </td>
+          <td class="info-cell">
+            <div class="card-label">Status do Pagamento</div>
+            <div style="margin-top: 4px;"><span class="status-pill">${paymentStatusText}</span></div>
+            ${order.paymentMethod ? `<div class="card-subtext" style="margin-top: 6px;">Método: <strong>${order.paymentMethod.toUpperCase()}</strong></div>` : ''}
+          </td>
+        </tr>
+      </table>
+
       <div class="table-container">
-        <table>
-          <thead><tr><th>Descrição do Serviço / Matriz</th><th class="text-center">Quantidade</th>${canSee ? '<th class="text-right">Valor Unitário</th><th class="text-right">Total</th>' : ''}</tr></thead>
+        <table class="items-table">
+          <thead>
+            <tr>
+              <th style="width: 50%;">Descrição do Serviço / Matriz</th>
+              <th class="text-center" style="width: 15%;">Quantidade</th>
+              ${canSee ? '<th class="text-right" style="width: 17%;">Valor Unitário</th><th class="text-right" style="width: 18%;">Total</th>' : ''}
+            </tr>
+          </thead>
           <tbody>
             ${order.items.map(item => {
               const uPrice = Number(item.unitPrice ?? (item as any).unit_price ?? 0);
@@ -188,19 +201,29 @@ const getOrderHTML = (order: OrderPDFData) => {
           </tbody>
         </table>
       </div>
+
       ${cleanNotes && cleanNotes.trim().length > 0 ? `
         <div class="notes-box">
           <div class="notes-title">📝 Observações & Especificações da Encomenda</div>
           <div class="notes-content">"${cleanNotes.trim()}"</div>
         </div>
       ` : ''}
-      <div class="summary-container">
-        <div class="payment-info-box">
-          <div class="payment-info-title">🔑 Dados para Pagamento & Atendimento</div>
-          <div class="payment-info-text">${canSee && order.pixKey ? `Chave PIX:&nbsp;<strong>${order.pixKey}</strong><br/>` : ''}${order.workingHours ? `Horário de Funcionamento: <strong>${order.workingHours}</strong><br/>` : ''}</div>
-        </div>
-        ${canSee ? `<div class="total-box"><div class="total-label">Valor Total do Pedido</div><div class="total-amount">${formattedTotal}</div></div>` : ''}
-      </div>
+
+      <table class="summary-table">
+        <tr>
+          <td class="payment-info-cell">
+            <div class="payment-info-title">🔑 Dados para Pagamento & Atendimento</div>
+            <div class="payment-info-text">${canSee && order.pixKey ? `Chave PIX:&nbsp;<strong>${order.pixKey}</strong><br/>` : ''}${order.workingHours ? `Horário de Funcionamento: <strong>${order.workingHours}</strong><br/>` : ''}</div>
+          </td>
+          ${canSee ? `
+            <td class="total-cell">
+              <div class="total-label">Valor Total do Pedido</div>
+              <div class="total-amount">${formattedTotal}</div>
+            </td>
+          ` : ''}
+        </tr>
+      </table>
+
       <div class="footer">${companyName} — Tecnologia ERP para Oficinas de Bordado</div>
     </body>
     </html>
@@ -239,13 +262,9 @@ export const generateOrderPDFBase64 = async (order: OrderPDFData): Promise<strin
   container.style.boxSizing = 'border-box';
   document.body.appendChild(container);
 
-  // Espera as fontes ficarem realmente prontas antes de capturar.
-  // Se o html2canvas desenha com a fonte de fallback, as larguras calculadas
-  // não batem com as reais e o texto sai sobreposto — foi o que o cliente
-  // reportou ("tudo sobreposto"). Um setTimeout fixo não garantia isso.
   try {
     if (document.fonts?.ready) await document.fonts.ready;
-  } catch { /* navegador sem Font Loading API: segue com a espera abaixo */ }
+  } catch { /* fallback */ }
   await new Promise(r => setTimeout(r, 250));
 
   const canvas = await html2canvas(container, {
@@ -254,7 +273,7 @@ export const generateOrderPDFBase64 = async (order: OrderPDFData): Promise<strin
     logging: false,
     y: 0,
     scrollY: 0,
-    windowWidth: 800
+    windowWidth: 794
   });
 
   const imgData = canvas.toDataURL('image/jpeg', 0.95);
@@ -265,11 +284,9 @@ export const generateOrderPDFBase64 = async (order: OrderPDFData): Promise<strin
   const imgProps = pdf.getImageProperties(imgData);
   const calculatedHeight = (imgProps.height * pdfWidth) / imgProps.width;
 
-  // Se a altura couber na página A4, centraliza levemente com margem
   if (calculatedHeight <= pdfHeight) {
     pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, calculatedHeight);
   } else {
-    // Se for maior que 1 página, adiciona com proporção
     let heightLeft = calculatedHeight;
     let position = 0;
 
@@ -334,56 +351,66 @@ const getClientStatementHTML = (data: ClientStatementPDFData) => {
       <title>Extrato Detalhado de Débitos — ${data.clientName}</title>
       <style>
         @page { size: A4; margin: 12mm; }
-        * { box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; word-spacing: normal; letter-spacing: normal; white-space: normal; }
-        body { font-family: 'Segoe UI', system-ui, -apple-system, Roboto, sans-serif; margin: 0; padding: 0; color: #1e293b; font-size: 12px; line-height: 1.4; background: #ffffff; }
-        .brand-bar { height: 6px; background: ${brandColor}; width: 100%; border-radius: 4px 4px 0 0; margin-bottom: 16px; }
-        .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #e2e8f0; padding-bottom: 12px; margin-bottom: 16px; }
-        .title { font-size: 20px; font-weight: 900; color: ${brandColor}; text-transform: uppercase; letter-spacing: normal; margin: 0; }
-        .subtitle { font-size: 10px; color: #64748b; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px; }
-        .client-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 12px 16px; margin-bottom: 16px; }
-        .client-title { font-size: 10px; font-weight: 800; text-transform: uppercase; color: #64748b; margin-bottom: 2px; letter-spacing: 0.5px; }
-        .client-name { font-size: 16px; font-weight: 900; color: #0f172a; }
+        * { box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; word-spacing: normal !important; letter-spacing: normal !important; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; margin: 0; padding: 0; color: #1e293b; font-size: 11px; line-height: 1.4; background: #ffffff; -webkit-font-smoothing: antialiased; }
+        .brand-bar { height: 6px; background: ${brandColor}; width: 100%; border-radius: 4px 4px 0 0; margin-bottom: 14px; }
         
-        .order-card { margin-bottom: 16px; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; background: #ffffff; page-break-inside: avoid; break-inside: avoid; }
-        .order-header { background: #f8fafc; padding: 10px 14px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; }
-        .order-num { font-size: 13px; font-weight: 900; color: #0f172a; }
-        .order-dates { font-size: 11px; color: #64748b; margin-left: 8px; }
+        .header-table { width: 100%; border-collapse: collapse; table-layout: fixed; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px; margin-bottom: 14px; }
+        .header-left { width: 65%; vertical-align: top; padding-right: 12px; word-break: break-word; }
+        .header-right { width: 35%; vertical-align: top; text-align: right; word-break: break-word; }
+        .title { font-size: 18px; font-weight: 900; color: ${brandColor}; text-transform: uppercase; margin: 0 0 2px 0; line-height: 1.25; word-break: break-word; }
+        .subtitle { font-size: 10px; color: #64748b; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px; }
+        
+        .client-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px 14px; margin-bottom: 14px; word-break: break-word; }
+        .client-title { font-size: 9px; font-weight: 800; text-transform: uppercase; color: #64748b; margin-bottom: 2px; letter-spacing: 0.5px; }
+        .client-name { font-size: 15px; font-weight: 900; color: #0f172a; line-height: 1.3; }
+        
+        .order-card { margin-bottom: 14px; border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden; background: #ffffff; page-break-inside: avoid; break-inside: avoid; }
+        .order-header-table { width: 100%; border-collapse: collapse; background: #f8fafc; border-bottom: 1px solid #e2e8f0; table-layout: fixed; }
+        .order-header-left { padding: 8px 12px; vertical-align: middle; width: 55%; word-break: break-word; }
+        .order-header-right { padding: 8px 12px; vertical-align: middle; width: 45%; text-align: right; }
+        .order-num { font-size: 12px; font-weight: 900; color: #0f172a; }
+        .order-dates { font-size: 10px; color: #64748b; margin-left: 6px; }
         
         .pending-tag { background: #fef2f2; color: #dc2626; padding: 3px 8px; border-radius: 16px; font-weight: 800; font-size: 9px; border: 1px solid #fca5a5; display: inline-block; white-space: nowrap; }
         .half-tag { background: #eff6ff; color: #2563eb; padding: 3px 8px; border-radius: 16px; font-weight: 800; font-size: 9px; border: 1px solid #93c5fd; display: inline-block; white-space: nowrap; }
         
-        table.items-table { width: 100%; border-collapse: collapse; }
-        table.items-table th { background: ${brandColor}; color: #ffffff; text-align: left; padding: 8px 12px; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; }
-        table.items-table td { padding: 8px 12px; border-bottom: 1px solid #f1f5f9; font-size: 11px; color: #334155; }
+        table.items-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+        table.items-table th { background: ${brandColor}; color: #ffffff; text-align: left; padding: 7px 10px; font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; }
+        table.items-table td { padding: 7px 10px; border-bottom: 1px solid #f1f5f9; font-size: 10px; color: #334155; word-break: break-word; vertical-align: top; }
         table.items-table tr:nth-child(even) { background-color: #f8fafc; }
         
         .text-right { text-align: right; }
         .text-center { text-align: center; }
         .font-bold { font-weight: 700; }
         
-        .total-container { display: flex; justify-content: space-between; align-items: center; background: #0f172a; color: white; padding: 16px 20px; border-radius: 12px; margin-top: 20px; margin-bottom: 16px; page-break-inside: avoid; }
-        .total-val { font-size: 24px; font-weight: 900; color: #ffffff; letter-spacing: normal; }
-        .pix-box { padding: 12px 16px; background: #fffbeb; border: 1px solid #fde68a; border-radius: 12px; color: #92400e; font-size: 11px; margin-bottom: 16px; page-break-inside: avoid; }
-        .footer { border-top: 1px solid #e2e8f0; padding-top: 12px; text-align: center; font-size: 10px; color: #94a3b8; }
+        .total-container-table { width: 100%; border-collapse: collapse; background: #0f172a; color: white; border-radius: 10px; margin-top: 16px; margin-bottom: 14px; page-break-inside: avoid; table-layout: fixed; }
+        .total-left { padding: 12px 16px; vertical-align: middle; width: 60%; }
+        .total-right { padding: 12px 16px; vertical-align: middle; width: 40%; text-align: right; }
+        .total-val { font-size: 20px; font-weight: 900; color: #ffffff; }
+        .pix-box { padding: 10px 14px; background: #fffbeb; border: 1px solid #fde68a; border-radius: 10px; color: #92400e; font-size: 10px; margin-bottom: 14px; page-break-inside: avoid; line-height: 1.45; }
+        .footer { border-top: 1px solid #e2e8f0; padding-top: 10px; text-align: center; font-size: 9px; color: #94a3b8; }
       </style>
     </head>
     <body>
       <div class="brand-bar"></div>
-      <div class="header">
-        <div>
-          <h1 class="title">${companyName}</h1>
-          <div class="subtitle">Extrato Detalhado de Fechamento de Pedidos</div>
-        </div>
-        <div style="text-align: right;">
-          <div style="font-weight: 800; font-size: 10px; color: #64748b; text-transform: uppercase;">DATA DE EMISSÃO</div>
-          <div style="font-weight: 800; font-size: 12px; color: #0f172a;">${formattedDate}</div>
-        </div>
-      </div>
+      <table class="header-table">
+        <tr>
+          <td class="header-left">
+            <div class="title">${companyName}</div>
+            <div class="subtitle">Extrato Detalhado de Fechamento de Pedidos</div>
+          </td>
+          <td class="header-right">
+            <div style="font-weight: 800; font-size: 9px; color: #64748b; text-transform: uppercase;">DATA DE EMISSÃO</div>
+            <div style="font-weight: 800; font-size: 11px; color: #0f172a;">${formattedDate}</div>
+          </td>
+        </tr>
+      </table>
 
       <div class="client-box">
         <div class="client-title">Cliente / Destinatário</div>
         <div class="client-name">${data.clientName} ${data.clientCompany ? `(${data.clientCompany})` : ''}</div>
-        ${data.clientPhone ? `<div style="font-size: 11px; color: #64748b; margin-top: 2px;">📞 ${data.clientPhone}</div>` : ''}
+        ${data.clientPhone ? `<div style="font-size: 10px; color: #64748b; margin-top: 2px;">📞 ${data.clientPhone}</div>` : ''}
       </div>
 
       <!-- Pedidos Detalhados com seus Respectivos Itens -->
@@ -397,21 +424,22 @@ const getClientStatementHTML = (data: ClientStatementPDFData) => {
 
         return `
           <div class="order-card">
-            <div class="order-header">
-              <div>
-                <span class="order-num">Pedido ${orderNumStr}</span>
-                <span class="order-dates">Entrada: ${dateStr} • Vencimento: ${dueStr}</span>
-              </div>
-              <div style="display: flex; align-items: center; gap: 12px;">
-                ${isHalf 
-                  ? `<span class="half-tag">⚡ SINAL 50% PAGO (${fmt(depositVal)})</span>` 
-                  : '<span class="pending-tag">⏳ 100% PENDENTE</span>'}
-                <div style="text-align: right;">
-                  <span style="font-size: 9px; font-weight: 800; color: #64748b; text-transform: uppercase; display: block;">Restante a Receber</span>
-                  <span style="font-size: 14px; font-weight: 900; color: #dc2626;">${fmt(o.pendingAmount)}</span>
-                </div>
-              </div>
-            </div>
+            <table class="order-header-table">
+              <tr>
+                <td class="order-header-left">
+                  <span class="order-num">Pedido ${orderNumStr}</span>
+                  <span class="order-dates">Entrada: ${dateStr} • Vencimento: ${dueStr}</span>
+                </td>
+                <td class="order-header-right">
+                  <div style="display: inline-flex; align-items: center; gap: 8px;">
+                    ${isHalf 
+                      ? `<span class="half-tag">⚡ SINAL 50% (${fmt(depositVal)})</span>` 
+                      : '<span class="pending-tag">⏳ 100% PENDENTE</span>'}
+                    <span style="font-size: 13px; font-weight: 900; color: #dc2626; margin-left: 4px;">${fmt(o.pendingAmount)}</span>
+                  </div>
+                </td>
+              </tr>
+            </table>
 
             <table class="items-table">
               <thead>
@@ -451,13 +479,17 @@ const getClientStatementHTML = (data: ClientStatementPDFData) => {
         `;
       }).join('')}
 
-      <div class="total-container">
-        <div>
-          <div style="font-size: 10px; font-weight: 800; text-transform: uppercase; color: #94a3b8;">Total Acumulado a Pagar</div>
-          <div style="font-size: 11px; color: #cbd5e1;">Sumatório dos débitos em aberto deste cliente</div>
-        </div>
-        <div class="total-val">${formattedGrandPending}</div>
-      </div>
+      <table class="total-container-table">
+        <tr>
+          <td class="total-left">
+            <div style="font-size: 9px; font-weight: 800; text-transform: uppercase; color: #94a3b8;">Total Acumulado a Pagar</div>
+            <div style="font-size: 10px; color: #cbd5e1;">Sumatório dos débitos em aberto deste cliente</div>
+          </td>
+          <td class="total-right">
+            <div class="total-val">${formattedGrandPending}</div>
+          </td>
+        </tr>
+      </table>
 
       ${data.pixKey ? `
         <div class="pix-box">
@@ -668,7 +700,10 @@ export const generateClientStatementPDFBase64 = async (data: ClientStatementPDFD
   container.style.boxSizing = 'border-box';
   document.body.appendChild(container);
 
-  await new Promise(r => setTimeout(r, 100));
+  try {
+    if (document.fonts?.ready) await document.fonts.ready;
+  } catch { /* fallback */ }
+  await new Promise(r => setTimeout(r, 250));
 
   const canvas = await html2canvas(container, {
     scale: 2,
@@ -676,7 +711,7 @@ export const generateClientStatementPDFBase64 = async (data: ClientStatementPDFD
     logging: false,
     y: 0,
     scrollY: 0,
-    windowWidth: 800
+    windowWidth: 794
   });
 
   const imgData = canvas.toDataURL('image/jpeg', 0.95);
