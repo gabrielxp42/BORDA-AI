@@ -272,9 +272,9 @@ export const CreateReceivableModal: React.FC<CreateReceivableModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-[99999] flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200 overflow-y-auto">
+    <div className="fixed inset-0 z-[99999] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200 overscroll-contain">
       <div 
-        className="relative w-full max-w-lg bg-white dark:bg-[#0f0f18] text-slate-900 dark:text-zinc-100 border border-slate-200 dark:border-white/10 rounded-3xl shadow-2xl overflow-hidden flex flex-col my-auto"
+        className="relative w-full max-w-lg max-h-[94dvh] sm:max-h-[90dvh] bg-white dark:bg-[#0f0f18] text-slate-900 dark:text-zinc-100 border border-slate-200 dark:border-white/10 rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
@@ -297,7 +297,7 @@ export const CreateReceivableModal: React.FC<CreateReceivableModalProps> = ({
         </div>
 
         {/* Form Body */}
-        <div className="p-6 space-y-5 max-h-[75vh] overflow-y-auto custom-scrollbar">
+        <div className="flex-1 min-h-0 p-5 sm:p-6 space-y-5 overflow-y-auto overscroll-contain custom-scrollbar">
           
           {/* Seletor de Status de Produção */}
           <div className="space-y-2">
@@ -477,11 +477,11 @@ export const CreateReceivableModal: React.FC<CreateReceivableModalProps> = ({
         </div>
 
         {/* Footer Actions */}
-        <div className="p-5 border-t border-slate-200 dark:border-white/10 bg-slate-100/80 dark:bg-white/5 flex items-center justify-end gap-3">
+        <div className="shrink-0 p-4 sm:p-5 pb-[max(1rem,env(safe-area-inset-bottom))] border-t border-slate-200 dark:border-white/10 bg-slate-100/80 dark:bg-white/5 flex items-center justify-end gap-3">
           <button
             type="button"
             onClick={onClose}
-            className="px-5 py-2.5 rounded-xl text-xs font-bold text-slate-700 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white bg-slate-200 dark:bg-white/5 hover:bg-slate-300 dark:hover:bg-white/10 transition-all border border-slate-300 dark:border-white/10"
+            className="px-5 py-3 rounded-xl text-xs font-bold text-slate-700 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white bg-slate-200 dark:bg-white/5 hover:bg-slate-300 dark:hover:bg-white/10 transition-all border border-slate-300 dark:border-white/10"
           >
             Cancelar
           </button>
@@ -490,7 +490,7 @@ export const CreateReceivableModal: React.FC<CreateReceivableModalProps> = ({
             type="button"
             onClick={handleSave}
             disabled={saving}
-            className="px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider text-black bg-gradient-to-r from-amber-400 to-amber-500 hover:brightness-110 shadow-lg shadow-amber-500/20 active:scale-95 transition-all flex items-center gap-2"
+            className="flex-1 sm:flex-none justify-center px-6 py-3 rounded-xl text-xs font-black uppercase tracking-wider text-black bg-gradient-to-r from-amber-400 to-amber-500 hover:brightness-110 shadow-lg shadow-amber-500/20 active:scale-95 transition-all flex items-center gap-2"
           >
             {saving ? 'REGISTRANDO...' : 'REGISTRAR A RECEBER'}
           </button>

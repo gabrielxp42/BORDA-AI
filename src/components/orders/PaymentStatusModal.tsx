@@ -461,12 +461,12 @@ export const PaymentStatusModal: React.FC<PaymentStatusModalProps> = ({
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-[99999999] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/80 backdrop-blur-md">
+      <div className="fixed inset-0 z-[99999999] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/80 backdrop-blur-md overscroll-contain">
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.95 }}
-          className="relative w-full max-w-lg bg-[#0e0e17] border border-emerald-500/30 rounded-3xl shadow-2xl overflow-hidden p-6 space-y-5 text-white"
+          className="relative w-full max-w-lg max-h-[92dvh] sm:max-h-[90dvh] overflow-y-auto overscroll-contain custom-scrollbar bg-[#0e0e17] border border-emerald-500/30 rounded-t-3xl sm:rounded-3xl shadow-2xl p-5 sm:p-6 space-y-5 text-white"
         >
           {/* Header */}
           <div className="flex items-center justify-between border-b border-white/10 pb-4">
@@ -709,12 +709,12 @@ export const PaymentStatusModal: React.FC<PaymentStatusModalProps> = ({
             </div>
           </div>
 
-          {/* Botões de Ação */}
-          <div className="flex items-center justify-end gap-3 pt-2">
+          {/* Barra de ação fixa: no celular o polegar precisa alcançar o Salvar */}
+          <div className="sticky bottom-0 z-20 -mx-5 px-5 sm:-mx-6 sm:px-6 pt-3 pb-[max(0.5rem,env(safe-area-inset-bottom))] mt-4 bg-[#0e0e17]/95 backdrop-blur-md border-t border-white/10 flex items-center justify-end gap-3">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2.5 rounded-xl text-xs font-bold bg-white/5 hover:bg-white/10 text-zinc-300 transition-colors"
+              className="px-4 py-3 rounded-xl text-xs font-bold bg-white/5 hover:bg-white/10 text-zinc-300 transition-colors"
             >
               Cancelar
             </button>
@@ -722,7 +722,7 @@ export const PaymentStatusModal: React.FC<PaymentStatusModalProps> = ({
               type="button"
               disabled={isSaveDisabled}
               onClick={handleSave}
-              className="px-6 py-2.5 rounded-xl text-xs font-black bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-600/30 transition-all flex items-center gap-2 disabled:opacity-50 cursor-pointer"
+              className="flex-1 sm:flex-none justify-center px-6 py-3 rounded-xl text-xs font-black bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-600/30 transition-all flex items-center gap-2 disabled:opacity-50 cursor-pointer"
             >
               <Save className="h-4 w-4" />
               <span>{isMultiple ? 'Confirmar Quitação em Lote' : 'Salvar Quitação'}</span>

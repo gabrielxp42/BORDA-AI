@@ -113,15 +113,15 @@ const getOrderHTML = (order: OrderPDFData) => {
         .doc-badge { font-size: 18px; font-weight: 900; color: #0f172a; line-height: 1.25; }
         .doc-date { font-size: 11px; color: #64748b; margin-top: 4px; line-height: 1.4; }
         .info-table { width: 100%; border-collapse: separate; border-spacing: 12px 0; margin-left: -12px; margin-right: -12px; margin-bottom: 20px; table-layout: fixed; }
-        .info-cell { width: 50%; vertical-align: top; background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 12px 14px; word-break: break-word; }
+        .info-cell { width: 50%; vertical-align: top; background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px 16px; word-break: break-word; }
         .card-label { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: #64748b; margin-bottom: 4px; }
-        .card-value { font-size: 14px; font-weight: 700; color: #0f172a; word-break: break-word; }
-        .card-subtext { font-size: 11px; color: #475569; margin-top: 3px; word-break: break-word; }
+        .card-value { font-size: 16px; font-weight: 800; color: #0f172a; line-height: 1.3; word-break: break-word; }
+        .card-subtext { font-size: 11.5px; color: #334155; margin-top: 4px; line-height: 1.4; word-break: break-word; }
         .status-pill { display: inline-block; padding: 5px 10px; border-radius: 20px; font-size: 10px; font-weight: 800; text-transform: uppercase; background-color: ${paymentBadgeBg}; color: ${paymentBadgeColor}; border: 1px solid ${paymentBadgeColor}40; white-space: nowrap; }
         .table-container { margin-bottom: 20px; border-radius: 12px; overflow: hidden; border: 1px solid #e2e8f0; }
         table.items-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
         table.items-table th { background-color: ${brandColor}; color: #ffffff; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; padding: 10px 12px; text-align: left; }
-        table.items-table td { padding: 10px 12px; border-bottom: 1px solid #f1f5f9; color: #334155; font-size: 11px; word-break: break-word; vertical-align: top; }
+        table.items-table td { padding: 11px 12px; border-bottom: 1px solid #f1f5f9; color: #334155; font-size: 11.5px; line-height: 1.45; word-break: break-word; vertical-align: top; }
         table.items-table tr:nth-child(even) { background-color: #f8fafc; }
         .text-right { text-align: right; }
         .text-center { text-align: center; }
@@ -165,9 +165,9 @@ const getOrderHTML = (order: OrderPDFData) => {
         <tr>
           <td class="info-cell">
             <div class="card-label">Cliente / Destinatário</div>
-            <div class="card-value">${order.clientName}</div>
-            ${order.clientCompany ? `<div class="card-subtext">🏢 ${order.clientCompany}</div>` : ''}
-            ${order.clientPhone ? `<div class="card-subtext">📞 ${order.clientPhone}</div>` : ''}
+            <div class="card-value">${order.clientCompany || order.clientName}</div>
+            ${order.clientCompany ? `<div class="card-subtext">Contato:&nbsp;<strong>${order.clientName}</strong></div>` : ''}
+            ${order.clientPhone ? `<div class="card-subtext">Telefone:&nbsp;<strong>${order.clientPhone}</strong></div>` : ''}
           </td>
           <td class="info-cell">
             <div class="card-label">Status do Pagamento</div>
@@ -361,9 +361,10 @@ const getClientStatementHTML = (data: ClientStatementPDFData) => {
         .title { font-size: 18px; font-weight: 900; color: ${brandColor}; text-transform: uppercase; margin: 0 0 2px 0; line-height: 1.25; word-break: break-word; }
         .subtitle { font-size: 10px; color: #64748b; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px; }
         
-        .client-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px 14px; margin-bottom: 14px; word-break: break-word; }
+        .client-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 13px 16px; margin-bottom: 16px; word-break: break-word; }
         .client-title { font-size: 9px; font-weight: 800; text-transform: uppercase; color: #64748b; margin-bottom: 2px; letter-spacing: 0.5px; }
-        .client-name { font-size: 15px; font-weight: 900; color: #0f172a; line-height: 1.3; }
+        .client-name { font-size: 17px; font-weight: 900; color: #0f172a; line-height: 1.3; word-break: break-word; }
+        .client-contact { font-size: 11.5px; color: #334155; margin-top: 4px; line-height: 1.4; word-break: break-word; }
         
         .order-card { margin-bottom: 14px; border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden; background: #ffffff; page-break-inside: avoid; break-inside: avoid; }
         .order-header-table { width: 100%; border-collapse: collapse; background: #f8fafc; border-bottom: 1px solid #e2e8f0; table-layout: fixed; }
@@ -377,7 +378,7 @@ const getClientStatementHTML = (data: ClientStatementPDFData) => {
         
         table.items-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
         table.items-table th { background: ${brandColor}; color: #ffffff; text-align: left; padding: 7px 10px; font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; }
-        table.items-table td { padding: 7px 10px; border-bottom: 1px solid #f1f5f9; font-size: 10px; color: #334155; word-break: break-word; vertical-align: top; }
+        table.items-table td { padding: 9px 10px; border-bottom: 1px solid #f1f5f9; font-size: 10.5px; line-height: 1.45; color: #334155; word-break: break-word; vertical-align: top; }
         table.items-table tr:nth-child(even) { background-color: #f8fafc; }
         
         .text-right { text-align: right; }
@@ -409,8 +410,9 @@ const getClientStatementHTML = (data: ClientStatementPDFData) => {
 
       <div class="client-box">
         <div class="client-title">Cliente / Destinatário</div>
-        <div class="client-name">${data.clientName} ${data.clientCompany ? `(${data.clientCompany})` : ''}</div>
-        ${data.clientPhone ? `<div style="font-size: 10px; color: #64748b; margin-top: 2px;">📞 ${data.clientPhone}</div>` : ''}
+        <div class="client-name">${data.clientCompany || data.clientName}</div>
+        ${data.clientCompany ? `<div class="client-contact">Contato:&nbsp;<strong>${data.clientName}</strong></div>` : ''}
+        ${data.clientPhone ? `<div class="client-contact">Telefone:&nbsp;<strong>${data.clientPhone}</strong></div>` : ''}
       </div>
 
       <!-- Pedidos Detalhados com seus Respectivos Itens -->

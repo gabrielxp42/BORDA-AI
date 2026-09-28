@@ -289,8 +289,8 @@ export const CreateInstallmentAgreementModal: React.FC<CreateInstallmentAgreemen
   };
 
   return (
-    <div className="fixed inset-0 z-[99999999] flex items-center justify-center p-3 sm:p-4 bg-black/90 backdrop-blur-2xl animate-in fade-in duration-200 overflow-y-auto">
-      <div className="relative w-full max-w-2xl bg-[#0c0c14] border border-purple-500/30 rounded-3xl shadow-2xl overflow-hidden flex flex-col my-auto text-white">
+    <div className="fixed inset-0 z-[99999999] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/90 backdrop-blur-2xl animate-in fade-in duration-200 overscroll-contain">
+      <div className="relative w-full max-w-2xl max-h-[94dvh] sm:max-h-[90dvh] bg-[#0c0c14] border border-purple-500/30 rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col text-white">
         
         {/* Header */}
         <div className="p-5 border-b border-white/10 bg-gradient-to-r from-purple-950/70 via-zinc-900 to-black flex items-center justify-between">
@@ -316,7 +316,7 @@ export const CreateInstallmentAgreementModal: React.FC<CreateInstallmentAgreemen
         </div>
 
         {/* Form Body */}
-        <div className="p-6 space-y-5 max-h-[80vh] overflow-y-auto scrollbar-thin scrollbar-thumb-white/10">
+        <div className="flex-1 min-h-0 p-5 sm:p-6 space-y-5 overflow-y-auto overscroll-contain scrollbar-thin scrollbar-thumb-white/10">
           
           {/* Passo 1: Seleção de Pedidos */}
           <div className="space-y-2">
@@ -671,7 +671,7 @@ export const CreateInstallmentAgreementModal: React.FC<CreateInstallmentAgreemen
         </div>
 
         {/* Footer Actions */}
-        <div className="p-4 sm:p-5 border-t border-white/10 bg-white/[0.02] flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div className="shrink-0 p-4 sm:p-5 pb-[max(1rem,env(safe-area-inset-bottom))] border-t border-white/10 bg-white/[0.02] flex flex-col sm:flex-row items-center justify-between gap-3">
           {/* Alerta explicativo de validação caso o saldo a parcelar seja <= 0 */}
           {remainingTotal <= 0 ? (
             <div className="flex items-center gap-2 text-amber-400 text-xs font-bold bg-amber-400/10 border border-amber-400/20 px-3 py-2 rounded-xl w-full sm:w-auto">
@@ -688,7 +688,7 @@ export const CreateInstallmentAgreementModal: React.FC<CreateInstallmentAgreemen
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2.5 rounded-xl text-xs font-bold bg-white/5 hover:bg-white/10 text-zinc-300 transition-colors cursor-pointer"
+              className="px-4 py-3 rounded-xl text-xs font-bold bg-white/5 hover:bg-white/10 text-zinc-300 transition-colors cursor-pointer"
             >
               Cancelar
             </button>
@@ -696,7 +696,7 @@ export const CreateInstallmentAgreementModal: React.FC<CreateInstallmentAgreemen
               type="button"
               disabled={isSaving || remainingTotal <= 0 || effectiveTotal <= 0}
               onClick={handleSaveAgreement}
-              className="px-6 py-2.5 rounded-xl text-xs font-black text-white bg-gradient-to-r from-purple-600 to-indigo-600 hover:brightness-110 shadow-lg shadow-purple-600/30 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+              className="flex-1 sm:flex-none justify-center px-6 py-3 rounded-xl text-xs font-black text-white bg-gradient-to-r from-purple-600 to-indigo-600 hover:brightness-110 shadow-lg shadow-purple-600/30 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <Check className="h-4 w-4" />
               <span>{isSaving ? 'Salvando...' : 'Confirmar & Programar Parcelas'}</span>
