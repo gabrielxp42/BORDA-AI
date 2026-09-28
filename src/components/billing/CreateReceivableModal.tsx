@@ -272,9 +272,9 @@ export const CreateReceivableModal: React.FC<CreateReceivableModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-[99999] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200 overscroll-contain">
+    <div className="fixed inset-0 z-[99999] flex items-end sm:items-center justify-center p-0 pb-16 sm:p-4 sm:pb-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200 overscroll-contain">
       <div 
-        className="relative w-full max-w-lg max-h-[94dvh] sm:max-h-[90dvh] bg-white dark:bg-[#0f0f18] text-slate-900 dark:text-zinc-100 border border-slate-200 dark:border-white/10 rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col"
+        className="relative w-full max-w-lg max-h-[calc(100dvh-5.5rem)] sm:max-h-[90dvh] bg-white dark:bg-[#0f0f18] text-slate-900 dark:text-zinc-100 border border-slate-200 dark:border-white/10 rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}

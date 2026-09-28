@@ -62,6 +62,11 @@ export const CreateInstallmentAgreementModal: React.FC<CreateInstallmentAgreemen
   const [manualCustomTotal, setManualCustomTotal] = useState<number | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
+  // Vencimentos que o usuario ajustou a mao, por indice de parcela.
+  // O cronograma automatico (1o vencimento + intervalo fixo) nao cobre combinados
+  // do tipo "20 e 20 dias" ou datas cheias no mes — dai a necessidade de editar.
+  const [datasEditadas, setDatasEditadas] = useState<Record<number, string>>({});
+
   // Lista de parcelas personalizadas
   const [customInstallments, setCustomInstallments] = useState<CustomInstallment[]>([]);
 
@@ -116,16 +121,23 @@ export const CreateInstallmentAgreementModal: React.FC<CreateInstallmentAgreemen
       accumulated += amt;
 
       const dateObj = addDays(baseDate, i * intervalDays);
+      const indice = i + 1;
       list.push({
-        index: i + 1,
-        dueDate: format(dateObj, 'yyyy-MM-dd'),
+        index: indice,
+        dueDate: datasEditadas[indice] || format(dateObj, 'yyyy-MM-dd'),
         amount: amt,
         method: paymentMethod,
       });
     }
 
     setCustomInstallments(list);
-  }, [remainingTotal, installmentCount, intervalDays, firstDueDate, paymentMethod]);
+  }, [remainingTotal, installmentCount, intervalDays, firstDueDate, paymentMethod, datasEditadas]);
+
+  // Mexer na quantidade, no 1o vencimento ou no intervalo refaz o cronograma
+  // do zero — os ajustes manuais anteriores deixam de fazer sentido.
+  useEffect(() => {
+    setDatasEditadas({});
+  }, [installmentCount, intervalDays, firstDueDate]);
 
   if (!isOpen || !clientData) return null;
 
@@ -289,8 +301,8 @@ export const CreateInstallmentAgreementModal: React.FC<CreateInstallmentAgreemen
   };
 
   return (
-    <div className="fixed inset-0 z-[99999999] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/90 backdrop-blur-2xl animate-in fade-in duration-200 overscroll-contain">
-      <div className="relative w-full max-w-2xl max-h-[94dvh] sm:max-h-[90dvh] bg-[#0c0c14] border border-purple-500/30 rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col text-white">
+    <div className="fixed inset-0 z-[99999999] flex items-end sm:items-center justify-center p-0 pb-16 sm:p-4 sm:pb-4 bg-black/90 backdrop-blur-2xl animate-in fade-in duration-200 overscroll-contain">
+      <div className="relative w-full max-w-2xl max-h-[calc(100dvh-5.5rem)] sm:max-h-[90dvh] bg-[#0c0c14] border border-purple-500/30 rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col text-white">
         
         {/* Header */}
         <div className="p-5 border-b border-white/10 bg-gradient-to-r from-purple-950/70 via-zinc-900 to-black flex items-center justify-between">
@@ -482,28 +494,51 @@ export const CreateInstallmentAgreementModal: React.FC<CreateInstallmentAgreemen
           {/* Prévia dos Vencimentos */}
           {customInstallments.length > 0 && (
             <div className="space-y-2">
-              <label className="text-xs font-extrabold uppercase tracking-wider text-zinc-400 block">
-                Cronograma de Vencimentos Gerado:
-              </label>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {customInstallments.map(inst => (
-                  <div
-                    key={inst.index}
-                    className="p-3 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-between text-xs"
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <label className="text-xs font-extrabold uppercase tracking-wider text-zinc-400">
+                  Cronograma de Vencimentos <span className="text-purple-300">(clique na data para ajustar)</span>
+                </label>
+                {Object.keys(datasEditadas).length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setDatasEditadas({})}
+                    className="text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-lg bg-white/5 border border-white/10 text-zinc-300 hover:bg-white/10 cursor-pointer"
                   >
-                    <div className="flex items-center gap-2">
-                      <span className="px-2 py-0.5 rounded-md bg-purple-500/20 text-purple-300 font-black text-[10px]">
-                        {inst.index}ª Parcela
-                      </span>
-                      <span className="text-zinc-300 font-bold">
-                        {format(parseISO(inst.dueDate), 'dd/MM/yyyy')}
+                    Refazer automático
+                  </button>
+                )}
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {customInstallments.map(inst => {
+                  const ajustada = datasEditadas[inst.index] !== undefined;
+                  return (
+                    <div
+                      key={inst.index}
+                      className={`p-3 rounded-2xl border flex items-center justify-between gap-2 text-xs transition-colors ${
+                        ajustada ? 'bg-purple-500/15 border-purple-500/40' : 'bg-white/5 border-white/10'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="px-2 py-0.5 rounded-md bg-purple-500/20 text-purple-300 font-black text-[10px] shrink-0">
+                          {inst.index}ª
+                        </span>
+                        <input
+                          type="date"
+                          value={inst.dueDate}
+                          onChange={(e) => {
+                            const valor = e.target.value;
+                            if (!valor) return;
+                            setDatasEditadas(prev => ({ ...prev, [inst.index]: valor }));
+                          }}
+                          className="bg-black/40 border border-white/10 rounded-lg px-2 py-1.5 text-xs text-white font-bold focus:outline-none focus:border-purple-500 cursor-pointer min-w-0"
+                        />
+                      </div>
+                      <span className="font-black text-purple-200 shrink-0">
+                        {formatCurrency(inst.amount, true)}
                       </span>
                     </div>
-                    <span className="font-black text-purple-200">
-                      {formatCurrency(inst.amount, true)}
-                    </span>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}

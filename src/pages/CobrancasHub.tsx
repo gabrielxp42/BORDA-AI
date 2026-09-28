@@ -1144,9 +1144,9 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
                     {/* Header do Card do Cliente */}
                     <div 
                       onClick={() => toggleAccordion(debt.clientId)}
-                      className="p-4 flex items-center justify-between gap-3 cursor-pointer select-none"
+                      className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 cursor-pointer select-none"
                     >
-                      <div className="flex items-center gap-3 min-w-0">
+                      <div className="flex items-center gap-3 min-w-0 w-full sm:w-auto">
                         <button
                           type="button"
                           onClick={(e) => handleToggleSelectClient(debt.clientId, e)}
@@ -1166,14 +1166,12 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
                         </div>
 
                         <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <h3 className="text-base font-black text-slate-900 dark:text-white truncate">{debt.clientName}</h3>
-                            {debt.clientCompany && (
-                              <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-slate-200 dark:bg-white/10 text-slate-700 dark:text-zinc-300 border border-slate-300 dark:border-white/10">
-                                🏢 {debt.clientCompany}
-                              </span>
-                            )}
-                          </div>
+                          <h3 className="text-base font-black text-slate-900 dark:text-white truncate">{debt.clientName}</h3>
+                          {debt.clientCompany && (
+                            <span className="mt-0.5 inline-block max-w-full truncate align-bottom text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-slate-200 dark:bg-white/10 text-slate-700 dark:text-zinc-300 border border-slate-300 dark:border-white/10">
+                              🏢 {debt.clientCompany}
+                            </span>
+                          )}
                           {/* Composição em frase, não em etiquetas coloridas:
                               "4 pedidos e 3 parcelas · próxima cobrança 07/09"
                               se lê de uma vez; quatro chips obrigam a decifrar. */}
@@ -1191,9 +1189,10 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
                         </div>
                       </div>
 
-                      {/* Lado Direito: Total & Ações Rápidas */}
-                      <div className="flex items-center gap-3 shrink-0">
-                        <div className="text-right">
+                      {/* Lado Direito: Total & Ações Rápidas.
+                          No celular vira uma faixa propria embaixo do nome. */}
+                      <div className="flex items-center justify-between sm:justify-end gap-3 w-full sm:w-auto shrink-0 pl-11 sm:pl-0">
+                        <div className="text-left sm:text-right">
                           <span className="text-base font-bold text-slate-900 dark:text-white tabular-nums block">
                             {formatCurrency(debt.totalPending, true)}
                           </span>

@@ -148,8 +148,8 @@ export const FinancialTransactionModal: React.FC<FinancialTransactionModalProps>
   ];
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/75 backdrop-blur-md animate-in fade-in duration-200 overscroll-contain">
-      <div className="relative w-full max-w-md max-h-[88dvh] sm:max-h-[90dvh] overflow-y-auto overscroll-contain custom-scrollbar rounded-t-3xl sm:rounded-3xl border border-slate-200 dark:border-white/10 bg-white dark:bg-[#0d0d14] text-slate-900 dark:text-zinc-100 shadow-2xl p-5 sm:p-6 space-y-4 animate-in zoom-in-95 duration-200">
+    <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 pb-16 sm:p-4 sm:pb-4 bg-black/75 backdrop-blur-md animate-in fade-in duration-200 overscroll-contain">
+      <div className="relative w-full max-w-md max-h-[calc(100dvh-5.5rem)] sm:max-h-[90dvh] overflow-y-auto overscroll-contain custom-scrollbar rounded-t-3xl sm:rounded-3xl border border-slate-200 dark:border-white/10 bg-white dark:bg-[#0d0d14] text-slate-900 dark:text-zinc-100 shadow-2xl p-5 sm:p-6 space-y-4 animate-in zoom-in-95 duration-200">
         
         {/* Header */}
         <div className="flex items-center justify-between pb-4 border-b border-slate-200 dark:border-white/10">

@@ -461,12 +461,12 @@ export const PaymentStatusModal: React.FC<PaymentStatusModalProps> = ({
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-[99999999] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/80 backdrop-blur-md overscroll-contain">
+      <div className="fixed inset-0 z-[99999999] flex items-end sm:items-center justify-center p-0 pb-16 sm:p-4 sm:pb-4 bg-black/80 backdrop-blur-md overscroll-contain">
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.95 }}
-          className="relative w-full max-w-lg max-h-[92dvh] sm:max-h-[90dvh] overflow-y-auto overscroll-contain custom-scrollbar bg-[#0e0e17] border border-emerald-500/30 rounded-t-3xl sm:rounded-3xl shadow-2xl p-5 sm:p-6 space-y-5 text-white"
+          className="relative w-full max-w-lg max-h-[calc(100dvh-5.5rem)] sm:max-h-[90dvh] overflow-y-auto overscroll-contain custom-scrollbar bg-[#0e0e17] border border-emerald-500/30 rounded-t-3xl sm:rounded-3xl shadow-2xl p-5 sm:p-6 space-y-5 text-white"
         >
           {/* Header */}
           <div className="flex items-center justify-between border-b border-white/10 pb-4">

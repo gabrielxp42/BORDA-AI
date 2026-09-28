@@ -21,6 +21,7 @@ import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { serializePaymentMetadata, updatePaymentMetadata, parsePaymentMetadata } from '@/utils/paymentHelper';
+import { parseItemDescription } from '@/utils/itemDescription';
 import { sendEvolutionText, getWhatsAppWebLink, formatWhatsAppNumber, handleWhatsAppDispatchError } from '@/services/whatsappService';
 import { getStoredTemplates, formatEmbroideryTemplate } from '@/services/whatsappTemplatesService';
 import { useBackgroundTasks } from '@/hooks/useBackgroundTasks';
@@ -171,6 +172,9 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
     matrixId?: string | null;
     embroideryMetadata?: EmbroideryMetadata;
     embroideryFile?: File;
+    /** Item carregado de um pedido existente: ja tem preco fechado e nao deve
+     *  ser barrado pela validacao de pontos/cores na hora de salvar. */
+    fromSavedOrder?: boolean;
   }[]>([]);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [isAddingNewMatrix, setIsAddingNewMatrix] = useState(false);
@@ -464,16 +468,23 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
 
         // Map items
         if (order.items && order.items.length > 0) {
-          const mappedItems = order.items.map((item: any) => ({
-            id: `item_${item.id}`,
-            matrixName: item.description,
-            quantity: item.quantity,
-            unitPrice: item.unit_price,
-            totalPrice: item.total_price,
-            stitchCount: 0,
-            colorCount: 1,
-            manualUnitPrice: item.unit_price
-          }));
+          // Pontos e cores moram dentro da descricao. Sem ler de volta, todo
+          // item voltava zerado e a validacao barrava o pedido inteiro.
+          const mappedItems = order.items.map((item: any) => {
+            const desc = parseItemDescription(item.description);
+            return {
+              id: `item_${item.id}`,
+              matrixName: desc.name || item.description,
+              quantity: item.quantity,
+              unitPrice: item.unit_price,
+              totalPrice: item.total_price,
+              stitchCount: desc.stitchCount,
+              colorCount: desc.colorCount,
+              manualUnitPrice: item.unit_price,
+              matrixId: item.matrix_id || null,
+              fromSavedOrder: true,
+            };
+          });
           setOrderItemsList(mappedItems);
           
           // Select first item
@@ -482,6 +493,9 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
             setSelectedItemId(first.id);
             setMatrixName(first.matrixName);
             setQuantity(first.quantity);
+            setStitchCount(first.stitchCount ? first.stitchCount : '');
+            setColorCount(first.colorCount ? first.colorCount : '');
+            setSelectedMatrixId(first.matrixId || null);
           }
         }
       } else {
@@ -685,7 +699,11 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
 
   const handleCreateOrder = async () => {
     if (importBlocked) { toast.error('Conclua a validação da matriz antes de salvar.'); return; }
-    if (entryMode === 'budget' && orderItemsList.some(item => !Number.isInteger(item.stitchCount) || item.stitchCount <= 0 || !Number.isInteger(item.colorCount) || item.colorCount <= 0 || (item.embroideryMetadata && !isValidatedEmbroidery(item.embroideryMetadata)))) {
+    // Itens vindos de um pedido salvo (servicos, DTF, taxas) podem nao ter
+    // pontos — eles ja tem preco fechado e nao devem travar a edicao.
+    const precisaPontos = (item: typeof orderItemsList[number]) =>
+      !(item.fromSavedOrder && Number(item.unitPrice) > 0 && !item.embroideryMetadata);
+    if (entryMode === 'budget' && orderItemsList.some(item => precisaPontos(item) && (!Number.isInteger(item.stitchCount) || item.stitchCount <= 0 || !Number.isInteger(item.colorCount) || item.colorCount <= 0 || (item.embroideryMetadata && !isValidatedEmbroidery(item.embroideryMetadata))))) {
       toast.error('Há uma matriz com pontos ou cores pendentes no pedido.'); return;
     }
     if (entryMode === 'budget' && saveToLibrary && orderItemsList.some(item => item.embroideryMetadata && !item.matrixId && !(item.embroideryFile instanceof File))) {
@@ -847,7 +865,9 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
             if (/^(entrada|sinal|desenvolvimento|serviço|taxa|frete|desconto):/i.test(clean)) {
               return clean;
             }
-            const cleanName = clean.replace(/^bordado:\s*/gi, '').trim();
+            // Descasca sufixo de pontos/cores que ja esteja no nome, senao um
+            // pedido reeditado acumula "(5.145 pts, 1 cores) (1 pts, 1 cores)".
+            const cleanName = parseItemDescription(clean).name || clean.replace(/^bordado:\s*/gi, '').trim();
             if (stitches === 0) {
               return cleanName || 'Bordado Personalizado';
             }
@@ -880,7 +900,9 @@ export const SmartCalculatorWorkflow: React.FC<SmartCalculatorWorkflowProps> = (
             if (/^(entrada|sinal|desenvolvimento|serviço|taxa|frete|desconto):/i.test(clean)) {
               return clean;
             }
-            const cleanName = clean.replace(/^bordado:\s*/gi, '').trim();
+            // Descasca sufixo de pontos/cores que ja esteja no nome, senao um
+            // pedido reeditado acumula "(5.145 pts, 1 cores) (1 pts, 1 cores)".
+            const cleanName = parseItemDescription(clean).name || clean.replace(/^bordado:\s*/gi, '').trim();
             if (stitches === 0) {
               return cleanName || 'Bordado Personalizado';
             }
