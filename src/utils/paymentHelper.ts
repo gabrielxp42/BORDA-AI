@@ -27,6 +27,9 @@ export interface PaymentMetadata {
    *  não deve ser cobrado separadamente — quem representa a dívida é a parcela. */
   agreementId?: string;
   agreementCreatedAt?: string;
+  /** Desconto a vista concedido na baixa. A diferenca foi perdoada de propósito:
+   *  o pedido fica quitado e NAO gera saldo pendente no Hub de Cobrancas. */
+  discountAmount?: number;
 }
 
 const METADATA_REGEX = /<!--PAYMENT_METADATA:([\s\S]*?)-->/;

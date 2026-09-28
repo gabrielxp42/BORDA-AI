@@ -101,6 +101,10 @@ export const PaymentStatusModal: React.FC<PaymentStatusModalProps> = ({
   const [status, setStatus] = useState<'pending' | 'paid' | 'half_paid'>('paid');
   const [method, setMethod] = useState<string>('pix');
   const [customAmount, setCustomAmount] = useState<number | ''>(totalSumToPay);
+  // Desconto à vista: o cliente paga menos e a diferença é PERDOADA, não fica
+  // pendente. Sem isso, receber com desconto virava "sinal 50%" e o pedido
+  // continuava cobrando o resto — foi o que o usuário relatou.
+  const [isDesconto, setIsDesconto] = useState(false);
   const [paymentNote, setPaymentNote] = useState<string>('');
   const [scheduledDueDate, setScheduledDueDate] = useState<string>('');
   const [customPaidAt, setCustomPaidAt] = useState<string>(() => {
@@ -125,6 +129,8 @@ export const PaymentStatusModal: React.FC<PaymentStatusModalProps> = ({
       const savedMethod = firstOrd.payment_method || metadata.paymentMethod || 'pix';
       setMethod(initialStatus === 'pending' ? '' : savedMethod);
 
+      setIsDesconto(false);
+
       if (initialStatus === 'paid') {
         setCustomAmount(totalSumToPay);
       } else if (initialStatus === 'half_paid') {
@@ -137,6 +143,7 @@ export const PaymentStatusModal: React.FC<PaymentStatusModalProps> = ({
 
   const handleStatusChange = (newStatus: 'pending' | 'paid' | 'half_paid') => {
     setStatus(newStatus);
+    setIsDesconto(false);
     if (newStatus === 'pending') {
       setMethod('');
       setCustomAmount(0);
@@ -150,12 +157,36 @@ export const PaymentStatusModal: React.FC<PaymentStatusModalProps> = ({
   const handleAmountChange = (val: number | '') => {
     setCustomAmount(val);
     if (val === '') return;
+    // Com desconto ligado, valor menor continua sendo quitacao total.
+    if (isDesconto) {
+      setStatus('paid');
+      return;
+    }
     const num = Number(val);
     if (num < totalSumToPay - 0.01 && num > 0) {
       setStatus('half_paid');
     } else if (num >= totalSumToPay - 0.01) {
       setStatus('paid');
     }
+  };
+
+  const toggleDesconto = (ligar: boolean) => {
+    setIsDesconto(ligar);
+    if (ligar) {
+      // Desconto so faz sentido como quitacao: o que falta e perdoado.
+      setStatus('paid');
+    } else {
+      // Ao desligar, o valor menor volta a ser tratado como sinal.
+      const num = Number(customAmount) || 0;
+      setStatus(num > 0 && num < totalSumToPay - 0.01 ? 'half_paid' : 'paid');
+    }
+  };
+
+  const aplicarDescontoPercentual = (pct: number) => {
+    const novo = Math.round(totalSumToPay * (1 - pct / 100) * 100) / 100;
+    setIsDesconto(true);
+    setStatus('paid');
+    setCustomAmount(novo);
   };
 
   if (!isOpen || targetOrders.length === 0) return null;
@@ -180,7 +211,10 @@ export const PaymentStatusModal: React.FC<PaymentStatusModalProps> = ({
       }
 
       // Blindagem contra quitação parcial acidental:
-      const isPartial = paidVal < totalSumToPay - 0.01;
+      // Com desconto marcado, receber menos QUITA o pedido — a diferença é
+      // abatida de propósito, não é saldo a cobrar.
+      const isPartial = !isDesconto && paidVal < totalSumToPay - 0.01;
+      const valorDesconto = isDesconto ? Math.max(0, totalSumToPay - paidVal) : 0;
       const effectiveStatus: 'pending' | 'paid' | 'half_paid' = 
         status === 'pending' ? 'pending' : isPartial ? 'half_paid' : 'paid';
 
@@ -257,6 +291,8 @@ export const PaymentStatusModal: React.FC<PaymentStatusModalProps> = ({
         toast.success(
           isPartial
             ? `🟡 Sinal de R$ ${paidVal.toFixed(2)} registrado! Restante de R$ ${remainingVal.toFixed(2)} continua em cobrança.`
+            : valorDesconto > 0
+            ? `🎉 Quitado com desconto de R$ ${valorDesconto.toFixed(2)}. Nada ficou pendente!`
             : '🎉 Lançamento/Parcela quitada e registrada no caixa!'
         );
 
@@ -273,6 +309,7 @@ export const PaymentStatusModal: React.FC<PaymentStatusModalProps> = ({
               `💳 *Forma de Pagamento:* ${methodText}\n` +
               `⏰ *Data:* ${format(new Date(exactPaidAt), "dd/MM/yyyy 'às' HH:mm")}\n\n` +
               (isPartial ? `📌 *Saldo Restante Pendente:* R$ ${remainingVal.toFixed(2)}\n\n` : '') +
+              (valorDesconto > 0 ? `🏷️ *Desconto Concedido:* R$ ${valorDesconto.toFixed(2)}\n\n` : '') +
               `Agradecemos a preferência!`;
 
             const res = await sendEvolutionText(targetClient.phone, msg);
@@ -310,6 +347,7 @@ export const PaymentStatusModal: React.FC<PaymentStatusModalProps> = ({
           paidByOperator: effectiveStatus !== 'pending' ? operatorName : undefined,
           registeredAt: effectiveStatus !== 'pending' ? new Date().toISOString() : undefined,
           scheduledPaymentDate: scheduledDueDate || undefined,
+          discountAmount: valorDesconto > 0 ? valorDesconto : undefined,
         };
 
         const noteWithMetadata = serializePaymentMetadata(cleanNotes, updatedMetadata);
@@ -339,11 +377,15 @@ export const PaymentStatusModal: React.FC<PaymentStatusModalProps> = ({
             ? `Sinal/Entrada do Pedido #${targetOrders[0].order_number || targetOrders[0].id.slice(0, 4)} de ${clientNameText}`
             : `Recebimento Pedido #${targetOrders[0].order_number || targetOrders[0].id.slice(0, 4)} de ${clientNameText}`;
 
+          const descricaoFinal = valorDesconto > 0
+            ? `${descriptionText} (desconto de R$ ${valorDesconto.toFixed(2)})`
+            : descriptionText;
+
           await supabase.from('financial_transactions').insert({
             user_id: authUser.user.id,
             type: 'income',
             amount: paidVal,
-            description: descriptionText,
+            description: descricaoFinal,
             category: categoryText,
             payment_method: selectedMethod || 'pix',
             date: exactPaidAt,
@@ -353,6 +395,7 @@ export const PaymentStatusModal: React.FC<PaymentStatusModalProps> = ({
             notes: JSON.stringify({
               orderIds: targetOrders.map(o => o.id),
               paymentStatus: effectiveStatus,
+              discountAmount: valorDesconto > 0 ? valorDesconto : undefined,
               operator: operatorName,
               registeredAt: new Date().toISOString()
             })
@@ -365,6 +408,8 @@ export const PaymentStatusModal: React.FC<PaymentStatusModalProps> = ({
           ? `🎉 Quitação coletiva de ${targetOrders.length} encomendas salva e sincronizada!` 
           : isPartial
           ? `🟡 Sinal de R$ ${paidVal.toFixed(2)} registrado! Restante continua em cobrança.`
+          : valorDesconto > 0
+          ? `🎉 Pedido #${targetOrders[0]?.order_number || ''} QUITADO com desconto de R$ ${valorDesconto.toFixed(2)}. Nada ficou pendente!`
           : `🎉 Quitação do Pedido #${targetOrders[0]?.order_number || ''} registrada com sucesso!`
       );
 
@@ -372,7 +417,9 @@ export const PaymentStatusModal: React.FC<PaymentStatusModalProps> = ({
       if (notifyWhatsApp && targetClient?.phone) {
         const toastId = toast.loading("📲 Enviando recibo de quitação via WhatsApp...");
         try {
-          const statusText = status === 'paid' 
+          const statusText = valorDesconto > 0
+            ? `QUITADO COM DESCONTO (R$ ${paidVal.toFixed(2)} · desconto de R$ ${valorDesconto.toFixed(2)})`
+            : status === 'paid' 
             ? `QUITADO 100% (R$ ${paidVal.toFixed(2)})` 
             : `ENTRADA / SINAL (R$ ${paidVal.toFixed(2)})`;
           
@@ -552,9 +599,60 @@ export const PaymentStatusModal: React.FC<PaymentStatusModalProps> = ({
             </div>
           </div>
 
+          {/* Desconto a vista: quita o pedido sem deixar saldo pendente */}
+          {status !== 'pending' && (
+            <div className={`rounded-2xl border p-3 space-y-3 transition-colors ${isDesconto ? 'bg-violet-500/15 border-violet-500/40' : 'bg-white/[0.03] border-white/10'}`}>
+              <button
+                type="button"
+                onClick={() => toggleDesconto(!isDesconto)}
+                className="w-full flex items-center gap-3 text-left"
+              >
+                <span className={`w-11 h-6 rounded-full flex items-center p-0.5 flex-shrink-0 transition-colors ${isDesconto ? 'bg-violet-500' : 'bg-zinc-700'}`}>
+                  <span className={`w-5 h-5 rounded-full bg-white transition-transform ${isDesconto ? 'translate-x-5' : 'translate-x-0'}`} />
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-xs font-black text-white uppercase tracking-wider">
+                    Dar desconto a vista
+                  </span>
+                  <span className="block text-[11px] text-zinc-400 font-medium leading-snug">
+                    O que faltar e abatido de proposito. O pedido fica quitado e nao volta como pendencia.
+                  </span>
+                </span>
+              </button>
+
+              {isDesconto && (
+                <div className="flex flex-wrap items-center gap-2 pl-14">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-violet-300">Atalhos:</span>
+                  {[5, 10, 15, 20].map((pct) => (
+                    <button
+                      key={pct}
+                      type="button"
+                      onClick={() => aplicarDescontoPercentual(pct)}
+                      className="px-2.5 py-1 rounded-lg text-[11px] font-black bg-violet-500/20 border border-violet-500/40 text-violet-200 hover:bg-violet-500/30"
+                    >
+                      -{pct}%
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Banner de Feedback Dinâmico sobre Quitação vs Sinal */}
           {Number(customAmount || 0) > 0 && (
-            Number(customAmount) < totalSumToPay - 0.01 ? (
+            isDesconto ? (
+              <div className="p-3.5 rounded-2xl bg-violet-500/15 border border-violet-500/30 text-violet-200 text-xs space-y-1 animate-in fade-in duration-200">
+                <div className="flex items-center justify-between font-black">
+                  <span>🏷️ Quitacao com Desconto:</span>
+                  <span className="bg-violet-500/20 px-2 py-0.5 rounded-md border border-violet-500/30 text-white">
+                    Recebido: R$ {Number(customAmount).toFixed(2)}
+                  </span>
+                </div>
+                <p className="text-[11px] text-violet-200/80 leading-relaxed font-medium">
+                  Desconto de <strong className="text-white">R$ {Math.max(0, totalSumToPay - Number(customAmount)).toFixed(2)}</strong> sobre o total de R$ {totalSumToPay.toFixed(2)}. O pedido sera marcado como <strong>QUITADO</strong> e <strong>nao</strong> deixara saldo pendente no Hub de Cobrancas.
+                </p>
+              </div>
+            ) : Number(customAmount) < totalSumToPay - 0.01 ? (
               <div className="p-3.5 rounded-2xl bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs space-y-1 animate-in fade-in duration-200">
                 <div className="flex items-center justify-between font-black">
                   <span>🟡 Sinal / Pagamento Parcial Detectado:</span>
