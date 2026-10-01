@@ -1,15 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { parseLocalDate, toLocalDateInput } from '@/utils/dateHelper';
-import { 
-  CreditCard, Search, Calendar, AlertTriangle, CheckCircle2, Clock, 
-  Send, FileText, User, Building, Phone, DollarSign, Plus, ChevronRight, ChevronDown,
-  Layers, ArrowUpRight, Filter, Sparkles, RefreshCw, X, ShieldAlert, Check,
-  CheckSquare, Square, ShieldCheck, Loader2, Target, Eye, ExternalLink,
-  Package, Trophy, History, TrendingUp, Zap, Flame, Award, Activity, Trash2,
-  CalendarClock,
-  MessageCircle,
-  QrCode
-} from 'lucide-react';
+import { CreditCard, Search, Calendar, AlertTriangle, CheckCircle2, Clock, Send, FileText, User, Building, Phone, DollarSign, Plus, ChevronRight, ChevronDown, Layers, ArrowUpRight, Filter, Sparkles, RefreshCw, X, ShieldAlert, Check, CheckSquare, Square, ShieldCheck, Loader2, Target, Eye, ExternalLink, Package, Trophy, History, TrendingUp, Zap, Flame, Award, Activity, Trash2, CalendarClock, MessageCircle, QrCode, Lock } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useProfile } from '@/contexts/ProfileContext';
 import { useCompanySettings } from '@/contexts/CompanySettingsContext';
@@ -93,7 +84,7 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
   const modoPagina = isOpen === undefined;
   const aberto = modoPagina ? true : !!isOpen;
   const fechar = onClose ?? (() => {});
-  const { isUnlocked } = useProfile();
+  const { isUnlocked, canAccessCobrancas } = useProfile();
   const { settings } = useCompanySettings();
   const [loading, setLoading] = useState(true);
   const [pendingOrders, setPendingOrders] = useState<PendingItem[]>([]);
@@ -647,6 +638,29 @@ export const CobrancasHub: React.FC<CobrancasHubProps> = ({ isOpen, onClose }) =
   };
 
   if (!aberto) return null;
+
+  // Defesa final: a rota /cobrancas renderizava o Hub para qualquer perfil
+  // logado. Nao da pra confiar so em esconder o botao — todos os perfis
+  // dividem a mesma conta Supabase, entao nao ha barreira no servidor.
+  if (!canAccessCobrancas) {
+    if (modoPagina) {
+      return (
+        <div className="flex flex-col items-center justify-center min-h-[60vh] gap-3 text-center px-6">
+          <div className="h-14 w-14 rounded-2xl bg-rose-500/15 border border-rose-500/30 flex items-center justify-center">
+            <Lock className="h-7 w-7 text-rose-400" />
+          </div>
+          <h2 className="text-lg font-black text-slate-900 dark:text-white">
+            Hub de Cobranças restrito
+          </h2>
+          <p className="text-sm text-slate-500 dark:text-zinc-400 max-w-sm">
+            Este perfil não tem permissão para ver cobranças e faturas. Fale com o
+            responsável para liberar o acesso.
+          </p>
+        </div>
+      );
+    }
+    return null;
+  }
 
   return (
     <div className="fixed inset-0 z-[999999] flex items-center justify-center p-3 sm:p-6 bg-slate-900/60 dark:bg-black/95 backdrop-blur-md overflow-y-auto">

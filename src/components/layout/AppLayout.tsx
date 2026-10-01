@@ -232,7 +232,7 @@ const DesktopSidebar: React.FC<{
 
 export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { settings } = useCompanySettings();
-  const { activeProfile, isUnlocked, permissions } = useProfile();
+  const { activeProfile, isUnlocked, permissions, canAccessCobrancas } = useProfile();
   const isChefe = (activeProfile as any)?.role === 'chefe' || isUnlocked || (permissions?.canSeeFinancials === true);
   const { user, profile: authProfile, signOut } = useAuth();
 
@@ -349,6 +349,9 @@ export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children })
     '/matrizes': 'matrizes',
     '/estoque': 'estoque',
     '/faturamento': 'faturamento',
+    '/relatorios': 'faturamento',
+    '/cobrancas': 'cobrancas',
+    '/pedidos-kanban': 'pedidos',
     '/clientes': 'clientes',
     '/maquinas': 'maquinas',
     '/configuracoes': 'configuracoes',
@@ -357,6 +360,10 @@ export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children })
 
   // Redireciona Operador se tentar acessar rota restrita
   useEffect(() => {
+    if (location.pathname === '/cobrancas' && !canAccessCobrancas) {
+      navigate('/pedidos', { replace: true });
+      return;
+    }
     const key = pathToKey[location.pathname];
     if (key && permissions.routes[key] === false) {
       const firstAllowed = Object.entries(permissions.routes).find(([, allowed]) => allowed);
@@ -368,6 +375,7 @@ export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children })
   // Filtra itens do menu conforme o perfil e permissões
   const visibleNavItems = useMemo(() => {
     let items = navItems.filter((item: NavItem) => {
+      if (item.path === '/cobrancas') return canAccessCobrancas;
       const key = pathToKey[item.path];
       return key ? permissions.routes[key] !== false : true;
     });
@@ -379,7 +387,7 @@ export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children })
       ];
     }
     return items;
-  }, [permissions.routes, isMasterAdmin, pathToKey]);
+  }, [permissions.routes, isMasterAdmin, pathToKey, canAccessCobrancas]);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -461,8 +469,8 @@ export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children })
               <span className="uppercase tracking-wider">Novo Pedido</span>
             </button>
 
-            {/* Hub Cobranças Button (Apenas Chefe) */}
-            {isChefe && (
+            {/* Hub Cobranças: autorizacao unica, ver podeAcessarCobrancas */}
+            {canAccessCobrancas && (
               <button
                 onClick={() => handleToggleCobrancasHub(true)}
                 className="hidden lg:flex items-center gap-1.5 px-3.5 py-2 rounded-2xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:brightness-110 text-white text-xs font-black shadow-lg shadow-purple-600/20 active:scale-95 transition-all cursor-pointer"

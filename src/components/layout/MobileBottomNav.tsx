@@ -39,7 +39,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
 }) => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { isUnlocked, openProfileModal } = useProfile();
+  const { isUnlocked, openProfileModal, canAccessCobrancas } = useProfile();
   const { settings } = useCompanySettings();
   const [isSheetOpen, setIsSheetOpen] = useState(false);
 
@@ -197,7 +197,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
             </button>
 
             {/* Hub de Cobranças — só o chefe cobra, e no mobile não existe sidebar */}
-            {isUnlocked && onOpenCobrancasHub && (
+            {canAccessCobrancas && onOpenCobrancasHub && (
               <button
                 type="button"
                 onClick={() => {

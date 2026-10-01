@@ -13,6 +13,9 @@ export interface ProfilePermissions {
     matrizes: boolean;         // '/matrizes'
     estoque: boolean;          // '/estoque'
     faturamento: boolean;      // '/faturamento'
+    /** '/cobrancas' — Hub de Cobrancas. Opcional: perfis gravados antes dessa
+     *  chave existir herdam a decisao de `faturamento` (ver podeAcessarCobrancas). */
+    cobrancas?: boolean;
     clientes: boolean;         // '/clientes'
     maquinas: boolean;         // '/maquinas'
     configuracoes: boolean;    // '/configuracoes'
@@ -46,6 +49,7 @@ export const CHEFE_PERMISSIONS: ProfilePermissions = {
     matrizes: true,
     estoque: true,
     faturamento: true,
+    cobrancas: true,
     clientes: true,
     maquinas: true,
     configuracoes: true,
@@ -69,6 +73,7 @@ export const PRODUCAO_PERMISSIONS: ProfilePermissions = {
     matrizes: true,
     estoque: false,
     faturamento: false,
+    cobrancas: false,
     clientes: false,
     maquinas: true,
     configuracoes: false,
@@ -82,6 +87,26 @@ export const PRODUCAO_PERMISSIONS: ProfilePermissions = {
   canSendWhatsApp: true,
   canChangeSettings: false,
   canDownloadMatrices: false,
+};
+
+/**
+ * Unica fonte de verdade sobre quem abre o Hub de Cobrancas.
+ *
+ * O Hub expoe nome de cliente, divida, vencimento e o disparo de cobranca —
+ * nao e so "ver valores". Antes dessa funcao o Hub vazava para todo perfil,
+ * porque '/cobrancas' nao estava no mapa de rotas e o filtro deixava passar
+ * o que nao conhecia.
+ *
+ * Importante: isso e uma tranca de interface, nao de banco. Todos os perfis
+ * compartilham a mesma conta Supabase (o RLS isola por user_id), entao nao
+ * existe barreira no servidor — a checagem precisa valer em todo lugar que
+ * abre o Hub.
+ */
+export const podeAcessarCobrancas = (p?: ProfilePermissions | null): boolean => {
+  if (!p || p.canSeeFinancials !== true) return false;
+  if (typeof p.routes?.cobrancas === 'boolean') return p.routes.cobrancas;
+  // Perfil antigo: herda a intencao ja registrada em faturamento.
+  return p.routes?.faturamento !== false;
 };
 
 export const DEFAULT_PROFILES: CustomProfile[] = [
@@ -109,6 +134,8 @@ interface ProfileContextType {
   customProfiles: CustomProfile[];
   permissions: ProfilePermissions;
   isUnlocked: boolean;
+  /** Autorizacao para abrir o Hub de Cobrancas (ver podeAcessarCobrancas). */
+  canAccessCobrancas: boolean;
   hasPinSet: boolean;
   unlockChefe: (pin: string) => boolean;
   selectProfile: (profileId: string, pinInput?: string) => boolean;
@@ -219,6 +246,7 @@ export const ProfileProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const activeProfile = customProfiles.find(p => p.id === activeProfileId) || customProfiles[0] || DEFAULT_PROFILES[0];
   const permissions = activeProfile.permissions || (activeProfile.id === 'chefe' ? CHEFE_PERMISSIONS : PRODUCAO_PERMISSIONS);
   const isUnlocked = activeProfile.id === 'chefe' || permissions.canSeeFinancials;
+  const canAccessCobrancas = podeAcessarCobrancas(permissions);
 
   const selectProfile = (profileId: string, pinInput?: string): boolean => {
     const target = customProfiles.find(p => p.id === profileId);
@@ -347,6 +375,7 @@ export const ProfileProvider: React.FC<{ children: React.ReactNode }> = ({ child
         customProfiles,
         permissions,
         isUnlocked,
+        canAccessCobrancas,
         hasPinSet: masterPin !== null,
         unlockChefe,
         selectProfile,
