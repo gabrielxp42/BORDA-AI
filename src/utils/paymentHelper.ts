@@ -343,6 +343,9 @@ export function isOrderLinkedTx(t: any, orderIdsSet?: Set<string>): boolean {
 }
 
 
+/** Dinheiro nao tem fracao de centavo; subtracao de float gera lixo. */
+const arredondaCentavos = (v: number): number => Math.round(v * 100) / 100;
+
 /** Formato minimo de pedido aceito pelos calculos de valor abaixo. */
 export interface PedidoValoravel {
   total_amount?: number | string | null;
@@ -368,7 +371,7 @@ export function getDiscountAmount(order: PedidoValoravel, metadata?: PaymentMeta
 export function getOrderNetValue(order: PedidoValoravel, metadata?: PaymentMetadata): number {
   const total = Number(order?.total_amount || 0);
   if (!Number.isFinite(total)) return 0;
-  return Math.max(0, total - getDiscountAmount(order, metadata));
+  return arredondaCentavos(Math.max(0, total - getDiscountAmount(order, metadata)));
 }
 
 /**
@@ -387,7 +390,7 @@ export function getOrderReceivedValue(order: PedidoValoravel, metadata?: Payment
     return Number.isFinite(sinal) && sinal > 0 ? sinal : total * 0.5;
   }
   if (order?.payment_status === 'paid') {
-    return Math.max(0, total - getDiscountAmount(order, meta));
+    return arredondaCentavos(Math.max(0, total - getDiscountAmount(order, meta)));
   }
   return 0;
 }

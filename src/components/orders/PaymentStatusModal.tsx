@@ -214,7 +214,11 @@ export const PaymentStatusModal: React.FC<PaymentStatusModalProps> = ({
       // Com desconto marcado, receber menos QUITA o pedido — a diferença é
       // abatida de propósito, não é saldo a cobrar.
       const isPartial = !isDesconto && paidVal < totalSumToPay - 0.01;
-      const valorDesconto = isDesconto ? Math.max(0, totalSumToPay - paidVal) : 0;
+      // Arredonda na origem: subtracao de float gerava lixo como
+      // 130.40000000000146 gravado no metadata.
+      const valorDesconto = isDesconto
+        ? Math.max(0, Math.round((totalSumToPay - paidVal) * 100) / 100)
+        : 0;
       const effectiveStatus: 'pending' | 'paid' | 'half_paid' = 
         status === 'pending' ? 'pending' : isPartial ? 'half_paid' : 'paid';
 
