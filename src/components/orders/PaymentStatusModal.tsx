@@ -170,6 +170,15 @@ export const PaymentStatusModal: React.FC<PaymentStatusModalProps> = ({
     }
   };
 
+  // Pedido dentro de acordo ja tem a parcela representando aquele dinheiro.
+  // Lancar o recebimento do pedido tambem gravava o valor DUAS vezes no caixa
+  // — foi o que o usuario viu como "entrou todos os pedidos dela tambem".
+  const pedidosEmAcordo = targetOrders.filter(o => {
+    const { metadata } = parsePaymentMetadata(o.notes);
+    return Boolean(metadata.agreementId);
+  });
+  const todosEmAcordo = targetOrders.length > 0 && pedidosEmAcordo.length === targetOrders.length;
+
   const toggleDesconto = (ligar: boolean) => {
     setIsDesconto(ligar);
     if (ligar) {
@@ -367,8 +376,10 @@ export const PaymentStatusModal: React.FC<PaymentStatusModalProps> = ({
           .eq('id', ord.id);
       }
 
-      // 2. Sincroniza uma ÚNICA entrada financeira consolidada no Faturamento (financial_transactions)
-      if (effectiveStatus !== 'pending' && paidVal > 0) {
+      // 2. Sincroniza uma ÚNICA entrada financeira consolidada no Faturamento.
+      //    Pulada quando os pedidos pertencem a um acordo: quem representa esse
+      //    dinheiro e a parcela, e lancar aqui tambem duplicava o recebimento.
+      if (effectiveStatus !== 'pending' && paidVal > 0 && !todosEmAcordo) {
         const { data: authUser } = await supabase.auth.getUser();
         if (authUser?.user?.id) {
           const clientNameText = targetClient?.name || 'Cliente';
@@ -412,6 +423,8 @@ export const PaymentStatusModal: React.FC<PaymentStatusModalProps> = ({
           ? `🎉 Quitação coletiva de ${targetOrders.length} encomendas salva e sincronizada!` 
           : isPartial
           ? `🟡 Sinal de R$ ${paidVal.toFixed(2)} registrado! Restante continua em cobrança.`
+          : todosEmAcordo
+          ? `✅ Status atualizado. O valor não foi lançado no caixa porque já existe a parcela do acordo.`
           : valorDesconto > 0
           ? `🎉 Pedido #${targetOrders[0]?.order_number || ''} QUITADO com desconto de R$ ${valorDesconto.toFixed(2)}. Nada ficou pendente!`
           : `🎉 Quitação do Pedido #${targetOrders[0]?.order_number || ''} registrada com sucesso!`
@@ -572,6 +585,17 @@ export const PaymentStatusModal: React.FC<PaymentStatusModalProps> = ({
                   </button>
                 ))}
               </div>
+            </div>
+          )}
+
+          {todosEmAcordo && (
+            <div className="p-3.5 rounded-2xl bg-sky-500/15 border border-sky-500/30 text-sky-200 text-xs space-y-1">
+              <div className="font-black">🤝 Pedido dentro de um acordo</div>
+              <p className="text-[11px] text-sky-200/80 leading-relaxed font-medium">
+                O recebimento deste pedido já é representado pela <strong>parcela do acordo</strong>.
+                Dar baixa aqui atualiza o status do pedido, mas <strong>não lança o valor no caixa de novo</strong> —
+                senão o mesmo dinheiro entraria duas vezes. Para registrar o recebimento, dê baixa na parcela.
+              </p>
             </div>
           )}
 
