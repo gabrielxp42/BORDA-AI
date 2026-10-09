@@ -19,7 +19,7 @@ import { PaymentStatusModal } from '@/components/orders/PaymentStatusModal';
 import { toast } from 'sonner';
 import { GabiHeroWidget } from '@/components/gabi/GabiHeroWidget';
 import { formatCurrency } from '@/utils/currencyFormatter';
-import { parsePaymentMetadata, formatOrderPaymentBadgeDetails } from '@/utils/paymentHelper';
+import { parsePaymentMetadata, formatOrderPaymentBadgeDetails, getOrderReceivedValue } from '@/utils/paymentHelper';
 import { format, subMonths, startOfMonth, endOfMonth, isSameMonth } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { ReceberDetailsModal } from '@/components/billing/ReceberDetailsModal';
@@ -117,7 +117,8 @@ export const Dashboard: React.FC = () => {
       const { metadata } = parsePaymentMetadata(ord.notes);
 
       if (ord.payment_status === 'paid') {
-        totalBilledAllTime += val;
+        // Liquido: desconto concedido na baixa nao conta como dinheiro que entrou.
+        totalBilledAllTime += getOrderReceivedValue(ord, metadata);
         paidOrdersCount += 1;
       } else if (ord.payment_status === 'half_paid') {
         const deposit = metadata.depositAmount || val / 2;
@@ -181,7 +182,7 @@ export const Dashboard: React.FC = () => {
 
         monthsData[key].pedidos += 1;
         if (ord.payment_status === 'paid') {
-          monthsData[key].faturamento += val;
+          monthsData[key].faturamento += getOrderReceivedValue(ord, metadata);
         } else if (ord.payment_status === 'half_paid') {
           monthsData[key].faturamento += (metadata.depositAmount || val / 2);
         }
@@ -213,7 +214,7 @@ export const Dashboard: React.FC = () => {
 
       map[cId].orderCount += 1;
       if (ord.payment_status === 'paid') {
-        map[cId].totalSpent += val;
+        map[cId].totalSpent += getOrderReceivedValue(ord);
       } else if (ord.payment_status === 'half_paid') {
         const { metadata } = parsePaymentMetadata(ord.notes);
         map[cId].totalSpent += (metadata.depositAmount || val / 2);

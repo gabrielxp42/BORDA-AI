@@ -62,7 +62,7 @@ import { format, startOfMonth, endOfMonth, subMonths, eachMonthOfInterval, eachD
 import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
 import { formatCurrency } from '@/utils/currencyFormatter';
-import { parsePaymentMetadata, formatPaymentMethodName, isOrderLinkedTx } from '@/utils/paymentHelper';
+import { parsePaymentMetadata, formatPaymentMethodName, isOrderLinkedTx, getOrderReceivedValue, getOrderNetValue } from '@/utils/paymentHelper';
 import { isInstallment, parseInstallmentMeta, updateInstallmentDueDate } from '@/services/installmentService';
 import { syncLocalToCloud } from '@/utils/cloudSync';
 
@@ -630,7 +630,8 @@ export const Faturamento: React.FC = () => {
         const client = order.clients;
         if (!client) return acc;
 
-        const val = Number(order.total_amount || 0);
+        // Valor liquido: um desconto concedido reduz o faturamento, nao e receita.
+        const val = getOrderNetValue(order);
         const status = order.payment_status;
 
         if (!acc[client.id]) {
@@ -727,9 +728,8 @@ export const Faturamento: React.FC = () => {
       if (dateStr) {
         const paidDate = new Date(dateStr);
         if (paidDate >= targetMonthStart && paidDate <= targetMonthEnd) {
-          const isHalf = o.payment_status === 'half_paid';
-          const val = isHalf ? (metadata.depositAmount || Number(o.total_amount || 0) * 0.5) : Number(o.total_amount || 0);
-          sum += val;
+          // Honra o desconto a vista: o que entrou em caixa e o liquido.
+          sum += getOrderReceivedValue(o, metadata);
         }
       }
     });

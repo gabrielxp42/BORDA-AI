@@ -13,6 +13,7 @@ import { useProfile } from '@/contexts/ProfileContext';
 import { sendEvolutionText } from '@/services/whatsappService';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
+import { getOrderReceivedValue } from '@/utils/paymentHelper';
 
 interface GabiAlertItem {
   id: string;
@@ -390,7 +391,7 @@ export const GabiHeroWidget: React.FC = () => {
 
       (orders || []).forEach((o: any) => {
         const amt = Number(o.total_amount || 0);
-        if (o.payment_status === 'paid') paidOrdersTotal += amt;
+        if (o.payment_status === 'paid') paidOrdersTotal += getOrderReceivedValue(o);
         else if (o.payment_status === 'half_paid') {
           paidOrdersTotal += amt * 0.5;
           pendingOrdersTotal += amt * 0.5;

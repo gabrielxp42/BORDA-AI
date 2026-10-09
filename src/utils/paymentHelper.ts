@@ -342,3 +342,52 @@ export function isOrderLinkedTx(t: any, orderIdsSet?: Set<string>): boolean {
   return true;
 }
 
+
+/** Formato minimo de pedido aceito pelos calculos de valor abaixo. */
+export interface PedidoValoravel {
+  total_amount?: number | string | null;
+  payment_status?: string | null;
+  notes?: string | null;
+}
+
+/**
+ * Desconto a vista concedido na baixa deste pedido (0 quando nao houve).
+ *
+ * O desconto era gravado em metadata.discountAmount mas nunca lido de volta:
+ * o faturamento somava `total_amount` cheio e o caixa mostrava mais dinheiro
+ * do que realmente entrou. Foi o que o usuario relatou — quitou com R$ 130 de
+ * desconto e "o valor que entrou nao entrou o valor com desconto".
+ */
+export function getDiscountAmount(order: PedidoValoravel, metadata?: PaymentMetadata): number {
+  const meta = metadata ?? parsePaymentMetadata(order?.notes).metadata;
+  const valor = Number(meta?.discountAmount || 0);
+  return Number.isFinite(valor) && valor > 0 ? valor : 0;
+}
+
+/** Valor do pedido ja descontado: o que ele de fato vale depois do abatimento. */
+export function getOrderNetValue(order: PedidoValoravel, metadata?: PaymentMetadata): number {
+  const total = Number(order?.total_amount || 0);
+  if (!Number.isFinite(total)) return 0;
+  return Math.max(0, total - getDiscountAmount(order, metadata));
+}
+
+/**
+ * Quanto ja entrou em caixa por este pedido.
+ * - pago       -> total menos o desconto concedido;
+ * - sinal      -> o sinal registrado (metade do total como ultimo recurso);
+ * - pendente   -> zero.
+ */
+export function getOrderReceivedValue(order: PedidoValoravel, metadata?: PaymentMetadata): number {
+  const meta = metadata ?? parsePaymentMetadata(order?.notes).metadata;
+  const total = Number(order?.total_amount || 0);
+  if (!Number.isFinite(total)) return 0;
+
+  if (order?.payment_status === 'half_paid') {
+    const sinal = Number(meta?.depositAmount);
+    return Number.isFinite(sinal) && sinal > 0 ? sinal : total * 0.5;
+  }
+  if (order?.payment_status === 'paid') {
+    return Math.max(0, total - getDiscountAmount(order, meta));
+  }
+  return 0;
+}
